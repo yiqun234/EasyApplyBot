@@ -48,7 +48,6 @@ class AIResponseGenerator:
                 self._resume_content = ""
         return self._resume_content
 
-    # TODO 这里要改
     def _build_context(self):
         return f"""
         Personal Information:
@@ -58,7 +57,7 @@ class AIResponseGenerator:
         - Languages: {', '.join(f'{lang}: {level}' for lang, level in self.languages.items())}
         - Professional Summary: {self.personal_info.get('MessageToManager', '')}
 
-        Resume Content (Give the greatest weight to this information, if specified):
+        Resume Content (Give the greatest weight to this information, if specified) (If you have similar questions to the Personal Information above, please refer to the following resume content):
         {self.resume_content}
         """
 
@@ -257,7 +256,7 @@ class LinkedinEasyApply:
             print("Attempting to restore previous session...")
             if os.path.exists("chrome_bot"):
                 self.browser.get("https://www.linkedin.com/feed/")
-                time.sleep(random.uniform(5, 10))
+                time.sleep(random.uniform(1, 2))
 
                 # Check if the current URL is the feed page
                 if self.browser.current_url != "https://www.linkedin.com/feed/":
@@ -297,7 +296,7 @@ class LinkedinEasyApply:
             EC.url_contains("https://www.linkedin.com/feed/")
         )
 
-        time.sleep(random.uniform(5, 10))
+        # time.sleep(random.uniform(5, 10))
 
     def start_applying(self):
         searches = list(product(self.positions, self.locations))
@@ -319,7 +318,7 @@ class LinkedinEasyApply:
                     job_page_number += 1
                     print("Going to job page " + str(job_page_number))
                     self.next_job_page(position, location_url, job_page_number)
-                    time.sleep(random.uniform(1, 2))
+                    time.sleep(random.uniform(0.5, 1))
                     print("Starting the application process for this page...")
                     self.apply_jobs(location)
                     print("Job applications on this page have been successfully completed.")
@@ -330,8 +329,8 @@ class LinkedinEasyApply:
                         time.sleep(time_left)
                         minimum_page_time = time.time() + minimum_time
                     if page_sleep % 5 == 0:
-                        sleep_time = random.randint(180, 300)  # Changed from 500, 900 {seconds}
-                        print("Sleeping for " + str(sleep_time / 60) + " minutes.")
+                        sleep_time = random.randint(5, 10)  # Changed from 500, 900 {seconds}
+                        print(f"Sleeping for {sleep_time} seconds.")
                         time.sleep(sleep_time)
                         page_sleep += 1
             except:
@@ -344,8 +343,8 @@ class LinkedinEasyApply:
                 time.sleep(time_left)
                 minimum_page_time = time.time() + minimum_time
             if page_sleep % 5 == 0:
-                sleep_time = random.randint(500, 900)
-                print("Sleeping for " + str(sleep_time / 60) + " minutes.")
+                sleep_time = random.randint(5, 10)  # Changed from 500, 900 {seconds}
+                print(f"Sleeping for {sleep_time} seconds.")
                 time.sleep(sleep_time)
                 page_sleep += 1
 
@@ -405,8 +404,8 @@ class LinkedinEasyApply:
             print("Successfully located the element using the random class name.")
 
             # Scroll logic (currently disabled for testing)
-            self.scroll_slow(job_results_by_class)  # Scroll down
-            self.scroll_slow(job_results_by_class, step=300, reverse=True)  # Scroll up
+            self.scroll_slow(job_results_by_class, step=600,)  # Scroll down
+            self.scroll_slow(job_results_by_class, step=900, reverse=True)  # Scroll up
 
             # Find job list elements
             job_list = self.browser.find_elements(By.CLASS_NAME, ul_element_class)[0].find_elements(By.CLASS_NAME, 'scaffold-layout__list-item')
@@ -481,7 +480,7 @@ class LinkedinEasyApply:
                             retries += 1
                             continue
 
-                    time.sleep(random.uniform(3, 5))
+                    time.sleep(random.uniform(1, 2))
 
                     # TODO: Check if the job is already applied or the application has been reached
                     # "You’ve reached the Easy Apply application limit for today. Save this job and come back tomorrow to continue applying."
@@ -540,12 +539,12 @@ class LinkedinEasyApply:
             easy_apply_button = self.browser.find_element(By.CLASS_NAME, 'jobs-apply-button')
         except:
             return False
-
+        # Scroll to the job description
         try:
             job_description_area = self.browser.find_element(By.ID, "job-details")
             print (f"{job_description_area}")
-            self.scroll_slow(job_description_area, end=1600)
-            self.scroll_slow(job_description_area, end=1600, step=400, reverse=True)
+            # self.scroll_slow(job_description_area, end=1600)
+            # self.scroll_slow(job_description_area, end=1600, step=400, reverse=True)
         except:
             pass
 
@@ -554,19 +553,23 @@ class LinkedinEasyApply:
 
         button_text = ""
         submit_application_text = 'submit application'
-        while submit_application_text not in button_text.lower():
+
+        while submit_application_text not in button_text.lower() and '提交' not in button_text:
+            print(button_text)
             try:
                 self.fill_up()
                 next_button = self.browser.find_element(By.CLASS_NAME, "artdeco-button--primary")
                 button_text = next_button.text.lower()
-                if submit_application_text in button_text:
+                print(button_text)
+                if submit_application_text in button_text or '提交' in button_text:
                     try:
+                        # Try to unfollow company
                         self.unfollow()
                     except:
                         print("Failed to unfollow company.")
-                time.sleep(random.uniform(1.5, 2.5))
+                time.sleep(random.uniform(1, 2))
                 next_button.click()
-                time.sleep(random.uniform(3.0, 5.0))
+                time.sleep(random.uniform(2.0, 3.0))
 
                 # Newer error handling
                 error_messages = [
@@ -604,13 +607,13 @@ class LinkedinEasyApply:
             except:
                 traceback.print_exc()
                 self.browser.find_element(By.CLASS_NAME, 'artdeco-modal__dismiss').click()
-                time.sleep(random.uniform(3, 5))
+                time.sleep(random.uniform(1, 2))
                 self.browser.find_elements(By.CLASS_NAME, 'artdeco-modal__confirm-dialog-btn')[0].click()
-                time.sleep(random.uniform(3, 5))
+                time.sleep(random.uniform(1, 2))
                 raise Exception("Failed to apply to job!")
 
         closed_notification = False
-        time.sleep(random.uniform(3, 5))
+        time.sleep(random.uniform(1, 2))
         try:
             self.browser.find_element(By.CLASS_NAME, 'artdeco-modal__dismiss').click()
             closed_notification = True
@@ -627,7 +630,7 @@ class LinkedinEasyApply:
         except:
             pass
 
-        time.sleep(random.uniform(3, 5))
+        time.sleep(random.uniform(2, 3))
 
         if closed_notification is False:
             raise Exception("Could not close the applied confirmation window!")
@@ -644,9 +647,11 @@ class LinkedinEasyApply:
                     input_field = group.find_element(By.TAG_NAME, 'input')
                     if 'street' in lb:
                         self.enter_text(input_field, self.personal_info['Street address'])
-                    elif 'city' in lb:
+                    elif 'city' in lb or 'GEO-LOCATION' in input_field.get_attribute('id'):
+                        print("Trying to fill up city field")
+                        print(self.personal_info['City'])
                         self.enter_text(input_field, self.personal_info['City'])
-                        time.sleep(3)
+                        time.sleep(0.5)
                         input_field.send_keys(Keys.DOWN)
                         input_field.send_keys(Keys.RETURN)
                     elif 'zip' in lb or 'zip / postal code' in lb or 'postal' in lb:
@@ -655,6 +660,29 @@ class LinkedinEasyApply:
                         self.enter_text(input_field, self.personal_info['State'])
                     else:
                         pass
+            else:
+                groups = form.find_elements(By.TAG_NAME, 'label')
+                for group in groups:
+                    lb = group.text.lower()
+                    input_id = group.get_attribute('for')
+                    if input_id:
+                        input_field = form.find_element(By.ID, input_id)
+                        print(f"Label: {lb}")
+                        if 'street' in lb:
+                            self.enter_text(input_field, self.personal_info['Street address'])
+                        elif 'city' in lb or 'GEO-LOCATION' in input_field.get_attribute('id'):
+                            print("Trying to fill up city field")
+                            print(self.personal_info['City'])
+                            self.enter_text(input_field, self.personal_info['City'])
+                            time.sleep(0.5)
+                            input_field.send_keys(Keys.DOWN)
+                            input_field.send_keys(Keys.RETURN)
+                        elif 'zip' in lb or 'zip / postal code' in lb or 'postal' in lb:
+                            self.enter_text(input_field, self.personal_info['Zip'])
+                        elif 'state' in lb or 'province' in lb:
+                            self.enter_text(input_field, self.personal_info['State'])
+                        else:
+                            pass
         except:
             pass
 
@@ -664,6 +692,7 @@ class LinkedinEasyApply:
         else:
             return 'no'
 
+    # 主要代码
     def additional_questions(self, form):
         print("Trying to fill up additional questions")
 
@@ -894,9 +923,9 @@ class LinkedinEasyApply:
                 date_picker = question.find_element(By.CLASS_NAME, 'artdeco-datepicker__input ')
                 date_picker.clear()
                 date_picker.send_keys(date.today().strftime("%m/%d/%y"))
-                time.sleep(3)
+                time.sleep(1)
                 date_picker.send_keys(Keys.RETURN)
-                time.sleep(2)
+                time.sleep(0.5)
                 continue
             except:
                 print("An exception occurred while filling up date picker field")  # TODO: Put logging behind debug flag
@@ -1130,7 +1159,7 @@ class LinkedinEasyApply:
     def unfollow(self):
         try:
             follow_checkbox = self.browser.find_element(By.XPATH,
-                                                        "//label[contains(.,\'to stay up to date with their page.\')]").click()
+                                                        "//label[contains(.,'to stay up to date with their page.') or contains(.,'随时了解公司动态')]").click()
             follow_checkbox.click()
         except:
             pass
@@ -1145,8 +1174,9 @@ class LinkedinEasyApply:
                 if len(input_buttons) == 0:
                     raise Exception("No input elements found in element")
                 for upload_button in input_buttons:
-                    upload_type = upload_button.find_element(By.XPATH, "..").find_element(By.XPATH,
-                                                                                          "preceding-sibling::*")
+                    # upload_type = upload_button.find_element(By.XPATH, "..").find_element(By.XPATH, "preceding-sibling::*")
+                    input_id = upload_button.get_attribute("id")
+                    upload_type = self.browser.find_element(By.CSS_SELECTOR, f"label[for='{input_id}']")
                     if 'resume' in upload_type.text.lower():
                         upload_button.send_keys(self.resume_dir)
                     elif 'cover' in upload_type.text.lower():
@@ -1204,6 +1234,7 @@ class LinkedinEasyApply:
             form = easy_apply_modal_content.find_element(By.TAG_NAME, 'form')
             try:
                 label = form.find_element(By.TAG_NAME, 'h3').text.lower()
+                # Try to fill in the basic information, if you don't have it AI will help you
                 if 'home address' in label:
                     self.home_address(form)
                 elif 'contact info' in label:
