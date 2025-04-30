@@ -13,7 +13,7 @@ disableAntiLock: False
 remote: False
 
 # Set to True if you wish to search for jobs marked as "under 10 applicants" (default is False).
-lessthanTenApplicants: False
+lessthanTenApplicants: True
 
 # Set to True to sort by date posted, False to sort by relevance
 newestPostingsFirst: False
