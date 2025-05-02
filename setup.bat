@@ -13,7 +13,8 @@ if %errorlevel% neq 0 (
 
 REM 创建虚拟环境
 if not exist venv\ (
-    python -m venv venv
+    pip install virtualenv
+    virtualenv venv
     echo 虚拟环境已创建
 ) else (
     echo 检测到现有虚拟环境
