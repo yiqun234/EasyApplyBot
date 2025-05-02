@@ -5,3 +5,4 @@ PyYAML
 validate_email
 openai>=1.0.0
 pypdf>=3.0.0
+tkinter
