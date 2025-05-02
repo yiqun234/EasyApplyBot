@@ -1,4 +1,6 @@
 import time, random, csv, pyautogui, traceback, os, re
+from urllib.parse import urlparse, parse_qs
+
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException
@@ -307,7 +309,7 @@ class LinkedinEasyApply:
         minimum_page_time = time.time() + minimum_time
 
         for (position, location) in searches:
-            location_url = "&location=" + location
+            location_url = "&location=" + location + "&geoId=" + self.click_location_url(location)
             job_page_number = -1
 
             print("Starting the search for " + position + " in " + location + ".")
@@ -595,6 +597,9 @@ class LinkedinEasyApply:
                     'A file is required',
                     '请选择',
                     '请 选 择',
+                    '請選擇',
+                    '請 選 擇',
+                    '請輸入有效',
                     'Inserisci',
                     'wholenummer',
                     'Wpisz liczb',
@@ -708,7 +713,7 @@ class LinkedinEasyApply:
                 radio_labels = radio_fieldset.find_elements(By.TAG_NAME, 'label')
                 radio_options = [(i, text.text.lower()) for i, text in enumerate(radio_labels)]
                 print(f"radio options: {[opt[1] for opt in radio_options]}")
-                
+
                 if len(radio_options) == 0:
                     raise Exception("No radio options found in question")
 
@@ -1279,7 +1284,7 @@ class LinkedinEasyApply:
 
         for i in range(start, end, step):
             self.browser.execute_script("arguments[0].scrollTo(0, {})".format(i), scrollable_element)
-            time.sleep(random.uniform(0.1, .6))
+            time.sleep(random.uniform(0.5, .6))
 
     def avoid_lock(self):
         if self.disable_lock:
@@ -1346,3 +1351,27 @@ class LinkedinEasyApply:
                          "&keywords=" + position + location + "&start=" + str(job_page * 25))
 
         self.avoid_lock()
+
+    def click_location_url(self, keyword):
+        try:
+            self.browser.get("https://www.linkedin.com/jobs/search/")
+            # 使用xpath获取id前缀为jobs-search-box-location-id-xxx的元素
+            location_input = self.browser.find_element(By.XPATH, '//input[starts-with(@id,"jobs-search-box-location-id-")]')
+            self.enter_text(location_input, keyword)
+
+            location_seach_button = self.browser.find_element(By.XPATH, '//*[@id="global-nav-search"]/div/div[2]/button[1]')
+            location_seach_button.click()
+            time.sleep(5)
+            # 获取当前地址的链接,提取参数geoId
+            url = self.browser.current_url
+            geoId = self.parse_geoId_from_url(url)
+            return geoId
+        except:
+            print("An exception occurred while searching for location")
+            return ''
+
+    def parse_geoId_from_url(self, url):
+        parsed_url = urlparse(url)
+        query_params = parse_qs(parsed_url.query)
+        geoId = query_params.get('geoId', [None])[0]
+        return geoId
