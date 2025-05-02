@@ -807,6 +807,7 @@ class LinkedinEasyApply:
                 if to_select is None:
                     print("No answer determined")
                     self.record_unprepared_question("radio", radio_text)
+                    question_text = question.find_element(By.TAG_NAME, 'label').text.lower()
 
                     # Since no response can be determined, we use AI to identify the best responseif available, falling back to the final option if the AI response is not available
                     ai_response = self.ai_response_generator.generate_response(
