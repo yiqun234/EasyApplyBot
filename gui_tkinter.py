@@ -706,40 +706,39 @@ class EasyApplyApp(tk.Tk):
             self._log_message(f"启动机器人时出错: {e}\n")
             print(f"启动错误: {e}")  # 调试输出
             self._on_bot_finish(error=True)
-    
+
     def _read_bot_output(self):
-        """读取机器人输出并更新GUI，使用非阻塞方式"""
+        """读取机器人输出并更新GUI（不使用select，避免WinError 10038）"""
         try:
             # 确保Bot进程和stdout存在
             if self.bot_process and self.bot_process.stdout:
-                # 持续读取输出
-                while self.bot_process.poll() is None:  # 当进程仍在运行时
-                    # 使用select模块检查管道是否有数据可读，避免阻塞
-                    import select
-                    # 设置短超时，避免长时间阻塞
-                    ready, _, _ = select.select([self.bot_process.stdout], [], [], 0.5)
-                    
-                    if ready:
-                        # 有数据可读
-                        line = self.bot_process.stdout.readline()
-                        if line:  # 确保行不为空
-                            # 使用after在主线程中安排日志更新
-                            self.after(0, self._log_message, line)
-                    else:
-                        # 没有数据可读，短暂休眠避免过度占用CPU
-                        time.sleep(0.1)
-                        
-                # 进程结束，读取所有剩余输出
-                for line in self.bot_process.stdout:
-                    self.after(0, self._log_message, line)
-                    
-            # 进程结束或发生错误时
-            self.after(100, self._check_bot_process)
-            
+                # 使用 iter 和 readline 来迭代读取行，直到遇到EOF (空字符串)
+                # 这是读取管道输出的标准、非阻塞（对于行缓冲）方式
+                for line in iter(self.bot_process.stdout.readline, ''):
+                    if line:  # 确保行不为空
+                        # 使用after在主线程中安排日志更新
+                        self.after(0, self._log_message, line)
+                    # (可选) 如果担心进程卡住而不是正常退出，可以加一个poll检查，
+                    # 但通常 _check_bot_process 会处理进程结束
+                    if self.bot_process.poll() is not None:
+                        break
+
+                # 进程正常结束 (readline返回空字符串) 或被终止后，
+                # 确保最终状态检查被调度
+                self.after(100, self._check_bot_process)
+
+        except ValueError:
+            # 当管道在读取操作中途被强制关闭时 (例如 terminate/kill),
+            # readline 可能会抛出 ValueError: I/O operation on closed file.
+            print("读取输出时检测到管道关闭 (ValueError)")
+            self.after(0, self._log_message, "\n机器人进程输出管道已关闭。\n")
+            self.after(100, self._check_bot_process)  # 仍然检查最终状态
+
         except Exception as e:
+            # 捕获其他可能的读取错误
             print(f"读取输出错误: {e}")  # 调试输出
-            self.after(0, self._log_message, f"\n读取机器人输出时出错: {e}\n")
-            self.after(100, self._check_bot_process)
+            self.after(0, self._log_message, f"\n读取机器人输出时发生未知错误: {e}\n")
+            self.after(100, self._check_bot_process)  # 仍然检查最终状态
     
     def _check_bot_process(self):
         """检查机器人进程是否已结束并更新UI"""
