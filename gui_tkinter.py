@@ -663,23 +663,39 @@ class EasyApplyApp(tk.Tk):
         python_executable = sys.executable
         
         try:
-            # 关键改进：使用-u标志确保Python输出不缓冲
-            self.bot_process = subprocess.Popen(
-                [python_executable, "-u", "main.py"],  # -u 是关键，确保输出不缓冲
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                text=True,
-                encoding='utf-8',
-                errors='replace',
-                bufsize=1,  # 行缓冲
-                universal_newlines=True,
-                creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
-            )
+            # 使用更简单的方式启动，不捕获输出，不使用CREATE_NO_WINDOW标志
+            if sys.platform.startswith('win'):
+                # Windows: 直接启动，不使用CREATE_NO_WINDOW标志
+                self.bot_process = subprocess.Popen(
+                    [python_executable, "-u", "main.py"],
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    text=True,
+                    encoding='utf-8',
+                    errors='replace',
+                    bufsize=1,
+                    universal_newlines=True
+                    # 移除 creationflags 参数
+                )
+            else:
+                # 非Windows平台
+                self.bot_process = subprocess.Popen(
+                    [python_executable, "-u", "main.py"],
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    text=True,
+                    encoding='utf-8',
+                    errors='replace',
+                    bufsize=1,
+                    universal_newlines=True
+                )
             
-            # 使用线程读取输出，但不阻塞GUI
+            self._log_message("机器人已启动，请等待...\n")
+            
+            # 使用线程读取输出
             self.output_thread = threading.Thread(
                 target=self._read_bot_output,
-                daemon=True  # 设置为守护线程，这样主线程退出时它也会退出
+                daemon=True
             )
             self.output_thread.start()
             
