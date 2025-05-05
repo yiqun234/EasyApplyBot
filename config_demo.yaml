@@ -54,7 +54,7 @@ positions:
 
 # Remove hash sign to add locations. You can add as many as you need including adding 'Remote' as a location but first location must be a valid country.
 locations:
- - 中国
+ - 美国
  #- First location
  #- A second location
  #- A third location
@@ -243,6 +243,8 @@ evaluateJobFit: False
 
 # Path to the text version of your resume, used to extract text from the resume for AI evaluation of job fit, used if OpenAI API Key is configured and evaluateJobFit is True.
 textResume: /home/lian/Documents/resume_export.txt
+
+customQuestions: []
 
 # Debugging mode, used to print more information to the console and fetch more information in AI responses
 debug: False

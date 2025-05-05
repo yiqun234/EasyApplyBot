@@ -250,6 +250,7 @@ class LinkedinEasyApply:
         self.experience_default = int(self.experience['default'])
         self.debug = parameters.get('debug', False)
         self.evaluate_job_fit = parameters.get('evaluateJobFit', True)
+        self.customQuestions = parameters.get('customQuestions', {})
         self.ai_response_generator = AIResponseGenerator(
             api_key=self.openai_api_key,
             personal_info=self.personal_info,
@@ -439,7 +440,7 @@ class LinkedinEasyApply:
                 job_title_element = job_tile.find_element(By.CLASS_NAME, 'job-card-list__title--link')
                 job_title = job_title_element.find_element(By.TAG_NAME, 'strong').text
 
-                link = job_tile.find_element(By.CLASS_NAME, 'job-card-list__title--link').get_attribute('href').split('?')[0]
+                link = job_title_element.get_attribute('href').split('?')[0]
             except:
                 pass
             try:
@@ -707,549 +708,539 @@ class LinkedinEasyApply:
 
     # 主要代码
     def additional_questions(self, form):
-        print("Trying to fill up additional questions")
-
+        print("尝试填写额外问题")
         questions = form.find_elements(By.CLASS_NAME, 'fb-dash-form-element')
         for question in questions:
             try:
                 # Radio check
-                radio_fieldset = question.find_element(By.TAG_NAME, 'fieldset')
-                question_span = radio_fieldset.find_element(By.CLASS_NAME, 'fb-dash-form-element__label').find_elements(By.TAG_NAME, 'span')[0]
-                radio_text = question_span.text.lower()
-                print(f"Radio question text: {radio_text}")
+                try:
+                    radio_fieldset = question.find_element(By.TAG_NAME, 'fieldset')
+                    question_span = radio_fieldset.find_element(By.CLASS_NAME, 'fb-dash-form-element__label').find_elements(By.TAG_NAME, 'span')[0]
+                    radio_text = question_span.text.lower()
+                    print(f"Radio question text: {radio_text}")
 
-                radio_labels = radio_fieldset.find_elements(By.TAG_NAME, 'label')
-                radio_options = [(i, text.text.lower()) for i, text in enumerate(radio_labels)]
-                print(f"radio options: {[opt[1] for opt in radio_options]}")
+                    # First check whether it matches the custom question
+                    custom_answer = None
+                    if hasattr(self, 'customQuestions'):
+                        for custom_question, answer in self.customQuestions.items():
+                            print('custom_question:', custom_question.lower())
+                            if custom_question.lower() in radio_text:
+                                custom_answer = answer
+                                print(f"Found matches for custom radio questions: '{radio_text}' -> '{custom_answer}'")
+                                break
 
-                if len(radio_options) == 0:
-                    raise Exception("No radio options found in question")
+                    radio_labels = radio_fieldset.find_elements(By.TAG_NAME, 'label')
+                    radio_options = [(i, text.text.lower()) for i, text in enumerate(radio_labels)]
+                    print(f"radio options: {[opt[1] for opt in radio_options]}")
 
-                answer = None
+                    if len(radio_options) == 0:
+                        raise Exception("No radio options found in question")
 
-                # Try to determine answer using existing logic
-                if 'driver\'s licence' in radio_text or 'driver\'s license' in radio_text:
-                    answer = self.get_answer('driversLicence')
-                elif any(keyword in radio_text.lower() for keyword in
-                         [
-                             'Aboriginal', 'native', 'indigenous', 'tribe', 'first nations',
-                             'native american', 'native hawaiian', 'inuit', 'metis', 'maori',
-                             'aborigine', 'ancestral', 'native peoples', 'original people',
-                             'first people', 'gender', 'race', 'disability', 'latino', 'torres',
-                             'do you identify'
-                         ]):
-                    negative_keywords = ['prefer', 'decline', 'don\'t', 'specified', 'none', 'no']
-                    answer = next((option for option in radio_options if
-                                   any(neg_keyword in option[1].lower() for neg_keyword in negative_keywords)), None)
+                    # If there is a custom answer, use it first
+                    if custom_answer:
+                        selected = False
+                        for i, (_, option_text) in enumerate(radio_options):
+                            if custom_answer.lower() in option_text:
+                                radio_labels[i].click()
+                                print(f"Custom answer single option selected: '{radio_text}' -> '{option_text}'")
+                                selected = True
+                                break
+                        
+                        if selected:
+                            continue
 
-                elif 'assessment' in radio_text:
-                    answer = self.get_answer("assessment")
+                    # If there is no matching custom answer, use the original logic
+                    answer = None
 
-                elif 'clearance' in radio_text:
-                    answer = self.get_answer("securityClearance")
+                    # Try to determine answer using existing logic
+                    if 'driver\'s licence' in radio_text or 'driver\'s license' in radio_text:
+                        answer = self.get_answer('driversLicence')
+                    elif any(keyword in radio_text.lower() for keyword in
+                            [
+                                'Aboriginal', 'native', 'indigenous', 'tribe', 'first nations',
+                                'native american', 'native hawaiian', 'inuit', 'metis', 'maori',
+                                'aborigine', 'ancestral', 'native peoples', 'original people',
+                                'first people', 'gender', 'race', 'disability', 'latino', 'torres',
+                                'do you identify'
+                            ]):
+                        negative_keywords = ['prefer', 'decline', 'don\'t', 'specified', 'none']
+                        answer = next((option for option in radio_options if
+                                    any(neg_keyword in option[1].lower() for neg_keyword in negative_keywords)), None)
 
-                elif 'north korea' in radio_text:
-                    answer = 'no'
+                    elif 'assessment' in radio_text:
+                        answer = self.get_answer("assessment")
 
-                elif 'previously employ' in radio_text or 'previous employ' in radio_text:
-                    answer = 'no'
+                    elif 'clearance' in radio_text:
+                        answer = self.get_answer("securityClearance")
 
-                elif 'authorized' in radio_text or 'authorised' in radio_text or 'legally' in radio_text:
-                    answer = self.get_answer('legallyAuthorized')
+                    elif 'north korea' in radio_text:
+                        answer = 'no'
 
-                elif any(keyword in radio_text.lower() for keyword in
-                         ['certified', 'certificate', 'cpa', 'chartered accountant', 'qualification']):
-                    answer = self.get_answer('certifiedProfessional')
+                    elif 'previously employ' in radio_text or 'previous employ' in radio_text:
+                        answer = 'no'
 
-                elif 'urgent' in radio_text:
-                    answer = self.get_answer('urgentFill')
+                    elif 'authorized' in radio_text or 'authorised' in radio_text or 'legally' in radio_text:
+                        answer = self.get_answer('legallyAuthorized')
 
-                elif 'commut' in radio_text or 'on-site' in radio_text or 'hybrid' in radio_text or 'onsite' in radio_text:
-                    answer = self.get_answer('commute')
+                    elif any(keyword in radio_text.lower() for keyword in
+                            ['certified', 'certificate', 'cpa', 'chartered accountant', 'qualification']):
+                        answer = self.get_answer('certifiedProfessional')
 
-                elif 'remote' in radio_text:
-                    answer = self.get_answer('remote')
+                    elif 'urgent' in radio_text:
+                        answer = self.get_answer('urgentFill')
 
-                elif 'background check' in radio_text:
-                    answer = self.get_answer('backgroundCheck')
+                    elif 'commut' in radio_text or 'on-site' in radio_text or 'hybrid' in radio_text or 'onsite' in radio_text:
+                        answer = self.get_answer('commute')
 
-                elif 'drug test' in radio_text:
-                    answer = self.get_answer('drugTest')
+                    elif 'remote' in radio_text:
+                        answer = self.get_answer('remote')
 
-                elif 'currently living' in radio_text or 'currently reside' in radio_text or 'right to live' in radio_text:
-                    answer = self.get_answer('residency')
+                    elif 'background check' in radio_text:
+                        answer = self.get_answer('backgroundCheck')
 
-                elif 'level of education' in radio_text:
-                    for degree in self.checkboxes['degreeCompleted']:
-                        if degree.lower() in radio_text:
-                            answer = "yes"
-                            break
+                    elif 'drug test' in radio_text:
+                        answer = self.get_answer('drugTest')
 
-                elif 'experience' in radio_text:
-                    if self.experience_default > 0:
-                        answer = 'yes'
-                    else:
-                        for experience in self.experience:
-                            if experience.lower() in radio_text:
+                    elif 'currently living' in radio_text or 'currently reside' in radio_text or 'right to live' in radio_text:
+                        answer = self.get_answer('residency')
+
+                    elif 'level of education' in radio_text:
+                        for degree in self.checkboxes['degreeCompleted']:
+                            if degree.lower() in radio_text:
                                 answer = "yes"
                                 break
 
-                elif 'data retention' in radio_text:
-                    answer = 'no'
+                    elif 'experience' in radio_text:
+                        if self.experience_default > 0:
+                            answer = 'yes'
+                        else:
+                            for experience in self.experience:
+                                if experience.lower() in radio_text:
+                                    answer = "yes"
+                                    break
 
-                elif 'sponsor' in radio_text:
-                    answer = self.get_answer('requireVisa')
-                
-                to_select = None
-                if answer is not None:
-                    print(f"Choosing answer: {answer}")
-                    i = 0
-                    for radio in radio_labels:
-                        if answer in radio.text.lower():
-                            to_select = radio_labels[i]
-                            break
-                        i += 1
+                    elif 'data retention' in radio_text:
+                        answer = 'no'
+
+                    elif 'sponsor' in radio_text:
+                        answer = self.get_answer('requireVisa')
+                    
+                    to_select = None
+                    if answer is not None:
+                        print(f"Choosing answer: {answer}")
+                        i = 0
+                        for radio in radio_labels:
+                            if answer in radio.text.lower():
+                                to_select = radio_labels[i]
+                                break
+                            i += 1
+                        if to_select is None:
+                            print("Answer not found in radio options")
+
                     if to_select is None:
-                        print("Answer not found in radio options")
+                        print("No answer determined")
+                        self.record_unprepared_question("radio", radio_text)
+                        question_text = question.find_element(By.TAG_NAME, 'label').text.lower()
 
-                if to_select is None:
-                    print("No answer determined")
-                    self.record_unprepared_question("radio", radio_text)
-                    question_text = question.find_element(By.TAG_NAME, 'label').text.lower()
-
-                    # Since no response can be determined, we use AI to identify the best responseif available, falling back to the final option if the AI response is not available
-                    ai_response = self.ai_response_generator.generate_response(
-                        question_text,
-                        response_type="choice",
-                        options=radio_options
-                    )
-                    if ai_response is not None:
-                        to_select = radio_labels[ai_response]
-                    else:
-                        to_select = radio_labels[len(radio_labels) - 1]
-                to_select.click()
-
-                if radio_labels:
-                    continue
-            except Exception as e:
-                print("An exception occurred while filling up radio field")
-
-            # Questions check
-            try:
-                question_text = question.find_element(By.TAG_NAME, 'label').text.lower()
-                print( question_text )  # TODO: Put logging behind debug flag
-
-                txt_field_visible = False
-                try:
-                    txt_field = question.find_element(By.TAG_NAME, 'input')
-                    txt_field_visible = True
-                except:
-                    try:
-                        txt_field = question.find_element(By.TAG_NAME, 'textarea')  # TODO: Test textarea
-                        txt_field_visible = True
-                    except:
-                        raise Exception("Could not find textarea or input tag for question")
-
-                if 'numeric' in txt_field.get_attribute('id').lower():
-                    # For decimal and integer response fields, the id contains 'numeric' while the type remains 'text' 
-                    text_field_type = 'numeric'
-                elif 'text' in txt_field.get_attribute('type').lower():
-                    text_field_type = 'text'
-                else:
-                    raise Exception("Could not determine input type of input field!")
-
-                to_enter = ''
-                if 'experience' in question_text or 'how many years in' in question_text:
-                    no_of_years = None
-                    for experience in self.experience:
-                        if experience.lower() in question_text:
-                            no_of_years = int(self.experience[experience])
-                            break
-                    if no_of_years is None:
-                        self.record_unprepared_question(text_field_type, question_text)
-                        no_of_years = int(self.experience_default)
-                    to_enter = no_of_years
-
-                elif 'grade point average' in question_text:
-                    to_enter = self.university_gpa
-
-                elif 'first name' in question_text:
-                    to_enter = self.personal_info['First Name']
-
-                elif 'last name' in question_text:
-                    to_enter = self.personal_info['Last Name']
-
-                elif 'name' in question_text:
-                    to_enter = self.personal_info['First Name'] + " " + self.personal_info['Last Name']
-
-                elif 'pronouns' in question_text:
-                    to_enter = self.personal_info['Pronouns']
-
-                elif 'phone' in question_text:
-                    to_enter = self.personal_info['Mobile Phone Number']
-                elif '联系电话' in question_text:
-                    to_enter = self.personal_info['Mobile Phone Number']
-
-                elif 'linkedin' in question_text:
-                    to_enter = self.personal_info['Linkedin']
-
-                elif 'message to hiring' in question_text or 'cover letter' in question_text:
-                    to_enter = self.personal_info['MessageToManager']
-
-                elif 'website' in question_text or 'github' in question_text or 'portfolio' in question_text:
-                    to_enter = self.personal_info['Website']
-
-                elif 'notice' in question_text or 'weeks' in question_text:
-                    if text_field_type == 'numeric':
-                        to_enter = int(self.notice_period)
-                    else:
-                        to_enter = str(self.notice_period)
-
-                elif 'salary' in question_text or 'expectation' in question_text or 'compensation' in question_text or 'CTC' in question_text:
-                    if text_field_type == 'numeric':
-                        to_enter = int(self.salary_minimum)
-                    else:
-                        to_enter = float(self.salary_minimum)
-                    self.record_unprepared_question(text_field_type, question_text)
-
-                # Since no response can be determined, we use AI to generate a response if available, falling back to 0 or empty string if the AI response is not available
-                if text_field_type == 'numeric':
-                    if not isinstance(to_enter, (int, float)):
+                        # Since no response can be determined, we use AI to identify the best responseif available, falling back to the final option if the AI response is not available
                         ai_response = self.ai_response_generator.generate_response(
                             question_text,
-                            response_type="numeric"
+                            response_type="choice",
+                            options=radio_options
                         )
-                        to_enter = ai_response if ai_response is not None else 0
-                elif to_enter == '':
-                    ai_response = self.ai_response_generator.generate_response(
-                        question_text,
-                        response_type="text"
-                    )
-                    to_enter = ai_response if ai_response is not None else " ‏‏‎ "
-
-                self.enter_text(txt_field, to_enter)
-                continue
-            except:
-                print("An exception occurred while filling up text field")  # TODO: Put logging behind debug flag
-
-            # Date Check
-            try:
-                date_picker = question.find_element(By.CLASS_NAME, 'artdeco-datepicker__input ')
-                date_picker.clear()
-                date_picker.send_keys(date.today().strftime("%m/%d/%y"))
-                time.sleep(1)
-                date_picker.send_keys(Keys.RETURN)
-                time.sleep(0.5)
-                continue
-            except:
-                print("An exception occurred while filling up date picker field")  # TODO: Put logging behind debug flag
-
-            # Dropdown check
-            try:
-                question_text = question.find_element(By.TAG_NAME, 'label').text.lower()
-                print(f"Dropdown question text: {question_text}")  # TODO: Put logging behind debug flag
-                dropdown_field = question.find_element(By.TAG_NAME, 'select')
-
-                select = Select(dropdown_field)
-                options = [options.text for options in select.options]
-                print(f"Dropdown options: {options}")  # TODO: Put logging behind debug flag
-
-                if 'proficiency' in question_text:
-                    proficiency = "None"
-                    for language in self.languages:
-                        if language.lower() in question_text:
-                            proficiency = self.languages[language]
-                            break
-                    self.select_dropdown(dropdown_field, proficiency)
-
-                elif 'clearance' in question_text:
-                    answer = self.get_answer('securityClearance')
-
-                    choice = ""
-                    for option in options:
-                        if answer == 'yes':
-                            choice = option
+                        if ai_response is not None:
+                            to_select = radio_labels[ai_response]
                         else:
-                            if 'no' in option.lower():
-                                choice = option
-                    if choice == "":
-                        self.record_unprepared_question(text_field_type, question_text)
-                    self.select_dropdown(dropdown_field, choice)
+                            to_select = radio_labels[len(radio_labels) - 1]
+                    to_select.click()
 
-                elif 'assessment' in question_text:
-                    answer = self.get_answer('assessment')
-                    choice = ""
-                    for option in options:
-                        if answer == 'yes':
-                            choice = option
-                        else:
-                            if 'no' in option.lower():
-                                choice = option
-                    # if choice == "":
-                    #    choice = options[len(options) - 1]
-                    self.select_dropdown(dropdown_field, choice)
+                    if radio_labels:
+                        continue
+                except Exception as e:
+                    print(f"No custom radio option was matched")
 
-                elif 'commut' in question_text or 'on-site' in question_text or 'hybrid' in question_text or 'onsite' in question_text:
-                    answer = self.get_answer('commute')
+                # Questions check
+                try:
+                    question_text = question.find_element(By.TAG_NAME, 'label').text.lower()
+                    print(question_text)
 
-                    choice = ""
-                    for option in options:
-                        if answer == 'yes':
-                            choice = option
-                        else:
-                            if 'no' in option.lower():
-                                choice = option
-                    # if choice == "":
-                    #    choice = options[len(options) - 1]
-                    self.select_dropdown(dropdown_field, choice)
-
-                elif 'country code' in question_text:
-                    self.select_dropdown(dropdown_field, self.personal_info['Phone Country Code'])
-
-                elif 'north korea' in question_text:
-                    choice = ""
-                    for option in options:
-                        if 'no' in option.lower():
-                            choice = option
-                    if choice == "":
-                        choice = options[len(options) - 1]
-                    self.select_dropdown(dropdown_field, choice)
-
-                elif 'previously employed' in question_text or 'previous employment' in question_text:
-                    choice = ""
-                    for option in options:
-                        if 'no' in option.lower():
-                            choice = option
-                    if choice == "":
-                        choice = options[len(options) - 1]
-                    self.select_dropdown(dropdown_field, choice)
-
-                elif 'sponsor' in question_text:
-                    answer = self.get_answer('requireVisa')
-                    choice = ""
-                    for option in options:
-                        if answer == 'yes':
-                            choice = option
-                        else:
-                            if 'no' in option.lower():
-                                choice = option
-                    if choice == "":
-                        choice = options[len(options) - 1]
-                    self.select_dropdown(dropdown_field, choice)
-
-                elif 'above 18' in question_text.lower():  # Check for "above 18" in the question text
-                    choice = ""
-                    for option in options:
-                        if 'yes' in option.lower():  # Select 'yes' option
-                            choice = option
-                    if choice == "":
-                        choice = options[0]  # Default to the first option if 'yes' is not found
-                    self.select_dropdown(dropdown_field, choice)
-
-                elif 'currently living' in question_text or 'currently reside' in question_text:
-                    answer = self.get_answer('residency')
-                    choice = ""
-                    for option in options:
-                        if answer == 'yes':
-                            choice = option
-                        else:
-                            if 'no' in option.lower():
-                                choice = option
-                    if choice == "":
-                        choice = options[len(options) - 1]
-                    self.select_dropdown(dropdown_field, choice)
-
-                elif 'authorized' in question_text or 'authorised' in question_text:
-                    answer = self.get_answer('legallyAuthorized')
-                    choice = ""
-                    for option in options:
-                        if answer == 'yes':
-                            # find some common words
-                            choice = option
-                        else:
-                            if 'no' in option.lower():
-                                choice = option
-                    if choice == "":
-                        choice = options[len(options) - 1]
-                    self.select_dropdown(dropdown_field, choice)
-
-                elif 'citizenship' in question_text:
-                    answer = self.get_answer('legallyAuthorized')
-                    choice = ""
-                    for option in options:
-                        if answer == 'yes':
-                            if 'no' in option.lower():
-                                choice = option
-                    if choice == "":
-                        choice = options[len(options) - 1]
-                    self.select_dropdown(dropdown_field, choice)
-
-                elif 'clearance' in question_text:
-                    answer = self.get_answer('clearance')
-                    choice = ""
-                    for option in options:
-                        if answer == 'yes':
-                            choice = option
-                        else:
-                            if 'no' in option.lower():
-                                choice = option
-                    if choice == "":
-                        choice = options[len(options) - 1]
-
-                    self.select_dropdown(dropdown_field, choice)
-
-                elif any(keyword in question_text.lower() for keyword in
-                         [
-                             'aboriginal', 'native', 'indigenous', 'tribe', 'first nations',
-                             'native american', 'native hawaiian', 'inuit', 'metis', 'maori',
-                             'aborigine', 'ancestral', 'native peoples', 'original people',
-                             'first people', 'gender', 'race', 'disability', 'latino'
-                         ]):
-                    negative_keywords = ['prefer', 'decline', 'don\'t', 'specified', 'none']
-
-                    # 修复迭代逻辑：正确遍历下拉菜单的所有选项
-                    choice = ""
-                    # 尝试查找包含"不愿透露"关键词的选项
-                    for option in options:
-                        if any(neg_keyword in option.lower() for neg_keyword in negative_keywords):
-                            choice = option
-                            break
-                    
-                    # 如果没找到合适的选项，则默认选择最后一个
-                    if not choice and options:
-                        choice = options[len(options) - 1]
-
-                    self.select_dropdown(dropdown_field, choice)
-
-                elif 'email' in question_text:
-                    continue  # assume email address is filled in properly by default
-
-                elif 'experience' in question_text or 'understanding' in question_text or 'familiar' in question_text or 'comfortable' in question_text or 'able to' in question_text:
-                    answer = 'no'
-                    if self.experience_default > 0:
-                        answer = 'yes'
-                    else:
-                        for experience in self.experience:
-                            if experience.lower() in question_text and self.experience[experience] > 0:
-                                answer = 'yes'
+                    # First check whether it matches the custom question
+                    custom_answer = None
+                    if hasattr(self, 'customQuestions'):
+                        for custom_question, answer in self.customQuestions.items():
+                            if custom_question.lower() in question_text:
+                                custom_answer = answer
+                                print(f"Find custom text question matches: '{question_text}' -> '{custom_answer}'")
                                 break
-                    if answer == 'no':
-                        # record unlisted experience as unprepared questions
-                        self.record_unprepared_question("dropdown", question_text)
+                    
+                    txt_field_visible = False
+                    try:
+                        txt_field = question.find_element(By.TAG_NAME, 'input')
+                        txt_field_visible = True
+                    except:
+                        try:
+                            txt_field = question.find_element(By.TAG_NAME, 'textarea')
+                            txt_field_visible = True
+                        except:
+                            raise Exception("Could not find textarea or input tag for question")
 
-                    choice = ""
-                    for option in options:
-                        if answer in option.lower():
-                            choice = option
-                    if choice == "":
-                        choice = options[len(options) - 1]
-                    self.select_dropdown(dropdown_field, choice)
-
-                else:
-                    print(f"Unhandled dropdown question: {question_text}")
-                    self.record_unprepared_question("dropdown", question_text)
-
-                    # Since no response can be determined, we use AI to identify the best responseif available, falling back "yes" or the final response if the AI response is not available
-                    choice = options[len(options) - 1]
-                    choices = [(i, option) for i, option in enumerate(options)]
-                    ai_response = self.ai_response_generator.generate_response(
-                        question_text,
-                        response_type="choice",
-                        options=choices
-                    )
-                    if ai_response is not None:
-                        choice = options[ai_response]
+                    if 'numeric' in txt_field.get_attribute('id').lower():
+                        # For decimal and integer response fields, the id contains 'numeric' while the type remains 'text' 
+                        text_field_type = 'numeric'
+                    elif 'text' in txt_field.get_attribute('type').lower():
+                        text_field_type = 'text'
                     else:
+                        raise Exception("Could not determine input type of input field!")
+
+                    # If there is a custom answer, use it first
+                    if custom_answer:
+                        self.enter_text(txt_field, custom_answer)
+                        print(f"Custom text answer filled in: '{question_text}' -> '{custom_answer}'")
+                        continue
+
+                    # If there is no matching custom answer, use the original logic
+                    to_enter = ''
+                    if 'experience' in question_text or 'how many years in' in question_text:
+                        no_of_years = None
+                        for experience in self.experience:
+                            if experience.lower() in question_text:
+                                no_of_years = int(self.experience[experience])
+                                break
+                        if no_of_years is None:
+                            self.record_unprepared_question(text_field_type, question_text)
+                            no_of_years = int(self.experience_default)
+                        to_enter = no_of_years
+
+                    elif 'grade point average' in question_text:
+                        to_enter = self.university_gpa
+
+                    elif 'first name' in question_text:
+                        to_enter = self.personal_info['First Name']
+
+                    elif 'last name' in question_text:
+                        to_enter = self.personal_info['Last Name']
+
+                    elif 'name' in question_text:
+                        to_enter = self.personal_info['First Name'] + " " + self.personal_info['Last Name']
+
+                    elif 'pronouns' in question_text:
+                        to_enter = self.personal_info['Pronouns']
+
+                    elif 'phone' in question_text:
+                        to_enter = self.personal_info['Mobile Phone Number']
+                    elif '联系电话' in question_text:
+                        to_enter = self.personal_info['Mobile Phone Number']
+
+                    elif 'linkedin' in question_text:
+                        to_enter = self.personal_info['Linkedin']
+
+                    elif 'message to hiring' in question_text or 'cover letter' in question_text:
+                        to_enter = self.personal_info['MessageToManager']
+
+                    elif 'website' in question_text or 'github' in question_text or 'portfolio' in question_text:
+                        to_enter = self.personal_info['Website']
+
+                    elif 'notice' in question_text or 'weeks' in question_text:
+                        if text_field_type == 'numeric':
+                            to_enter = int(self.notice_period)
+                        else:
+                            to_enter = str(self.notice_period)
+
+                    elif 'salary' in question_text or 'expectation' in question_text or 'compensation' in question_text or 'CTC' in question_text:
+                        if text_field_type == 'numeric':
+                            to_enter = int(self.salary_minimum)
+                        else:
+                            to_enter = float(self.salary_minimum)
+                        self.record_unprepared_question(text_field_type, question_text)
+
+                    # Since no response can be determined, we use AI to generate a response if available, falling back to 0 or empty string if the AI response is not available
+                    if text_field_type == 'numeric':
+                        if not isinstance(to_enter, (int, float)):
+                            ai_response = self.ai_response_generator.generate_response(
+                                question_text,
+                                response_type="numeric"
+                            )
+                            to_enter = ai_response if ai_response is not None else 0
+                    elif to_enter == '':
+                        ai_response = self.ai_response_generator.generate_response(
+                            question_text,
+                            response_type="text"
+                        )
+                        to_enter = ai_response if ai_response is not None else " ‏‏‎ "
+
+                    self.enter_text(txt_field, to_enter)
+                    continue
+                except Exception as e:
+                    print(f"An exception occurred while filling up text field")
+
+                # Date Check
+                try:
+                    date_picker = question.find_element(By.CLASS_NAME, 'artdeco-datepicker__input ')
+                    date_picker.clear()
+                    date_picker.send_keys(date.today().strftime("%m/%d/%y"))
+                    time.sleep(1)
+                    date_picker.send_keys(Keys.RETURN)
+                    time.sleep(0.5)
+                    continue
+                except Exception as e:
+                    print(f"An exception occurred while filling up date picker field")
+
+                # Dropdown check
+                try:
+                    question_text = question.find_element(By.TAG_NAME, 'label').text.lower()
+                    print(f"Dropdown question text: {question_text}")
+                    
+                    # First check whether it matches the custom question
+                    custom_answer = None
+                    if hasattr(self, 'customQuestions'):
+                        for custom_question, answer in self.customQuestions.items():
+                            if custom_question.lower() in question_text:
+                                custom_answer = answer
+                                print(f"Found custom dropdown menu question matching: '{question_text}' -> '{custom_answer}'")
+                                break
+                                
+                    dropdown_field = question.find_element(By.TAG_NAME, 'select')
+                    select = Select(dropdown_field)
+                    options = [option.text for option in select.options]
+                    print(f"Dropdown options: {options}")
+                    
+                    # If there is a custom answer, use it first
+                    if custom_answer:
+                        selected = False
+                        for option in options:
+                            if custom_answer.lower() in option.lower():
+                                self.select_dropdown(dropdown_field, option)
+                                print(f"Custom drop-down menu option selected: '{question_text}' -> '{option}'")
+                                selected = True
+                                break
+                        
+                        if selected:
+                            continue
+
+                    # 如果没有匹配的自定义答案，使用原逻辑
+                    if 'proficiency' in question_text:
+                        proficiency = "None"
+                        for language in self.languages:
+                            if language.lower() in question_text:
+                                proficiency = self.languages[language]
+                                break
+                        self.select_dropdown(dropdown_field, proficiency)
+
+                    elif 'clearance' in question_text:
+                        answer = self.get_answer('securityClearance')
+
                         choice = ""
                         for option in options:
-                            if 'yes' in option.lower():
+                            if answer == 'yes':
                                 choice = option
+                            else:
+                                if 'no' in option.lower():
+                                    choice = option
+                        if choice == "":
+                            self.record_unprepared_question(text_field_type, question_text)
+                        self.select_dropdown(dropdown_field, choice)
 
-                    print(f"Selected option: {choice}")
-                    self.select_dropdown(dropdown_field, choice)
-                continue
-            except:
-                print("An exception occurred while filling up dropdown field")  # TODO: Put logging behind debug flag
+                    elif 'assessment' in question_text:
+                        answer = self.get_answer('assessment')
+                        choice = ""
+                        for option in options:
+                            if answer == 'yes':
+                                choice = option
+                            else:
+                                if 'no' in option.lower():
+                                    choice = option
+                        # if choice == "":
+                        #    choice = options[len(options) - 1]
+                        self.select_dropdown(dropdown_field, choice)
 
-            # Checkbox check for agreeing to terms and service
-            try:
-                clickable_checkbox = question.find_element(By.TAG_NAME, 'label')
-                clickable_checkbox.click()
-            except:
-                print("An exception occurred while filling up checkbox field")  # TODO: Put logging behind debug flag
+                    elif 'commut' in question_text or 'on-site' in question_text or 'hybrid' in question_text or 'onsite' in question_text:
+                        answer = self.get_answer('commute')
 
-    def unfollow(self):
-        try:
-            follow_checkbox = self.browser.find_element(By.XPATH,
-                                                        "//label[contains(.,'to stay up to date with their page.') or contains(.,'随时了解公司动态')]").click()
-            follow_checkbox.click()
-        except:
-            pass
+                        choice = ""
+                        for option in options:
+                            if answer == 'yes':
+                                choice = option
+                            else:
+                                if 'no' in option.lower():
+                                    choice = option
+                        # if choice == "":
+                        #    choice = options[len(options) - 1]
+                        self.select_dropdown(dropdown_field, choice)
 
-    def send_resume(self):
-        print("Trying to send resume")
-        # TODO 为啥失败
-        try:
-            file_upload_elements = (By.CSS_SELECTOR, "input[name='file']")
-            if len(self.browser.find_elements(file_upload_elements[0], file_upload_elements[1])) > 0:
-                input_buttons = self.browser.find_elements(file_upload_elements[0], file_upload_elements[1])
-                if len(input_buttons) == 0:
-                    raise Exception("No input elements found in element")
-                for upload_button in input_buttons:
-                    # upload_type = upload_button.find_element(By.XPATH, "..").find_element(By.XPATH, "preceding-sibling::*")
-                    input_id = upload_button.get_attribute("id")
-                    upload_type = self.browser.find_element(By.CSS_SELECTOR, f"label[for='{input_id}']")
-                    if 'resume' in upload_type.text.lower():
-                        upload_button.send_keys(self.resume_dir)
-                    elif 'cover' in upload_type.text.lower():
-                        if self.cover_letter_dir != '':
-                            upload_button.send_keys(self.cover_letter_dir)
-                        elif 'required' in upload_type.text.lower():
-                            upload_button.send_keys(self.resume_dir)
-        except:
-            print("Failed to upload resume or cover letter!")
-            pass
+                    elif 'country code' in question_text:
+                        self.select_dropdown(dropdown_field, self.personal_info['Phone Country Code'])
 
-    def enter_text(self, element, text):
-        element.clear()
-        element.send_keys(text)
+                    elif 'north korea' in question_text:
+                        choice = ""
+                        for option in options:
+                            if 'no' in option.lower():
+                                choice = option
+                        if choice == "":
+                            choice = options[len(options) - 1]
+                        self.select_dropdown(dropdown_field, choice)
 
-    def select_dropdown(self, element, text):
-        select = Select(element)
-        select.select_by_visible_text(text)
+                    elif 'previously employed' in question_text or 'previous employment' in question_text:
+                        choice = ""
+                        for option in options:
+                            if 'no' in option.lower():
+                                choice = option
+                        if choice == "":
+                            choice = options[len(options) - 1]
+                        self.select_dropdown(dropdown_field, choice)
 
-    # Radio Select
-    def radio_select(self, element, label_text, clickLast=False):
-        label = element.find_element(By.TAG_NAME, 'label')
-        if label_text in label.text.lower() or clickLast == True:
-            label.click()
+                    elif 'sponsor' in question_text:
+                        answer = self.get_answer('requireVisa')
+                        choice = ""
+                        for option in options:
+                            if answer == 'yes':
+                                choice = option
+                            else:
+                                if 'no' in option.lower():
+                                    choice = option
+                        if choice == "":
+                            choice = options[len(options) - 1]
+                        self.select_dropdown(dropdown_field, choice)
 
-    # Contact info fill-up
-    def contact_info(self, form):
-        print("Trying to fill up contact info fields")
-        frm_el = form.find_elements(By.TAG_NAME, 'label')
-        if len(frm_el) > 0:
-            for el in frm_el:
-                text = el.text.lower()
-                if 'email address' in text:
+                    elif 'above 18' in question_text.lower():  # Check for "above 18" in the question text
+                        choice = ""
+                        for option in options:
+                            if 'yes' in option.lower():  # Select 'yes' option
+                                choice = option
+                        if choice == "":
+                            choice = options[0]  # Default to the first option if 'yes' is not found
+                        self.select_dropdown(dropdown_field, choice)
+
+                    elif 'currently living' in question_text or 'currently reside' in question_text:
+                        answer = self.get_answer('residency')
+                        choice = ""
+                        for option in options:
+                            if answer == 'yes':
+                                choice = option
+                            else:
+                                if 'no' in option.lower():
+                                    choice = option
+                        if choice == "":
+                            choice = options[len(options) - 1]
+                        self.select_dropdown(dropdown_field, choice)
+
+                    elif 'authorized' in question_text or 'authorised' in question_text:
+                        answer = self.get_answer('legallyAuthorized')
+                        choice = ""
+                        for option in options:
+                            if answer == 'yes':
+                                # find some common words
+                                choice = option
+                            else:
+                                if 'no' in option.lower():
+                                    choice = option
+                        if choice == "":
+                            choice = options[len(options) - 1]
+                        self.select_dropdown(dropdown_field, choice)
+
+                    elif 'citizenship' in question_text:
+                        answer = self.get_answer('legallyAuthorized')
+                        choice = ""
+                        for option in options:
+                            if answer == 'yes':
+                                if 'no' in option.lower():
+                                    choice = option
+                        if choice == "":
+                            choice = options[len(options) - 1]
+                        self.select_dropdown(dropdown_field, choice)
+
+                    elif 'clearance' in question_text:
+                        answer = self.get_answer('clearance')
+                        choice = ""
+                        for option in options:
+                            if answer == 'yes':
+                                choice = option
+                            else:
+                                if 'no' in option.lower():
+                                    choice = option
+                        if choice == "":
+                            choice = options[len(options) - 1]
+
+                        self.select_dropdown(dropdown_field, choice)
+
+                    elif any(keyword in question_text.lower() for keyword in
+                             [
+                                 'aboriginal', 'native', 'indigenous', 'tribe', 'first nations',
+                                 'native american', 'native hawaiian', 'inuit', 'metis', 'maori',
+                                 'aborigine', 'ancestral', 'native peoples', 'original people',
+                                 'first people', 'gender', 'race', 'disability', 'latino'
+                             ]):
+                        negative_keywords = ['prefer', 'decline', 'don\'t', 'specified', 'none']
+
+                        choice = ""
+                        for option in options:
+                            if any(neg_keyword in option.lower() for neg_keyword in negative_keywords):
+                                choice = option
+                                break
+                        
+                        if not choice and options:
+                            choice = options[len(options) - 1]
+
+                        self.select_dropdown(dropdown_field, choice)
+
+                    elif 'email' in question_text:
+                        continue  # assume email address is filled in properly by default
+
+                    elif 'experience' in question_text or 'understanding' in question_text or 'familiar' in question_text or 'comfortable' in question_text or 'able to' in question_text:
+                        answer = 'no'
+                        if self.experience_default > 0:
+                            answer = 'yes'
+                        else:
+                            for experience in self.experience:
+                                if experience.lower() in question_text and self.experience[experience] > 0:
+                                    answer = 'yes'
+                                    break
+                        if answer == 'no':
+                            # record unlisted experience as unprepared questions
+                            self.record_unprepared_question("dropdown", question_text)
+
+                        choice = ""
+                        for option in options:
+                            if answer in option.lower():
+                                choice = option
+                        if choice == "":
+                            choice = options[len(options) - 1]
+                        self.select_dropdown(dropdown_field, choice)
+
+                    else:
+                        print(f"Unhandled dropdown question: {question_text}")
+                        self.record_unprepared_question("dropdown", question_text)
+
+                        # Since no response can be determined, we use AI to identify the best responseif available, falling back "yes" or the final response if the AI response is not available
+                        choice = options[len(options) - 1]
+                        choices = [(i, option) for i, option in enumerate(options)]
+                        ai_response = self.ai_response_generator.generate_response(
+                            question_text,
+                            response_type="choice",
+                            options=choices
+                        )
+                        if ai_response is not None:
+                            choice = options[ai_response]
+                        else:
+                            choice = ""
+                            for option in options:
+                                if 'yes' in option.lower():
+                                    choice = option
+
+                        print(f"Selected option: {choice}")
+                        self.select_dropdown(dropdown_field, choice)
                     continue
-                elif 'phone number' in text:
-                    try:
-                        country_code_picker = el.find_element(By.XPATH,
-                                                              '//select[contains(@id,"phoneNumber")][contains(@id,"country")]')
-                        self.select_dropdown(country_code_picker, self.personal_info['Phone Country Code'])
-                    except Exception as e:
-                        print("Country code " + self.personal_info[
-                            'Phone Country Code'] + " not found. Please make sure it is same as in LinkedIn.")
-                        print(e)
-                    try:
-                        phone_number_field = el.find_element(By.XPATH,
-                                                             '//input[contains(@id,"phoneNumber")][contains(@id,"nationalNumber")]')
-                        self.enter_text(phone_number_field, self.personal_info['Mobile Phone Number'])
-                    except Exception as e:
-                        print("Could not enter phone number:")
-                        print(e)
+                except Exception as e:
+                    print(f"An exception occurred while filling up dropdown field")
 
+                # Checkbox check for agreeing to terms and service
+                try:
+                    clickable_checkbox = question.find_element(By.TAG_NAME, 'label')
+                    clickable_checkbox.click()
+                except Exception as e:
+                    print(f"An exception occurred while filling up checkbox field")
+            except Exception as e:
+                print(f"An exception occurred while processing the problem")
+                
     def fill_up(self):
         try:
             easy_apply_modal_content = self.browser.find_element(By.CLASS_NAME, "jobs-easy-apply-modal__content")
@@ -1392,3 +1383,74 @@ class LinkedinEasyApply:
         query_params = parse_qs(parsed_url.query)
         geoId = query_params.get('geoId', [None])[0]
         return geoId
+
+    def unfollow(self):
+        try:
+            follow_checkbox = self.browser.find_element(By.XPATH,
+                                                        "//label[contains(.,'to stay up to date with their page.') or contains(.,'随时了解公司动态')]").click()
+            follow_checkbox.click()
+        except:
+            pass
+
+    def send_resume(self):
+        print("Trying to send resume")
+        try:
+            file_upload_elements = (By.CSS_SELECTOR, "input[name='file']")
+            if len(self.browser.find_elements(file_upload_elements[0], file_upload_elements[1])) > 0:
+                input_buttons = self.browser.find_elements(file_upload_elements[0], file_upload_elements[1])
+                if len(input_buttons) == 0:
+                    raise Exception("No input elements found in element")
+                for upload_button in input_buttons:
+                    # upload_type = upload_button.find_element(By.XPATH, "..").find_element(By.XPATH, "preceding-sibling::*")
+                    input_id = upload_button.get_attribute("id")
+                    upload_type = self.browser.find_element(By.CSS_SELECTOR, f"label[for='{input_id}']")
+                    if 'resume' in upload_type.text.lower():
+                        upload_button.send_keys(self.resume_dir)
+                    elif 'cover' in upload_type.text.lower():
+                        if self.cover_letter_dir != '':
+                            upload_button.send_keys(self.cover_letter_dir)
+                        elif 'required' in upload_type.text.lower():
+                            upload_button.send_keys(self.resume_dir)
+        except:
+            print("Failed to upload resume or cover letter!")
+            pass
+
+    def enter_text(self, element, text):
+        element.clear()
+        element.send_keys(text)
+
+    def select_dropdown(self, element, text):
+        select = Select(element)
+        select.select_by_visible_text(text)
+
+    # Radio Select
+    def radio_select(self, element, label_text, clickLast=False):
+        label = element.find_element(By.TAG_NAME, 'label')
+        if label_text in label.text.lower() or clickLast == True:
+            label.click()
+
+    # Contact info fill-up
+    def contact_info(self, form):
+        print("Trying to fill up contact info fields")
+        frm_el = form.find_elements(By.TAG_NAME, 'label')
+        if len(frm_el) > 0:
+            for el in frm_el:
+                text = el.text.lower()
+                if 'email address' in text:
+                    continue
+                elif 'phone number' in text:
+                    try:
+                        country_code_picker = el.find_element(By.XPATH,
+                                                              '//select[contains(@id,"phoneNumber")][contains(@id,"country")]')
+                        self.select_dropdown(country_code_picker, self.personal_info['Phone Country Code'])
+                    except Exception as e:
+                        print("Country code " + self.personal_info[
+                            'Phone Country Code'] + " not found. Please make sure it is same as in LinkedIn.")
+                        print(e)
+                    try:
+                        phone_number_field = el.find_element(By.XPATH,
+                                                             '//input[contains(@id,"phoneNumber")][contains(@id,"nationalNumber")]')
+                        self.enter_text(phone_number_field, self.personal_info['Mobile Phone Number'])
+                    except Exception as e:
+                        print("Could not enter phone number:")
+                        print(e)

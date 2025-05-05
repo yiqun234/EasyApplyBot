@@ -9,6 +9,7 @@ import webbrowser
 import collections.abc # Used for deep update
 import traceback
 import time
+import json
 
 CONFIG_FILE = "config.yaml"
 # DEFAULT_CONFIG now primarily defines structure and default *values* if a key *exists* but has no value,
@@ -25,7 +26,8 @@ DEFAULT_CONFIG = {
     'checkboxes': {'driversLicence': True, 'requireVisa': False, 'legallyAuthorized': False, 'certifiedProfessional': True, 'urgentFill': True, 'commute': True, 'remote': True, 'drugTest': True, 'assessment': True, 'securityClearance': False, 'degreeCompleted': ["High School Diploma", "Bachelor's Degree"], 'backgroundCheck': True},
     'universityGpa': 4.0, 'salaryMinimum': 65000, 'languages': {'english': 'Native or bilingual'},
     'noticePeriod': 2, 'experience': {'default': 0}, 'personalInfo': {}, 'eeo': {}, 'textResume': '',
-    'evaluateJobFit': False, 'debug': False
+    'evaluateJobFit': False, 'debug': False,
+    'customQuestions': {}  # 自定义问答配置
 }
 
 STANDARD_DEGREES = ["High School Diploma", "Associate's Degree", "Bachelor's Degree", "Master's Degree", "Master of Business Administration", "Doctor of Philosophy", "Doctor of Medicine", "Doctor of Law"]
@@ -82,15 +84,26 @@ def save_config(config):
             if isinstance(v, dict): config_to_save[k] = v.copy()
             elif isinstance(v, list): config_to_save[k] = v.copy()
             else: config_to_save[k] = v
+            
         with open(CONFIG_FILE, 'w', encoding='utf-8') as stream:
             yaml.dump(config_to_save, stream, default_flow_style=False, allow_unicode=True, sort_keys=False)
         return True
     except Exception as e: messagebox.showerror("保存错误", f"无法保存配置: {e}"); return False
 
-# --- Helper Functions ---
 def safe_join_list(config_value):
     if isinstance(config_value, list): return '\n'.join(map(str, config_value))
     return ''
+
+def parse_list_from_textarea(text_content):
+    return [line.strip() for line in text_content.strip().split('\n') if line.strip()]
+
+def save_config_to_yaml(config_data):
+    """Save configuration to config.yaml"""
+    with open('config.yaml', 'w', encoding='utf-8') as file:
+        yaml.dump(config_data, file, default_flow_style=False, sort_keys=False, allow_unicode=True)
+    return True
+
+# --- Helper Functions ---
 def parse_list_from_textarea(text_content):
     return [line.strip() for line in text_content.strip().split('\n') if line.strip()]
 # Removed parse_dict_from_textarea as it's no longer used for experience, lang, etc.
@@ -104,6 +117,27 @@ class EasyApplyApp(tk.Tk):
         self.geometry("900x800")
 
         self.config = load_config()
+        
+        # 特殊处理customQuestions，确保问题文本正确解析
+        if 'customQuestions' in self.config and self.config['customQuestions']:
+            processed_questions = {}
+            for q, a in self.config['customQuestions'].items():
+                # 处理可能的双引号字符串
+                question = q
+                answer = a
+                if isinstance(question, str) and question.startswith('"') and question.endswith('"'):
+                    try:
+                        question = json.loads(question)
+                    except:
+                        print(f"无法解析问题字符串: {question}")
+                if isinstance(answer, str) and answer.startswith('"') and answer.endswith('"'):
+                    try:
+                        answer = json.loads(answer)
+                    except:
+                        print(f"无法解析答案字符串: {answer}")
+                processed_questions[question] = answer
+            self.config['customQuestions'] = processed_questions
+            
         self.bot_process = None
 
         # --- Variables --- (Grouped for clarity)
@@ -361,6 +395,33 @@ class EasyApplyApp(tk.Tk):
         ttk.Button(exp_button_frame, text="批量添加", command=self._batch_add_experiences, width=8).pack(pady=2, fill=tk.X)
         ttk.Button(exp_button_frame, text="批量删除", command=self._batch_remove_experiences, width=8).pack(pady=2, fill=tk.X)
 
+        # --- 自定义问答 Frame ---
+        customq_frame = ttk.LabelFrame(self.scrollable_frame, text="自定义问答", padding=(10, 5))
+        customq_frame.grid(row=current_row, column=0, columnspan=2, padx=10, pady=5, sticky=tk.EW); current_row += 1
+        
+        # 添加滚动条容器
+        customq_list_frame = ttk.Frame(customq_frame)
+        customq_list_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0,5))
+        
+        # 创建Listbox以支持多选
+        self.customq_listbox = tk.Listbox(customq_list_frame, height=6, width=50, selectmode=tk.EXTENDED)
+        self.customq_listbox.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        
+        # 添加滚动条
+        customq_scrollbar = ttk.Scrollbar(customq_list_frame, orient="vertical", command=self.customq_listbox.yview)
+        customq_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        self.customq_listbox.config(yscrollcommand=customq_scrollbar.set)
+        
+        self._update_customquestions_listbox()  # 更新列表显示
+        
+        # 按钮
+        customq_button_frame = ttk.Frame(customq_frame)
+        customq_button_frame.pack(side=tk.LEFT, fill=tk.Y)
+        ttk.Button(customq_button_frame, text="添加", command=self._add_customquestion_dialog, width=8).pack(pady=2, fill=tk.X)
+        ttk.Button(customq_button_frame, text="修改", command=self._modify_customquestion_dialog, width=8).pack(pady=2, fill=tk.X)
+        ttk.Button(customq_button_frame, text="移除", command=self._remove_customquestion, width=8).pack(pady=2, fill=tk.X)
+        ttk.Button(customq_button_frame, text="批量添加", command=self._batch_add_customquestions, width=8).pack(pady=2, fill=tk.X)
+        ttk.Button(customq_button_frame, text="批量删除", command=self._batch_remove_customquestions, width=8).pack(pady=2, fill=tk.X)
 
         # --- Personal Info & EEO Frame (Dynamic Entries) ---
         dynamic_frame = ttk.LabelFrame(self.scrollable_frame, text="个人资料 & EEO (基于 config.yaml)", padding=(10, 5))
@@ -425,6 +486,42 @@ class EasyApplyApp(tk.Tk):
                      if col >= 3: col = 0; row += 1
 
         ttk.Label(self.scrollable_frame, text="提示: 更复杂的配置请编辑 YAML 文件。", justify=tk.LEFT, foreground="grey").grid(row=current_row, column=0, columnspan=2, padx=10, pady=5, sticky=tk.W)
+
+        # 给各个列表框添加鼠标滚轮事件绑定
+        def _configure_listbox_scrolling():
+            def _on_listbox_mousewheel(event, listbox):
+                # Platform-specific scroll delta calculation
+                if sys.platform == "win32":
+                    delta = -int(event.delta / 120)
+                elif sys.platform == "darwin":  # macOS
+                    delta = -event.delta
+                else:  # Linux (Button-4 and Button-5)
+                    if event.num == 4:
+                        delta = -1
+                    elif event.num == 5:
+                        delta = 1
+                    else:
+                        delta = 0
+                listbox.yview_scroll(delta, "units")
+                return "break"  # 阻止事件继续传播
+            
+            # 为语言列表框添加滚轮事件
+            self.lang_listbox.bind("<MouseWheel>", lambda e: _on_listbox_mousewheel(e, self.lang_listbox))
+            self.lang_listbox.bind("<Button-4>", lambda e: _on_listbox_mousewheel(e, self.lang_listbox))
+            self.lang_listbox.bind("<Button-5>", lambda e: _on_listbox_mousewheel(e, self.lang_listbox))
+            
+            # 为经验列表框添加滚轮事件
+            self.exp_listbox.bind("<MouseWheel>", lambda e: _on_listbox_mousewheel(e, self.exp_listbox))
+            self.exp_listbox.bind("<Button-4>", lambda e: _on_listbox_mousewheel(e, self.exp_listbox))
+            self.exp_listbox.bind("<Button-5>", lambda e: _on_listbox_mousewheel(e, self.exp_listbox))
+            
+            # 为自定义问答列表框添加滚轮事件
+            self.customq_listbox.bind("<MouseWheel>", lambda e: _on_listbox_mousewheel(e, self.customq_listbox))
+            self.customq_listbox.bind("<Button-4>", lambda e: _on_listbox_mousewheel(e, self.customq_listbox))
+            self.customq_listbox.bind("<Button-5>", lambda e: _on_listbox_mousewheel(e, self.customq_listbox))
+        
+        # 在所有列表框创建完后调用配置函数
+        self.after(100, _configure_listbox_scrolling)
 
     # --- Language Dialogs and Listbox Management ---
     def _add_language_dialog(self):
@@ -649,6 +746,8 @@ class EasyApplyApp(tk.Tk):
                 if isinstance(var, tk.BooleanVar): self.config['checkboxes'][key] = var.get()
             self.config['checkboxes']['degreeCompleted'] = [ # Degrees
                 degree for degree, var in self.vars['degreeCompleted'].items() if var.get() ]
+            
+            # CustomQuestions is handled by the dialog methods, no need to read here
 
             return True
         except tk.TclError as e: messagebox.showerror("获取值错误", f"无法从界面获取配置值: {e}"); return False
@@ -749,7 +848,7 @@ class EasyApplyApp(tk.Tk):
 
                 # 进程正常结束 (readline返回空字符串) 或被终止后，
                 # 确保最终状态检查被调度
-                self.after(100, self._check_bot_process)
+            self.after(100, self._check_bot_process)
 
         except ValueError:
             # 当管道在读取操作中途被强制关闭时 (例如 terminate/kill),
@@ -1038,6 +1137,314 @@ class EasyApplyApp(tk.Tk):
         if removed_count > 0:
             self._update_experience_listbox()
             messagebox.showinfo("批量删除完成", f"成功删除了 {removed_count} 个经验。")
+
+    def _update_customquestions_listbox(self):
+        """更新自定义问答列表显示"""
+        self.customq_listbox.delete(0, tk.END)
+        questions = self.config.get('customQuestions', {})
+        for question, answer in questions.items():
+            # 使用 " => " 作为问答分隔符，避免与问题中的冒号混淆
+            self.customq_listbox.insert(tk.END, f"{question} => {answer}")
+
+    def _add_customquestion_dialog(self):
+        """打开添加自定义问答对话框"""
+        dialog = tk.Toplevel(self)
+        dialog.title("添加自定义问答")
+        dialog.geometry("400x200")
+        dialog.transient(self)
+        dialog.grab_set()
+        
+        ttk.Label(dialog, text="问题:").grid(row=0, column=0, padx=5, pady=5, sticky=tk.W)
+        question_entry = ttk.Entry(dialog, width=40)
+        question_entry.grid(row=0, column=1, padx=5, pady=5, sticky=tk.EW)
+        
+        ttk.Label(dialog, text="答案:").grid(row=1, column=0, padx=5, pady=5, sticky=tk.NW)
+        answer_text = scrolledtext.ScrolledText(dialog, width=40, height=5)
+        answer_text.grid(row=1, column=1, padx=5, pady=5, sticky=tk.EW)
+        
+        def save_question():
+            question = question_entry.get().strip()
+            answer = answer_text.get("1.0", tk.END).strip()
+            
+            if question and answer:
+                if 'customQuestions' not in self.config:
+                    self.config['customQuestions'] = {}
+                
+                # 确保问题和答案中的特殊字符被正确处理
+                self.config['customQuestions'][question] = answer
+                self._update_customquestions_listbox()
+                # 每次添加后都保存一次配置，确保不会丢失
+                self._save_gui_config()
+                dialog.destroy()
+            else:
+                messagebox.showwarning("输入错误", "问题和答案都不能为空。", parent=dialog)
+        
+        button_frame = ttk.Frame(dialog)
+        button_frame.grid(row=2, column=0, columnspan=2, pady=10)
+        
+        ttk.Button(button_frame, text="保存", command=save_question, width=10).pack(side=tk.LEFT, padx=5)
+        ttk.Button(button_frame, text="取消", command=dialog.destroy, width=10).pack(side=tk.LEFT, padx=5)
+        
+        dialog.columnconfigure(1, weight=1)
+        dialog.rowconfigure(1, weight=1)
+        
+        # 居中显示对话框
+        dialog.update_idletasks()
+        width = dialog.winfo_width()
+        height = dialog.winfo_height()
+        x = (dialog.winfo_screenwidth() // 2) - (width // 2)
+        y = (dialog.winfo_screenheight() // 2) - (height // 2)
+        dialog.geometry(f"+{x}+{y}")
+        
+        question_entry.focus_set()
+
+    def _modify_customquestion_dialog(self):
+        """打开修改自定义问答对话框"""
+        selected = self.customq_listbox.curselection()
+        if not selected:
+            messagebox.showinfo("选择错误", "请先选择一个问题答案对。")
+            return
+        
+        selected_item = self.customq_listbox.get(selected[0])
+        try:
+            # 使用 " => " 作为分隔符拆分问题和答案
+            if " => " in selected_item:
+                question, answer = selected_item.split(" => ", 1)
+            else:
+                # 兼容旧格式
+                question, answer = selected_item.split(": ", 1)
+        except ValueError:
+            messagebox.showerror("格式错误", "所选项目格式不正确，无法修改。")
+            return
+        
+        dialog = tk.Toplevel(self)
+        dialog.title("修改自定义问答")
+        dialog.geometry("400x200")
+        dialog.transient(self)
+        dialog.grab_set()
+        
+        ttk.Label(dialog, text="问题:").grid(row=0, column=0, padx=5, pady=5, sticky=tk.W)
+        question_entry = ttk.Entry(dialog, width=40)
+        question_entry.insert(0, question)
+        question_entry.grid(row=0, column=1, padx=5, pady=5, sticky=tk.EW)
+        
+        ttk.Label(dialog, text="答案:").grid(row=1, column=0, padx=5, pady=5, sticky=tk.NW)
+        answer_text = scrolledtext.ScrolledText(dialog, width=40, height=5)
+        answer_text.insert("1.0", answer)
+        answer_text.grid(row=1, column=1, padx=5, pady=5, sticky=tk.EW)
+        
+        def save_modification():
+            new_question = question_entry.get().strip()
+            new_answer = answer_text.get("1.0", tk.END).strip()
+            
+            if new_question and new_answer:
+                # 删除旧问答
+                if question in self.config.get('customQuestions', {}):
+                    del self.config['customQuestions'][question]
+                
+                # 添加新问答
+                if 'customQuestions' not in self.config:
+                    self.config['customQuestions'] = {}
+                
+                # 确保问题和答案中的特殊字符被正确处理
+                self.config['customQuestions'][new_question] = new_answer
+                self._update_customquestions_listbox()
+                # 每次修改后都保存一次配置，确保不会丢失
+                self._save_gui_config()
+                dialog.destroy()
+            else:
+                messagebox.showwarning("输入错误", "问题和答案都不能为空。", parent=dialog)
+
+        button_frame = ttk.Frame(dialog)
+        button_frame.grid(row=2, column=0, columnspan=2, pady=10)
+        
+        ttk.Button(button_frame, text="保存", command=save_modification, width=10).pack(side=tk.LEFT, padx=5)
+        ttk.Button(button_frame, text="取消", command=dialog.destroy, width=10).pack(side=tk.LEFT, padx=5)
+        
+        dialog.columnconfigure(1, weight=1)
+        dialog.rowconfigure(1, weight=1)
+        
+        # 居中显示对话框
+        dialog.update_idletasks()
+        width = dialog.winfo_width()
+        height = dialog.winfo_height()
+        x = (dialog.winfo_screenwidth() // 2) - (width // 2)
+        y = (dialog.winfo_screenheight() // 2) - (height // 2)
+        dialog.geometry(f"+{x}+{y}")
+        
+        question_entry.focus_set()
+
+    def _remove_customquestion(self):
+        """删除选中的自定义问答"""
+        selected = self.customq_listbox.curselection()
+        if not selected:
+            messagebox.showinfo("选择错误", "请先选择一个问题答案对。")
+            return
+        
+        selected_items = [self.customq_listbox.get(idx) for idx in selected]
+        
+        if messagebox.askyesno("确认删除", f"确定要删除选中的 {len(selected_items)} 个问题答案对吗？"):
+            for item in selected_items:
+                try:
+                    # 使用 " => " 作为分隔符拆分问题和答案
+                    if " => " in item:
+                        question = item.split(" => ", 1)[0]
+                    else:
+                        # 兼容旧格式
+                        question = item.split(": ", 1)[0]
+                        
+                    if question in self.config.get('customQuestions', {}):
+                        del self.config['customQuestions'][question]
+                except ValueError:
+                    continue
+            
+            self._update_customquestions_listbox()
+            # 删除后保存配置
+            self._save_gui_config()
+
+    def _batch_add_customquestions(self):
+        """批量添加自定义问答"""
+        dialog = tk.Toplevel(self)
+        dialog.title("批量添加自定义问答")
+        dialog.geometry("500x400")  # 增加高度
+        dialog.transient(self)
+        dialog.grab_set()
+        
+        ttk.Label(dialog, text="每行一个问题答案对，格式为 '问题: 答案'").pack(pady=5)
+        
+        text_area = scrolledtext.ScrolledText(dialog, width=60, height=15)
+        text_area.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
+        
+        def save_batch():
+            content = text_area.get("1.0", tk.END).strip()
+            if not content:
+                dialog.destroy()
+                return
+            
+            lines = content.split("\n")
+            added_count = 0
+            
+            if 'customQuestions' not in self.config:
+                self.config['customQuestions'] = {}
+            
+            for line in lines:
+                if ": " in line:
+                    question, answer = line.split(": ", 1)
+                    question = question.strip()
+                    answer = answer.strip()
+                    
+                    if question and answer:
+                        # 确保问题和答案中的特殊字符被正确处理
+                        self.config['customQuestions'][question] = answer
+                        added_count += 1
+            
+            if added_count > 0:
+                messagebox.showinfo("批量添加完成", f"成功添加了 {added_count} 个问题答案对。", parent=dialog)
+                self._update_customquestions_listbox()
+                # 批量添加后保存配置
+                self._save_gui_config()
+                dialog.destroy()
+            else:
+                messagebox.showwarning("添加失败", "没有找到有效的问题答案对，请确保格式正确。", parent=dialog)
+        
+        button_frame = ttk.Frame(dialog)
+        button_frame.pack(pady=10)
+        
+        ttk.Button(button_frame, text="保存", command=save_batch, width=10).pack(side=tk.LEFT, padx=5)
+        ttk.Button(button_frame, text="取消", command=dialog.destroy, width=10).pack(side=tk.LEFT, padx=5)
+        ttk.Button(button_frame, text="从文件导入", command=lambda: self._import_qa_from_file(text_area), width=15).pack(side=tk.LEFT, padx=5)
+        
+        # 居中显示对话框
+        dialog.update_idletasks()
+        width = dialog.winfo_width()
+        height = dialog.winfo_height()
+        x = (dialog.winfo_screenwidth() // 2) - (width // 2)
+        y = (dialog.winfo_screenheight() // 2) - (height // 2)
+        dialog.geometry(f"+{x}+{y}")
+        
+        text_area.focus_set()
+
+    def _import_qa_from_file(self, text_area):
+        """从文件导入问题和答案"""
+        filepath = filedialog.askopenfilename(
+            title="选择数据文件",
+            filetypes=(
+                ("文本文件", "*.txt"),
+                ("CSV文件", "*.csv"),
+                ("所有文件", "*.*")
+            )
+        )
+        
+        if not filepath:
+            return
+            
+        try:
+            with open(filepath, 'r', encoding='utf-8') as file:
+                content = file.read()
+                text_area.delete("1.0", tk.END)
+                text_area.insert("1.0", content)
+                messagebox.showinfo("导入成功", "文件内容已导入，请检查格式并保存。")
+        except Exception as e:
+            messagebox.showerror("导入错误", f"导入文件时出错：{e}")
+
+    def _batch_remove_customquestions(self):
+        """批量删除自定义问答"""
+        selected = self.customq_listbox.curselection()
+        if not selected:
+            messagebox.showinfo("选择错误", "请先选择至少一个问题答案对。")
+            return
+        
+        selected_items = [self.customq_listbox.get(idx) for idx in selected]
+        
+        if messagebox.askyesno("确认删除", f"确定要删除选中的 {len(selected_items)} 个问题答案对吗？"):
+            removed_count = 0
+            for item in selected_items:
+                try:
+                    # 使用 " => " 作为分隔符拆分问题和答案
+                    if " => " in item:
+                        question = item.split(" => ", 1)[0]
+                    else:
+                        # 兼容旧格式
+                        question = item.split(": ", 1)[0]
+                        
+                    if question in self.config.get('customQuestions', {}):
+                        del self.config['customQuestions'][question]
+                        removed_count += 1
+                except ValueError:
+                    continue
+            
+            self._update_customquestions_listbox()
+            # 批量删除后保存配置
+            self._save_gui_config()
+            messagebox.showinfo("批量删除完成", f"成功删除了 {removed_count} 个问题答案对。")
+
+    def _save_config(self, config_to_save):
+        # 确保customQuestions中的特殊字符被正确处理
+        if 'customQuestions' in config_to_save and config_to_save['customQuestions']:
+            processed_questions = {}
+            for question, answer in config_to_save['customQuestions'].items():
+                # 对问题和答案进行处理，确保特殊字符被正确处理
+                # 在YAML中，冒号、引号等需要特别注意
+                if isinstance(question, str) and isinstance(answer, str):
+                    # 对于含有冒号的问题，确保它们被正确引用
+                    question_key = question
+                    if ':' in question or '\n' in question or '"' in question or "'" in question:
+                        # 使用YAML风格的双引号字符串，它会正确处理所有特殊字符
+                        question_key = json.dumps(question, ensure_ascii=False)
+                    
+                    # 同样处理答案
+                    answer_value = answer
+                    if ':' in answer or '\n' in answer or '"' in answer or "'" in answer:
+                        answer_value = json.dumps(answer, ensure_ascii=False)
+                        
+                    processed_questions[question_key] = answer_value
+                else:
+                    processed_questions[question] = answer
+                    
+            config_to_save['customQuestions'] = processed_questions
+
+        with open('config.yaml', 'w', encoding='utf-8') as stream:
+            yaml.dump(config_to_save, stream, default_flow_style=False, allow_unicode=True, sort_keys=False)
 
 if __name__ == '__main__':
     in_venv = hasattr(sys, 'real_prefix') or (hasattr(sys, 'base_prefix') and sys.base_prefix != sys.prefix)
