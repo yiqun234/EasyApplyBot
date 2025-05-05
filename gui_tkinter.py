@@ -313,29 +313,53 @@ class EasyApplyApp(tk.Tk):
         # --- Languages Frame (Listbox + Buttons) ---
         lang_frame = ttk.LabelFrame(self.scrollable_frame, text="语言能力", padding=(10, 5))
         lang_frame.grid(row=current_row, column=0, padx=10, pady=5, sticky=tk.NSEW); current_row += 1 # Takes one column now
-        self.lang_listbox = tk.Listbox(lang_frame, height=4, width=40)
-        self.lang_listbox.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0,5))
+        
+        # 添加滚动条容器
+        lang_list_frame = ttk.Frame(lang_frame)
+        lang_list_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0,5))
+        
+        # 修改Listbox以支持多选
+        self.lang_listbox = tk.Listbox(lang_list_frame, height=4, width=40, selectmode=tk.EXTENDED)
+        self.lang_listbox.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        
+        # 添加语言列表滚动条
+        lang_scrollbar = ttk.Scrollbar(lang_list_frame, orient="vertical", command=self.lang_listbox.yview)
+        lang_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        self.lang_listbox.config(yscrollcommand=lang_scrollbar.set)
+        
         self._update_language_listbox() # Initial population
         lang_button_frame = ttk.Frame(lang_frame); lang_button_frame.pack(side=tk.LEFT, fill=tk.Y)
-        ttk.Button(lang_button_frame, text="添加", command=self._add_language_dialog, width=6).pack(pady=2, fill=tk.X)
-        ttk.Button(lang_button_frame, text="修改", command=self._modify_language_dialog, width=6).pack(pady=2, fill=tk.X) # Added Modify Button
-        ttk.Button(lang_button_frame, text="移除", command=self._remove_language, width=6).pack(pady=2, fill=tk.X)
+        ttk.Button(lang_button_frame, text="添加", command=self._add_language_dialog, width=8).pack(pady=2, fill=tk.X)
+        ttk.Button(lang_button_frame, text="修改", command=self._modify_language_dialog, width=8).pack(pady=2, fill=tk.X)
+        ttk.Button(lang_button_frame, text="移除", command=self._remove_language, width=8).pack(pady=2, fill=tk.X)
+        ttk.Button(lang_button_frame, text="批量添加", command=self._batch_add_languages, width=8).pack(pady=2, fill=tk.X)
+        ttk.Button(lang_button_frame, text="批量删除", command=self._batch_remove_languages, width=8).pack(pady=2, fill=tk.X)
 
-        # --- Experience Frame (Listbox + Buttons) --- Changed ---
+        # --- Experience Frame (Listbox + Buttons) ---
         exp_frame = ttk.LabelFrame(self.scrollable_frame, text="经验 (技能: 年数)", padding=(10, 5))
         exp_frame.grid(row=current_row-1, column=1, padx=10, pady=5, sticky=tk.NSEW, rowspan=1) # Place next to languages
-        # Removed rowspan, place below languages
-        # exp_frame.grid(row=current_row, column=0, columnspan=2, padx=10, pady=5, sticky=tk.EW); current_row += 1
         exp_frame.grid(row=current_row, column=0, columnspan=2, padx=10, pady=5, sticky=tk.EW); current_row += 1
 
-
-        self.exp_listbox = tk.Listbox(exp_frame, height=5, width=50)
-        self.exp_listbox.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0,5))
+        # 添加滚动条容器
+        exp_list_frame = ttk.Frame(exp_frame)
+        exp_list_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0,5))
+        
+        # 修改Listbox以支持多选
+        self.exp_listbox = tk.Listbox(exp_list_frame, height=5, width=50, selectmode=tk.EXTENDED)
+        self.exp_listbox.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        
+        # 添加经验列表滚动条
+        exp_scrollbar = ttk.Scrollbar(exp_list_frame, orient="vertical", command=self.exp_listbox.yview)
+        exp_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        self.exp_listbox.config(yscrollcommand=exp_scrollbar.set)
+        
         self._update_experience_listbox() # Initial population
         exp_button_frame = ttk.Frame(exp_frame); exp_button_frame.pack(side=tk.LEFT, fill=tk.Y)
-        ttk.Button(exp_button_frame, text="添加", command=self._add_experience_dialog, width=6).pack(pady=2, fill=tk.X)
-        ttk.Button(exp_button_frame, text="修改", command=self._modify_experience_dialog, width=6).pack(pady=2, fill=tk.X)
-        ttk.Button(exp_button_frame, text="移除", command=self._remove_experience, width=6).pack(pady=2, fill=tk.X)
+        ttk.Button(exp_button_frame, text="添加", command=self._add_experience_dialog, width=8).pack(pady=2, fill=tk.X)
+        ttk.Button(exp_button_frame, text="修改", command=self._modify_experience_dialog, width=8).pack(pady=2, fill=tk.X)
+        ttk.Button(exp_button_frame, text="移除", command=self._remove_experience, width=8).pack(pady=2, fill=tk.X)
+        ttk.Button(exp_button_frame, text="批量添加", command=self._batch_add_experiences, width=8).pack(pady=2, fill=tk.X)
+        ttk.Button(exp_button_frame, text="批量删除", command=self._batch_remove_experiences, width=8).pack(pady=2, fill=tk.X)
 
 
         # --- Personal Info & EEO Frame (Dynamic Entries) ---
@@ -780,6 +804,240 @@ class EasyApplyApp(tk.Tk):
     def _on_closing(self):
         """直接关闭GUI，不再需要检查进程状态"""
         self.destroy()
+
+    # 添加批量操作相关的方法
+    def _batch_add_languages(self):
+        """批量添加语言能力"""
+        dialog = tk.Toplevel(self)
+        dialog.title("批量添加语言")
+        dialog.transient(self)
+        dialog.grab_set()
+        
+        ttk.Label(dialog, text="输入格式：每行一个语言，格式为 '语言名称: 熟练度'").pack(pady=(10, 5), padx=10)
+        ttk.Label(dialog, text="例如：'英语: Native or bilingual'").pack(pady=(0, 10), padx=10)
+        
+        # 文本区域用于输入多个语言
+        text_area = scrolledtext.ScrolledText(dialog, width=40, height=10)
+        text_area.pack(pady=5, padx=10, fill=tk.BOTH, expand=True)
+        
+        # 添加一个下拉框，显示可用的熟练度级别
+        level_frame = ttk.Frame(dialog)
+        level_frame.pack(pady=5, padx=10, fill=tk.X)
+        ttk.Label(level_frame, text="可用熟练度:").pack(side=tk.LEFT)
+        level_var = tk.StringVar()
+        level_combo = ttk.Combobox(level_frame, textvariable=level_var, values=LANGUAGE_LEVELS, state="readonly", width=20)
+        level_combo.pack(side=tk.LEFT, padx=(5, 0))
+        level_combo.current(1)  # 默认选择第二个选项
+        
+        def insert_level():
+            """将选中的熟练度插入到当前光标位置"""
+            selected_level = level_var.get()
+            if selected_level:
+                text_area.insert(tk.INSERT, f": {selected_level}")
+        
+        ttk.Button(level_frame, text="插入熟练度", command=insert_level).pack(side=tk.LEFT, padx=(5, 0))
+        
+        def on_ok():
+            lines = text_area.get("1.0", tk.END).strip().split('\n')
+            added_count = 0
+            
+            for line in lines:
+                if not line.strip():
+                    continue
+                
+                try:
+                    if ':' in line:
+                        lang_name, level = map(str.strip, line.split(':', 1))
+                    else:
+                        # 如果没有指定熟练度，使用默认值
+                        lang_name = line.strip()
+                        level = LANGUAGE_LEVELS[1]  # 使用第二个级别作为默认值
+                    
+                    if not lang_name:
+                        continue
+                    
+                    # 验证熟练度是否有效
+                    if level not in LANGUAGE_LEVELS:
+                        if not messagebox.askyesno("无效熟练度", 
+                                                 f"语言 '{lang_name}' 的熟练度 '{level}' 不在预设列表中。是否继续并将其设为 '{LANGUAGE_LEVELS[1]}'?",
+                                                 parent=dialog):
+                            continue
+                        level = LANGUAGE_LEVELS[1]
+                    
+                    if 'languages' not in self.config:
+                        self.config['languages'] = {}
+                    
+                    # 检查是否已存在该语言
+                    if lang_name in self.config['languages'] and not messagebox.askyesno("确认覆盖", 
+                                                                                      f"语言 '{lang_name}' 已存在。要覆盖吗？", 
+                                                                                      parent=dialog):
+                        continue
+                    
+                    self.config['languages'][lang_name] = level
+                    added_count += 1
+                except Exception as e:
+                    messagebox.showerror("添加错误", f"添加语言 '{line}' 时出错: {e}", parent=dialog)
+            
+            if added_count > 0:
+                self._update_language_listbox()
+                messagebox.showinfo("批量添加完成", f"成功添加了 {added_count} 个语言。", parent=dialog)
+                dialog.destroy()
+            else:
+                messagebox.showwarning("未添加", "没有添加任何语言。请检查输入格式。", parent=dialog)
+        
+        button_frame = ttk.Frame(dialog)
+        button_frame.pack(pady=15)
+        ttk.Button(button_frame, text="确定", command=on_ok, width=8).pack(side=tk.LEFT, padx=10, ipady=2)
+        ttk.Button(button_frame, text="取消", command=dialog.destroy, width=8).pack(side=tk.LEFT, padx=10, ipady=2)
+        
+        # 居中显示对话框
+        dialog.update_idletasks()
+        x = self.winfo_x() + (self.winfo_width() // 2) - (dialog.winfo_width() // 2)
+        y = self.winfo_y() + (self.winfo_height() // 2) - (dialog.winfo_height() // 2)
+        dialog.geometry(f"+{x}+{y}")
+    
+    def _batch_remove_languages(self):
+        """批量删除选中的语言"""
+        selection = self.lang_listbox.curselection()
+        if not selection:
+            messagebox.showwarning("未选择", "请在列表中选择要删除的语言。")
+            return
+        
+        if not messagebox.askyesno("确认删除", f"确定要删除选中的 {len(selection)} 个语言吗？"):
+            return
+        
+        # 因为每次删除一项后索引会变化，所以从后往前删除
+        selected_items = [self.lang_listbox.get(i) for i in selection]
+        removed_count = 0
+        
+        for item in selected_items:
+            try:
+                lang_name = item.split(':', 1)[0].strip()
+                if 'languages' in self.config and lang_name in self.config['languages']:
+                    del self.config['languages'][lang_name]
+                    removed_count += 1
+            except Exception as e:
+                messagebox.showerror("删除错误", f"删除语言 '{item}' 时出错: {e}")
+        
+        if removed_count > 0:
+            self._update_language_listbox()
+            messagebox.showinfo("批量删除完成", f"成功删除了 {removed_count} 个语言。")
+    
+    def _batch_add_experiences(self):
+        """批量添加经验"""
+        dialog = tk.Toplevel(self)
+        dialog.title("批量添加经验")
+        dialog.transient(self)
+        dialog.grab_set()
+        
+        ttk.Label(dialog, text="输入格式：每行一个经验，格式为 '技能/领域名称: 年数'").pack(pady=(10, 5), padx=10)
+        ttk.Label(dialog, text="例如：'Python: 3'").pack(pady=(0, 10), padx=10)
+        
+        # 文本区域用于输入多个经验
+        text_area = scrolledtext.ScrolledText(dialog, width=40, height=10)
+        text_area.pack(pady=5, padx=10, fill=tk.BOTH, expand=True)
+        
+        def on_ok():
+            lines = text_area.get("1.0", tk.END).strip().split('\n')
+            added_count = 0
+            
+            for line in lines:
+                if not line.strip():
+                    continue
+                
+                try:
+                    if ':' in line:
+                        skill_name, years_str = map(str.strip, line.split(':', 1))
+                    else:
+                        # 如果没有指定年数，跳过
+                        messagebox.showwarning("格式错误", 
+                                            f"行 '{line}' 缺少年数。请使用 '技能: 年数' 格式。", 
+                                            parent=dialog)
+                        continue
+                    
+                    if not skill_name:
+                        continue
+                    
+                    # 验证年数
+                    try:
+                        years = int(years_str)
+                    except ValueError:
+                        if not messagebox.askyesno("无效年数", 
+                                                f"经验 '{skill_name}' 的年数 '{years_str}' 不是整数。是否将其设为 0?",
+                                                parent=dialog):
+                            continue
+                        years = 0
+                    
+                    if skill_name == 'default':
+                        if not messagebox.askyesno("默认经验", 
+                                                "您正在修改默认经验年数。确定要继续吗？", 
+                                                parent=dialog):
+                            continue
+                    
+                    if 'experience' not in self.config:
+                        self.config['experience'] = {'default': 0}
+                    
+                    # 检查是否已存在该技能
+                    if skill_name in self.config['experience'] and not messagebox.askyesno("确认覆盖", 
+                                                                                       f"技能 '{skill_name}' 已存在。要覆盖吗？", 
+                                                                                       parent=dialog):
+                        continue
+                    
+                    self.config['experience'][skill_name] = years
+                    added_count += 1
+                except Exception as e:
+                    messagebox.showerror("添加错误", f"添加经验 '{line}' 时出错: {e}", parent=dialog)
+            
+            if added_count > 0:
+                self._update_experience_listbox()
+                messagebox.showinfo("批量添加完成", f"成功添加了 {added_count} 个经验。", parent=dialog)
+                dialog.destroy()
+            else:
+                messagebox.showwarning("未添加", "没有添加任何经验。请检查输入格式。", parent=dialog)
+        
+        button_frame = ttk.Frame(dialog)
+        button_frame.pack(pady=15)
+        ttk.Button(button_frame, text="确定", command=on_ok, width=8).pack(side=tk.LEFT, padx=10, ipady=2)
+        ttk.Button(button_frame, text="取消", command=dialog.destroy, width=8).pack(side=tk.LEFT, padx=10, ipady=2)
+        
+        # 居中显示对话框
+        dialog.update_idletasks()
+        x = self.winfo_x() + (self.winfo_width() // 2) - (dialog.winfo_width() // 2)
+        y = self.winfo_y() + (self.winfo_height() // 2) - (dialog.winfo_height() // 2)
+        dialog.geometry(f"+{x}+{y}")
+    
+    def _batch_remove_experiences(self):
+        """批量删除选中的经验"""
+        selection = self.exp_listbox.curselection()
+        if not selection:
+            messagebox.showwarning("未选择", "请在列表中选择要删除的经验。")
+            return
+        
+        if not messagebox.askyesno("确认删除", f"确定要删除选中的 {len(selection)} 个经验吗？"):
+            return
+        
+        # 因为每次删除一项后索引会变化，所以先获取所有选中项
+        selected_items = [self.exp_listbox.get(i) for i in selection]
+        removed_count = 0
+        
+        for item in selected_items:
+            try:
+                skill_name = item.split(':', 1)[0].strip()
+                
+                # 不允许删除 default
+                if skill_name == 'default':
+                    messagebox.showwarning("不能删除", "不能删除默认经验项。")
+                    continue
+                
+                if 'experience' in self.config and skill_name in self.config['experience']:
+                    del self.config['experience'][skill_name]
+                    removed_count += 1
+            except Exception as e:
+                messagebox.showerror("删除错误", f"删除经验 '{item}' 时出错: {e}")
+        
+        if removed_count > 0:
+            self._update_experience_listbox()
+            messagebox.showinfo("批量删除完成", f"成功删除了 {removed_count} 个经验。")
 
 if __name__ == '__main__':
     in_venv = hasattr(sys, 'real_prefix') or (hasattr(sys, 'base_prefix') and sys.base_prefix != sys.prefix)

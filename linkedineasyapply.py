@@ -63,7 +63,7 @@ class AIResponseGenerator:
         {self.resume_content}
         """
 
-    def generate_response(self, question_text, response_type="text", options=None, max_tokens=100):
+    def generate_response(self, question_text, response_type="text", options=None, max_tokens=3000):
         """
         Generate a response using OpenAI's API
         
@@ -99,7 +99,15 @@ Respond concisely based on the type of question:
 {}
 """,
                 "numeric": "You are a helpful assistant providing numeric answers to job application questions. Based on the candidate's experience, provide a single number as your response. No explanation needed.",
-                "choice": "You are a helpful assistant selecting the most appropriate answer choice for job application questions. Based on the candidate's background, select the best option by returning only its index number. No explanation needed."
+                "choice": """"
+                You are a helpful assistant selecting the most appropriate answer choice for job application questions. Based on the candidate's background, select the best option by returning only its index number. 
+
+Important rules:
+1. Never select options like "Select an option" or other placeholder instructions
+2. Only select "Yes" for questions when you have explicit evidence supporting that answer
+3. When in doubt about factual information not provided in context, default to the most conservative or non-committal valid option
+4. You need to think carefully, but in the end you need to return the option number.
+                """
             }[response_type]
 
             if response_type == "text":
@@ -485,7 +493,7 @@ class LinkedinEasyApply:
                     time.sleep(random.uniform(1, 2))
 
                     # TODO: Check if the job is already applied or the application has been reached
-                    # "You’ve reached the Easy Apply application limit for today. Save this job and come back tomorrow to continue applying."
+                    # "You've reached the Easy Apply application limit for today. Save this job and come back tomorrow to continue applying."
                     # Do this before evaluating job fit to save on API calls
 
                     if self.evaluate_job_fit:
@@ -1099,9 +1107,17 @@ class LinkedinEasyApply:
                          ]):
                     negative_keywords = ['prefer', 'decline', 'don\'t', 'specified', 'none']
 
+                    # 修复迭代逻辑：正确遍历下拉菜单的所有选项
                     choice = ""
-                    choice = next((option for options in option.lower() if
-                               any(neg_keyword in option.lower() for neg_keyword in negative_keywords)), None)
+                    # 尝试查找包含"不愿透露"关键词的选项
+                    for option in options:
+                        if any(neg_keyword in option.lower() for neg_keyword in negative_keywords):
+                            choice = option
+                            break
+                    
+                    # 如果没找到合适的选项，则默认选择最后一个
+                    if not choice and options:
+                        choice = options[len(options) - 1]
 
                     self.select_dropdown(dropdown_field, choice)
 
