@@ -223,30 +223,59 @@ class EasyApplyApp(tk.Tk):
         ttk.Label(frame, text="邮箱:").grid(row=current_row, column=0, sticky=tk.W, padx=5, pady=3); ttk.Entry(frame, textvariable=self.vars['email'], width=60).grid(row=current_row, column=1, sticky=tk.EW, padx=5, pady=3); current_row+=1
         ttk.Label(frame, text="密码:").grid(row=current_row, column=0, sticky=tk.W, padx=5, pady=3); ttk.Entry(frame, textvariable=self.vars['password'], width=60).grid(row=current_row, column=1, sticky=tk.EW, padx=5, pady=3); current_row+=1
         ttk.Label(frame, text="OpenAI API密钥:").grid(row=current_row, column=0, sticky=tk.W, padx=5, pady=3); ttk.Entry(frame, textvariable=self.vars['openaiApiKey'], width=60).grid(row=current_row, column=1, sticky=tk.EW, padx=5, pady=3); current_row+=1
-        ttk.Label(frame, text="PDF简历文件路径:").grid(row=current_row, column=0, sticky=tk.W, padx=5, pady=3); resume_frame = ttk.Frame(frame); ttk.Entry(resume_frame, textvariable=self.vars['resume_path'], width=52).pack(side=tk.LEFT, fill=tk.X, expand=True); ttk.Button(resume_frame, text="浏览", command=lambda: self._browse_file(self.vars['resume_path'], "PDF", "*.pdf")).pack(side=tk.LEFT, padx=(5,0)); resume_frame.grid(row=current_row, column=1, sticky=tk.EW, padx=5, pady=3); current_row+=1
+        
+        # 更新简历上传提示和文件类型
+        ttk.Label(frame, text="简历文件路径:").grid(row=current_row, column=0, sticky=tk.W, padx=5, pady=3)
+        resume_frame = ttk.Frame(frame)
+        ttk.Entry(resume_frame, textvariable=self.vars['resume_path'], width=52).pack(side=tk.LEFT, fill=tk.X, expand=True)
+        ttk.Button(resume_frame, text="浏览", command=lambda: self._browse_file(self.vars['resume_path'], "简历", "*.pdf")).pack(side=tk.LEFT, padx=(5,0))
+        resume_frame.grid(row=current_row, column=1, sticky=tk.EW, padx=5, pady=3)
+        current_row+=1
+        ttk.Label(frame, text="仅支持PDF格式 (最大2MB)").grid(row=current_row, column=1, sticky=tk.W, padx=5)
+        current_row+=1
+        
         ttk.Label(frame, text="文本简历文件路径:").grid(row=current_row, column=0, sticky=tk.W, padx=5, pady=3); text_resume_frame = ttk.Frame(frame); ttk.Entry(text_resume_frame, textvariable=self.vars['textResume_path'], width=52).pack(side=tk.LEFT, fill=tk.X, expand=True); ttk.Button(text_resume_frame, text="浏览", command=lambda: self._browse_file(self.vars['textResume_path'], "Text", "*.txt")).pack(side=tk.LEFT, padx=(5,0)); text_resume_frame.grid(row=current_row, column=1, sticky=tk.EW, padx=5, pady=3); current_row+=1
         
-        # 添加求职信上传选项
+        # 更新求职信上传提示和文件类型
         ttk.Label(frame, text="求职信文件路径:").grid(row=current_row, column=0, sticky=tk.W, padx=5, pady=3)
         cover_letter_frame = ttk.Frame(frame)
         ttk.Entry(cover_letter_frame, textvariable=self.vars['coverletter_path'], width=52).pack(side=tk.LEFT, fill=tk.X, expand=True)
-        ttk.Button(cover_letter_frame, text="浏览", command=lambda: self._browse_file(self.vars['coverletter_path'], "PDF", "*.pdf")).pack(side=tk.LEFT, padx=(5,0))
+        ttk.Button(cover_letter_frame, text="浏览", command=lambda: self._browse_file(self.vars['coverletter_path'], "求职信", "*.pdf")).pack(side=tk.LEFT, padx=(5,0))
         cover_letter_frame.grid(row=current_row, column=1, sticky=tk.EW, padx=5, pady=3)
         current_row+=1
+        ttk.Label(frame, text="仅支持PDF格式 (最大512KB)").grid(row=current_row, column=1, sticky=tk.W, padx=5)
+        current_row+=1
         
-        # 添加照片上传选项
+        # 更新照片上传提示和文件类型
         ttk.Label(frame, text="照片文件路径:").grid(row=current_row, column=0, sticky=tk.W, padx=5, pady=3)
         photo_frame = ttk.Frame(frame)
         ttk.Entry(photo_frame, textvariable=self.vars['photo_path'], width=52).pack(side=tk.LEFT, fill=tk.X, expand=True)
-        ttk.Button(photo_frame, text="浏览", command=lambda: self._browse_file(self.vars['photo_path'], "Image", "*.png *.jpg *.jpeg")).pack(side=tk.LEFT, padx=(5,0))
+        ttk.Button(photo_frame, text="浏览", command=lambda: self._browse_file(self.vars['photo_path'], "照片", "*.png *.jpg *.jpeg")).pack(side=tk.LEFT, padx=(5,0))
         photo_frame.grid(row=current_row, column=1, sticky=tk.EW, padx=5, pady=3)
+        current_row+=1
+        ttk.Label(frame, text="支持PNG, JPG, JPEG (最大1MB)").grid(row=current_row, column=1, sticky=tk.W, padx=5)
         current_row+=1
         
         ttk.Checkbutton(frame, text="禁用系统防锁定/休眠", variable=self.vars['disableAntiLock']).grid(row=current_row, column=0, columnspan=2, sticky=tk.W, padx=5, pady=10); current_row+=1
 
     def _browse_file(self, path_var, file_desc, file_pattern):
         filepath = filedialog.askopenfilename(title=f"选择 {file_desc} 文件", filetypes=((f"{file_desc} Files", file_pattern), ("All Files", "*.*")))
-        if filepath: path_var.set(filepath)
+        if filepath:
+            # 检查文件大小
+            filesize = os.path.getsize(filepath) / (1024 * 1024)  # 转换为MB
+            
+            # 根据文件类型检查大小限制
+            if "简历" in file_desc and filesize > 2:
+                messagebox.showwarning("文件过大", f"简历文件大小不能超过2MB，当前大小：{filesize:.2f}MB")
+                return
+            elif "求职信" in file_desc and filesize > 0.5:
+                messagebox.showwarning("文件过大", f"求职信文件大小不能超过512KB，当前大小：{filesize:.2f}MB")
+                return
+            elif "照片" in file_desc and filesize > 1:
+                messagebox.showwarning("文件过大", f"照片文件大小不能超过1MB，当前大小：{filesize:.2f}MB")
+                return
+                
+            path_var.set(filepath)
 
     def _create_job_tab(self):
         # (No significant changes needed)

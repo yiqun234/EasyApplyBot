@@ -715,7 +715,6 @@ class LinkedinEasyApply:
 
     # 主要代码
     def additional_questions(self, form):
-        print("尝试填写额外问题")
         questions = form.find_elements(By.CLASS_NAME, 'fb-dash-form-element')
         for question in questions:
             try:
