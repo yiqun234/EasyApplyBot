@@ -91,8 +91,9 @@ posterBlacklist: []
 uploads:
  resume: /home/lian/下载/yiqun-xu-resume.pdf
  # Cover letter is optional
- #coverLetter: C:\Users\myDirectory\CoverLettter.pdf
-
+ coverLetter: C:\Users\myDirectory\CoverLettter.pdf
+ # Photo is optional
+ photo: C:\Users\myDirectory\photo.png
 
 # ------------ QA section -------------------
 

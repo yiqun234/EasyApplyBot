@@ -22,7 +22,7 @@ DEFAULT_CONFIG = {
     'date': {'all time': True, 'month': False, 'week': False, '24 hours': False},
     'positions': ['sales'], 'locations': ['中国'], 'residentStatus': False, 'distance': 100,
     'outputFileDirectory': '~/Documents/EasyApplyBot/', 'companyBlacklist': [], 'titleBlacklist': [], 'posterBlacklist': [],
-    'uploads': {'resume': ''},
+    'uploads': {'resume': '', 'coverLetter': '', 'photo': ''},
     'checkboxes': {'driversLicence': True, 'requireVisa': False, 'legallyAuthorized': False, 'certifiedProfessional': True, 'urgentFill': True, 'commute': True, 'remote': True, 'drugTest': True, 'assessment': True, 'securityClearance': False, 'degreeCompleted': ["High School Diploma", "Bachelor's Degree"], 'backgroundCheck': True},
     'universityGpa': 4.0, 'salaryMinimum': 65000, 'languages': {'english': 'Native or bilingual'},
     'noticePeriod': 2, 'experience': {'default': 0}, 'personalInfo': {}, 'eeo': {}, 'textResume': '',
@@ -148,6 +148,8 @@ class EasyApplyApp(tk.Tk):
             'resume_path': tk.StringVar(value=self.config.get('uploads', {}).get('resume', '')),
             'textResume_path': tk.StringVar(value=self.config.get('textResume', '')),
             'disableAntiLock': tk.BooleanVar(value=self.config.get('disableAntiLock', False)),
+            'coverletter_path': tk.StringVar(value=self.config.get('uploads', {}).get('coverLetter', '')),
+            'photo_path': tk.StringVar(value=self.config.get('uploads', {}).get('photo', '')),
             # Job
             'positions': tk.StringVar(value=safe_join_list(self.config.get('positions', []))),
             'locations': tk.StringVar(value=safe_join_list(self.config.get('locations', []))),
@@ -223,6 +225,23 @@ class EasyApplyApp(tk.Tk):
         ttk.Label(frame, text="OpenAI API密钥:").grid(row=current_row, column=0, sticky=tk.W, padx=5, pady=3); ttk.Entry(frame, textvariable=self.vars['openaiApiKey'], width=60).grid(row=current_row, column=1, sticky=tk.EW, padx=5, pady=3); current_row+=1
         ttk.Label(frame, text="PDF简历文件路径:").grid(row=current_row, column=0, sticky=tk.W, padx=5, pady=3); resume_frame = ttk.Frame(frame); ttk.Entry(resume_frame, textvariable=self.vars['resume_path'], width=52).pack(side=tk.LEFT, fill=tk.X, expand=True); ttk.Button(resume_frame, text="浏览", command=lambda: self._browse_file(self.vars['resume_path'], "PDF", "*.pdf")).pack(side=tk.LEFT, padx=(5,0)); resume_frame.grid(row=current_row, column=1, sticky=tk.EW, padx=5, pady=3); current_row+=1
         ttk.Label(frame, text="文本简历文件路径:").grid(row=current_row, column=0, sticky=tk.W, padx=5, pady=3); text_resume_frame = ttk.Frame(frame); ttk.Entry(text_resume_frame, textvariable=self.vars['textResume_path'], width=52).pack(side=tk.LEFT, fill=tk.X, expand=True); ttk.Button(text_resume_frame, text="浏览", command=lambda: self._browse_file(self.vars['textResume_path'], "Text", "*.txt")).pack(side=tk.LEFT, padx=(5,0)); text_resume_frame.grid(row=current_row, column=1, sticky=tk.EW, padx=5, pady=3); current_row+=1
+        
+        # 添加求职信上传选项
+        ttk.Label(frame, text="求职信文件路径:").grid(row=current_row, column=0, sticky=tk.W, padx=5, pady=3)
+        cover_letter_frame = ttk.Frame(frame)
+        ttk.Entry(cover_letter_frame, textvariable=self.vars['coverletter_path'], width=52).pack(side=tk.LEFT, fill=tk.X, expand=True)
+        ttk.Button(cover_letter_frame, text="浏览", command=lambda: self._browse_file(self.vars['coverletter_path'], "PDF", "*.pdf")).pack(side=tk.LEFT, padx=(5,0))
+        cover_letter_frame.grid(row=current_row, column=1, sticky=tk.EW, padx=5, pady=3)
+        current_row+=1
+        
+        # 添加照片上传选项
+        ttk.Label(frame, text="照片文件路径:").grid(row=current_row, column=0, sticky=tk.W, padx=5, pady=3)
+        photo_frame = ttk.Frame(frame)
+        ttk.Entry(photo_frame, textvariable=self.vars['photo_path'], width=52).pack(side=tk.LEFT, fill=tk.X, expand=True)
+        ttk.Button(photo_frame, text="浏览", command=lambda: self._browse_file(self.vars['photo_path'], "Image", "*.png *.jpg *.jpeg")).pack(side=tk.LEFT, padx=(5,0))
+        photo_frame.grid(row=current_row, column=1, sticky=tk.EW, padx=5, pady=3)
+        current_row+=1
+        
         ttk.Checkbutton(frame, text="禁用系统防锁定/休眠", variable=self.vars['disableAntiLock']).grid(row=current_row, column=0, columnspan=2, sticky=tk.W, padx=5, pady=10); current_row+=1
 
     def _browse_file(self, path_var, file_desc, file_pattern):
@@ -713,6 +732,7 @@ class EasyApplyApp(tk.Tk):
             # Basic Tab
             self.config['email'] = self.vars['email'].get(); self.config['password'] = self.vars['password'].get(); self.config['openaiApiKey'] = self.vars['openaiApiKey'].get()
             self.config['disableAntiLock'] = self.vars['disableAntiLock'].get(); self.config['uploads']['resume'] = self.vars['resume_path'].get(); self.config['textResume'] = self.vars['textResume_path'].get()
+            self.config['uploads']['coverLetter'] = self.vars['coverletter_path'].get(); self.config['uploads']['photo'] = self.vars['photo_path'].get()
             # Job Tab
             self.config['positions'] = parse_list_from_textarea(self.positions_widget.get("1.0", tk.END)); self.config['locations'] = parse_list_from_textarea(self.locations_widget.get("1.0", tk.END))
             self.config['distance'] = self.vars['distance'].get(); self.config['remote'] = self.vars['search_remote'].get(); self.config['lessthanTenApplicants'] = self.vars['lessthanTenApplicants'].get()

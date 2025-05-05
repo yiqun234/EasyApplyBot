@@ -239,6 +239,13 @@ class LinkedinEasyApply:
             self.cover_letter_dir = parameters['uploads']['coverLetter']
         else:
             self.cover_letter_dir = ''
+
+        self.photo_dir = parameters['uploads']['photo']
+        if 'photo' in parameters['uploads']:
+            self.photo_dir = parameters['uploads']['photo']
+        else:
+            self.photo_dir = ''
+
         self.checkboxes = parameters.get('checkboxes', [])
         self.university_gpa = parameters['universityGpa']
         self.salary_minimum = parameters['salaryMinimum']
@@ -1409,6 +1416,11 @@ class LinkedinEasyApply:
                     elif 'cover' in upload_type.text.lower():
                         if self.cover_letter_dir != '':
                             upload_button.send_keys(self.cover_letter_dir)
+                        elif 'required' in upload_type.text.lower():
+                            upload_button.send_keys(self.resume_dir)
+                    elif  'photo' in upload_type.text.lower():
+                        if self.photo_dir != '':
+                            upload_button.send_keys(self.photo_dir)
                         elif 'required' in upload_type.text.lower():
                             upload_button.send_keys(self.resume_dir)
         except:
