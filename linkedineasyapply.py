@@ -444,7 +444,7 @@ class LinkedinEasyApply:
             try:
                 ## patch to incorporate new 'verification' crap by LinkedIn
                 # job_title = job_tile.find_element(By.CLASS_NAME, 'job-card-list__title').text # original code
-                job_title_element = job_tile.find_element(By.CLASS_NAME, 'job-card-list__title--link')
+                job_title_element = job_tile.find_element(By.TAG_NAME, 'a')
                 job_title = job_title_element.find_element(By.TAG_NAME, 'strong').text
 
                 link = job_title_element.get_attribute('href').split('?')[0]
@@ -491,7 +491,7 @@ class LinkedinEasyApply:
                     while retries < max_retries:
                         try:
                             # TODO: This is throwing an exception when running out of jobs on a page
-                            job_el = job_tile.find_element(By.CLASS_NAME, 'job-card-list__title--link')
+                            job_el = job_tile.find_element(By.TAG_NAME, 'a')
                             job_el.click()
                             break
                         except StaleElementReferenceException:
@@ -1260,6 +1260,10 @@ class LinkedinEasyApply:
                     self.contact_info(form)
                 elif 'resume' in label:
                     self.send_resume()
+                # elif 'work experience' in label:
+                #     self.work_experience(form)
+                # elif 'education' in label:
+                #     self.education(form)
                 else:
                     self.additional_questions(form)
             except Exception as e:
