@@ -438,9 +438,9 @@ class LinkedinEasyApply:
         except Exception as e:
             print(f"An unexpected error occurred: {e}")
 
-        for job_tile in job_list:
+        for i in range(len(job_list)):
             job_title, company, poster, job_location, apply_method, link = "", "", "", "", "", ""
-
+            job_tile = self.browser.find_elements(By.CLASS_NAME, ul_element_class)[0].find_elements(By.CLASS_NAME, 'scaffold-layout__list-item')[i]
             try:
                 ## patch to incorporate new 'verification' crap by LinkedIn
                 # job_title = job_tile.find_element(By.CLASS_NAME, 'job-card-list__title').text # original code
