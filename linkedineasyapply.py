@@ -1,4 +1,4 @@
-import time, random, csv, pyautogui, traceback, os, re
+import time, random, csv, pyautogui, traceback, os, re, json, requests, logging
 from urllib.parse import urlparse, parse_qs
 
 from selenium.webdriver.support.ui import WebDriverWait
@@ -215,6 +215,238 @@ Important rules:
             print(f"Error evaluating job fit: {str(e)}")
             return True  # Proceed with application if evaluation fails
 
+# 添加CloudAIResponseGenerator类
+class CloudAIResponseGenerator:
+    """基于AWS Lambda的AI响应生成器，将请求发送到AWS API Gateway处理"""
+    
+    def __init__(self, api_key=None, personal_info=None, experience=None, languages=None, resume_path=None, text_resume_path=None, debug=False):
+        """
+        初始化云端AI响应生成器
+        
+        参数与AIResponseGenerator保持一致，以确保无缝切换
+        api_key参数将传递给云函数，如果提供的话
+        """
+        self.personal_info = personal_info
+        self.experience = experience
+        self.languages = languages
+        self.pdf_resume_path = resume_path
+        self.text_resume_path = text_resume_path
+        self._resume_content = None
+        self.debug = debug
+        self.openai_api_key = api_key  # 保存用户提供的OpenAI API密钥
+        
+        # 直接硬编码AWS API配置
+        self.api_url = "https://9l0xkwbp0j.execute-api.us-east-2.amazonaws.com/prod"
+        self.api_key = "v9L4HANdpnaxegTjKvGDJ9pqIHhVdMhM2MOZuMCa"
+        
+        import logging
+        self.logger = logging.getLogger('CloudAIResponseGenerator')
+    
+    @property
+    def resume_content(self):
+        if self._resume_content is None:
+            # First try to read from text resume if available
+            if self.text_resume_path:
+                try:
+                    with open(self.text_resume_path, 'r', encoding='utf-8') as f:
+                        self._resume_content = f.read()
+                        print("Successfully loaded text resume")
+                        return self._resume_content
+                except Exception as e:
+                    print(f"Could not read text resume: {str(e)}")
+
+            # Fall back to PDF resume if text resume fails or isn't available
+            try:
+                content = []
+                reader = PdfReader(self.pdf_resume_path)
+                for page in reader.pages:
+                    content.append(page.extract_text())
+                self._resume_content = "\n".join(content)
+                print("Successfully loaded PDF resume")
+            except Exception as e:
+                print(f"Could not extract text from resume PDF: {str(e)}")
+                self._resume_content = ""
+        return self._resume_content
+        
+    def _build_context(self):
+        return f"""
+        Personal Information:
+        - Name: {self.personal_info['First Name']} {self.personal_info['Last Name']}
+        - Current Role: {self.experience.get('currentRole', '')}
+        - Skills: {', '.join(self.experience.keys())}
+        - Languages: {', '.join(f'{lang}: {level}' for lang, level in self.languages.items())}
+        - Professional Summary: {self.personal_info.get('MessageToManager', '')}
+
+        Resume Content (Give the greatest weight to this information, if specified) (If you have similar questions to the Personal Information above, please refer to the following resume content):
+        {self.resume_content}
+        """
+    
+    def _call_cloud_api(self, endpoint, data):
+        """调用云API处理AI请求"""
+        try:
+            import requests
+            headers = {
+                "Content-Type": "application/json",
+                "x-api-key": self.api_key
+            }
+            
+            # 将用户的OpenAI API密钥添加到请求数据中(如果有)
+            if self.openai_api_key:
+                data["openai_api_key"] = self.openai_api_key
+            
+            # 构建完整的API URL
+            full_url = f"{self.api_url.rstrip('/')}/{endpoint.lstrip('/')}"
+            
+            response = requests.post(
+                full_url,
+                headers=headers,
+                json=data,
+                timeout=60  # 设置超时时间为60秒
+            )
+
+            if response.status_code == 200:
+                api_response = response.json()
+                if api_response.get('statusCode') == 200:
+                    # 提取并解析body字段
+                    if 'body' in api_response and isinstance(api_response['body'], str):
+                        try:
+                            # body是JSON字符串，需要解析
+                            return json.loads(api_response['body'])
+                        except:
+                            print("无法解析响应中的body字段")
+                            return None
+                    else:
+                        # 如果没有body字段，返回整个响应
+                        return api_response
+                else:
+                    print(f"API请求失败: HTTP {response.status_code}")
+                    print(f"错误详情: {response.text}")
+                    return None
+            else:
+                print(f"API请求失败: HTTP {response.status_code}")
+                print(f"错误详情: {response.text}")
+                return None
+        
+        except requests.exceptions.Timeout:
+            print("API请求超时")
+            return None
+        
+        except requests.exceptions.RequestException as e:
+            print(f"API请求异常: {str(e)}")
+            return None
+        
+        except Exception as e:
+            print(f"处理API请求时出错: {str(e)}")
+            return None
+    
+    def generate_response(self, question_text, response_type="text", options=None, max_tokens=3000):
+        """
+        通过云端API生成回答
+        
+        Args:
+            question_text: 应用中的问题
+            response_type: "text", "numeric", 或 "choice"
+            options: 对于"choice"类型，包含可能答案的(索引,文本)元组列表
+            max_tokens: 回答的最大长度
+            
+        Returns:
+            - 文本类型: 生成的文本回答或None
+            - 数字类型: 整数值或None
+            - 选择类型: 选择选项的整数索引或None
+        """
+        try:
+            context = self._build_context()
+            
+            # 准备发送到云端API的数据
+            request_data = {
+                "context": context,
+                "question": question_text,
+                "response_type": response_type,
+                "max_tokens": max_tokens,
+                "debug": self.debug
+            }
+
+            if response_type == "choice" and options:
+                request_data["options"] = options
+            
+            # 调用云端API
+            response_data = self._call_cloud_api("generate-response", request_data)
+            
+            if not response_data or "result" not in response_data:
+                return None
+                
+            answer = response_data["result"]
+            print(f"AI response {response_type}: {answer}")
+            
+            if response_type == "numeric":
+                # 如果返回的不是数字，尝试从回答中提取数字
+                import re
+                if not isinstance(answer, (int, float)):
+                    numbers = re.findall(r'\d+', str(answer))
+                    if numbers:
+                        return int(numbers[0])
+                    return 0
+                return answer
+            elif response_type == "choice":
+                # 确保返回的索引在有效范围内
+                if isinstance(answer, int) and options and 0 <= answer < len(options):
+                    return answer
+                return None
+                
+            return answer
+            
+        except Exception as e:
+            print(f"生成回答时出错: {str(e)}")
+            return None
+
+    def evaluate_job_fit(self, job_title, job_description):
+        """
+        评估基于候选人经验和职位要求，这个职位是否值得申请
+        
+        Args:
+            job_title: 职位标题
+            job_description: 完整的职位描述文本
+            
+        Returns:
+            bool: True表示应该申请，False表示应该跳过
+        """
+        try:
+            context = self._build_context()
+            
+            # 准备发送到云端API的数据
+            request_data = {
+                "context": context,
+                "job_title": job_title,
+                "job_description": job_description,
+                "debug": self.debug
+            }
+            
+            # 调用云端API
+            response_data = self._call_cloud_api("evaluate-job-fit", request_data)
+            print(response_data)
+            
+            if not response_data or "result" not in response_data:
+                return True
+                
+            # 提取决策结果和可能的解释
+            decision = response_data["result"]
+            explanation = response_data.get("explanation", "")
+            
+            if explanation and self.debug:
+                print(f"AI评估解释: {explanation}")
+                
+            # 决策应该是布尔值，但也接受字符串"APPLY"/"SKIP"
+            if isinstance(decision, bool):
+                return decision
+            elif isinstance(decision, str):
+                return decision.upper().startswith('A')  # True代表APPLY，False代表SKIP
+            
+            return True  # 默认继续申请
+            
+        except Exception as e:
+            print(f"评估职位匹配度时出错: {str(e)}")
+            return True  # 出错时继续申请
+
 class LinkedinEasyApply:
     def __init__(self, parameters, driver):
         self.browser = driver
@@ -258,15 +490,32 @@ class LinkedinEasyApply:
         self.debug = parameters.get('debug', False)
         self.evaluate_job_fit = parameters.get('evaluateJobFit', True)
         self.customQuestions = parameters.get('customQuestions', {})
-        self.ai_response_generator = AIResponseGenerator(
-            api_key=self.openai_api_key,
-            personal_info=self.personal_info,
-            experience=self.experience,
-            languages=self.languages,
-            resume_path=self.resume_dir,
-            text_resume_path=self.text_resume,
-            debug=self.debug
-        )
+        
+        # 从配置中获取是否使用云服务AI的设置
+        use_cloud_ai = True
+        
+        if use_cloud_ai:
+            print("使用云端AI服务")
+            self.ai_response_generator = CloudAIResponseGenerator(
+                api_key=self.openai_api_key,  # 保持参数一致性
+                personal_info=self.personal_info,
+                experience=self.experience,
+                languages=self.languages,
+                resume_path=self.resume_dir,
+                text_resume_path=self.text_resume,
+                debug=self.debug
+            )
+        else:
+            print("使用本地AI服务")
+            self.ai_response_generator = AIResponseGenerator(
+                api_key=self.openai_api_key,
+                personal_info=self.personal_info,
+                experience=self.experience,
+                languages=self.languages,
+                resume_path=self.resume_dir,
+                text_resume_path=self.text_resume,
+                debug=self.debug
+            )
 
     def login(self):
         try:

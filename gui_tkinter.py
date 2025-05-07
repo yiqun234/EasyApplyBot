@@ -27,7 +27,8 @@ DEFAULT_CONFIG = {
     'universityGpa': 4.0, 'salaryMinimum': 65000, 'languages': {'english': 'Native or bilingual'},
     'noticePeriod': 2, 'experience': {'default': 0}, 'personalInfo': {}, 'eeo': {}, 'textResume': '',
     'evaluateJobFit': False, 'debug': False,
-    'customQuestions': {}  # 自定义问答配置
+    'customQuestions': {},  # 自定义问答配置
+    'useCloudAI': True,  # 是否使用云服务API，默认为True
 }
 
 STANDARD_DEGREES = ["High School Diploma", "Associate's Degree", "Bachelor's Degree", "Master's Degree", "Master of Business Administration", "Doctor of Philosophy", "Doctor of Medicine", "Doctor of Law"]
@@ -171,7 +172,8 @@ class EasyApplyApp(tk.Tk):
             'evaluateJobFit': tk.BooleanVar(value=self.config.get('evaluateJobFit', False)),
             'debug': tk.BooleanVar(value=self.config.get('debug', False)),
             # Advanced - Dynamic/Complex (Managed by dedicated widgets/logic)
-            'personalInfo': {}, 'eeo': {}, 'degreeCompleted': {}, 'checkboxes': {}
+            'personalInfo': {}, 'eeo': {}, 'degreeCompleted': {}, 'checkboxes': {},
+            'useCloudAI': tk.BooleanVar(value=self.config.get('useCloudAI', False)),
         }
 
         # --- Dynamic Variables Init --- (More robust against missing keys in loaded config)
@@ -223,6 +225,8 @@ class EasyApplyApp(tk.Tk):
         ttk.Label(frame, text="邮箱:").grid(row=current_row, column=0, sticky=tk.W, padx=5, pady=3); ttk.Entry(frame, textvariable=self.vars['email'], width=60).grid(row=current_row, column=1, sticky=tk.EW, padx=5, pady=3); current_row+=1
         ttk.Label(frame, text="密码:").grid(row=current_row, column=0, sticky=tk.W, padx=5, pady=3); ttk.Entry(frame, textvariable=self.vars['password'], width=60).grid(row=current_row, column=1, sticky=tk.EW, padx=5, pady=3); current_row+=1
         ttk.Label(frame, text="OpenAI API密钥:").grid(row=current_row, column=0, sticky=tk.W, padx=5, pady=3); ttk.Entry(frame, textvariable=self.vars['openaiApiKey'], width=60).grid(row=current_row, column=1, sticky=tk.EW, padx=5, pady=3); current_row+=1
+        ttk.Label(frame, text="(选填) 如果您有自己的OpenAI API密钥，可以在此处输入").grid(row=current_row, column=1, sticky=tk.W, padx=5); current_row+=1
+        
         
         # 更新简历上传提示和文件类型
         ttk.Label(frame, text="简历文件路径:").grid(row=current_row, column=0, sticky=tk.W, padx=5, pady=3)
@@ -727,13 +731,21 @@ class EasyApplyApp(tk.Tk):
     # --- Control Tab Creation --- (No changes needed)
     def _create_control_tab(self):
         frame = ttk.Frame(self.control_tab, padding=(10, 5)); frame.pack(expand=True, fill="both", padx=10, pady=5)
-        ttk.Label(frame, text="运行日志:").pack(anchor=tk.W, padx=5); self.output_area = scrolledtext.ScrolledText(frame, wrap=tk.WORD, height=15, state='disabled'); self.output_area.pack(expand=True, fill='both', padx=5, pady=5)
+        ttk.Label(frame, text="运行日志:").pack(anchor=tk.W, padx=5)
+        # 添加清除日志按钮
+        clear_log_btn = ttk.Button(frame, text="清除日志", command=self._clear_log)
+        clear_log_btn.pack(anchor=tk.E, padx=5, pady=(0, 3))
+        self.output_area = scrolledtext.ScrolledText(frame, wrap=tk.WORD, height=15, state='disabled'); self.output_area.pack(expand=True, fill='both', padx=5, pady=5)
         button_frame = ttk.Frame(frame); button_frame.pack(fill=tk.X, pady=5)
         self.save_button = ttk.Button(button_frame, text="保存配置", command=self._save_gui_config); self.save_button.pack(side=tk.LEFT, padx=5)
         self.start_button = ttk.Button(button_frame, text="启动机器人", command=self._start_bot); self.start_button.pack(side=tk.LEFT, padx=5)
         self.stop_button = ttk.Button(button_frame, text="停止", command=self._stop_bot, state='disabled'); self.stop_button.pack(side=tk.LEFT, padx=5)
         edit_config_button = ttk.Button(button_frame, text="编辑YAML", command=self._open_config_file); edit_config_button.pack(side=tk.LEFT, padx=5)
-        github_label = tk.Label(button_frame, text="GitHub项目", fg="blue", cursor="hand2"); github_label.pack(side=tk.RIGHT, padx=10); github_label.bind("<Button-1>", lambda e: webbrowser.open("https://github.com/yiqun234/EasyApplyBot"))
+
+    def _clear_log(self):
+        self.output_area.config(state='normal')
+        self.output_area.delete('1.0', tk.END)
+        self.output_area.config(state='disabled')
 
     # --- Action Methods ---
 
@@ -756,51 +768,48 @@ class EasyApplyApp(tk.Tk):
 
 
     def _update_config_from_gui(self):
-        """Updates the self.config dictionary based on GUI values. Now reads interactive elements."""
+        """Update 'config' data structure from current GUI state"""
         try:
             # Basic Tab
             self.config['email'] = self.vars['email'].get(); self.config['password'] = self.vars['password'].get(); self.config['openaiApiKey'] = self.vars['openaiApiKey'].get()
             self.config['disableAntiLock'] = self.vars['disableAntiLock'].get(); self.config['uploads']['resume'] = self.vars['resume_path'].get(); self.config['textResume'] = self.vars['textResume_path'].get()
             self.config['uploads']['coverLetter'] = self.vars['coverletter_path'].get(); self.config['uploads']['photo'] = self.vars['photo_path'].get()
+            self.config['useCloudAI'] = self.vars['useCloudAI'].get() # 添加使用云服务API选项
             # Job Tab
             self.config['positions'] = parse_list_from_textarea(self.positions_widget.get("1.0", tk.END)); self.config['locations'] = parse_list_from_textarea(self.locations_widget.get("1.0", tk.END))
-            self.config['distance'] = self.vars['distance'].get(); self.config['remote'] = self.vars['search_remote'].get(); self.config['lessthanTenApplicants'] = self.vars['lessthanTenApplicants'].get()
-            self.config['newestPostingsFirst'] = self.vars['newestPostingsFirst'].get(); self.config['residentStatus'] = self.vars['residentStatus'].get()
-            # Preferences Tab
+            self.config['distance'] = self.vars['distance'].get(); self.config['remote'] = self.vars['search_remote'].get()
+            self.config['lessthanTenApplicants'] = self.vars['lessthanTenApplicants'].get(); self.config['newestPostingsFirst'] = self.vars['newestPostingsFirst'].get()
+            self.config['residentStatus'] = self.vars['residentStatus'].get()
+            # Preferences Tab - dynamically created checkboxes need manual update
             for level, var in self.vars['exp_level'].items(): self.config['experienceLevel'][level] = var.get()
             for jtype, var in self.vars['job_type'].items(): self.config['jobTypes'][jtype] = var.get()
-            selected_date = self.vars['date_pref'].get(); self.config['date'] = {key: (key == selected_date) for key in DEFAULT_CONFIG['date']}
-            # --- Advanced Tab ---
-            # Blacklists
-            self.config['companyBlacklist'] = parse_list_from_textarea(self.company_bl_widget.get("1.0", tk.END))
-            self.config['titleBlacklist'] = parse_list_from_textarea(self.title_bl_widget.get("1.0", tk.END))
-            self.config['posterBlacklist'] = parse_list_from_textarea(self.poster_bl_widget.get("1.0", tk.END))
-            # Other settings
+            # Handle date radio buttons specially
+            for date_key in self.config['date']: self.config['date'][date_key] = (self.vars['date_pref'].get() == date_key)
+            # Advanced Tab
+            self.config['companyBlacklist'] = parse_list_from_textarea(self.company_bl_widget.get('1.0', tk.END))
+            self.config['titleBlacklist'] = parse_list_from_textarea(self.title_bl_widget.get('1.0', tk.END))
+            self.config['posterBlacklist'] = parse_list_from_textarea(self.poster_bl_widget.get('1.0', tk.END))
             self.config['outputFileDirectory'] = self.vars['outputFileDirectory'].get()
-            try: self.config['universityGpa'] = self.vars['universityGpa'].get()
-            except tk.TclError: messagebox.showerror("输入错误", "大学GPA必须是数字。"); return False
-            try: self.config['salaryMinimum'] = self.vars['salaryMinimum'].get()
-            except tk.TclError: messagebox.showerror("输入错误", "最低期望薪资必须是整数。"); return False
-            try: self.config['noticePeriod'] = self.vars['noticePeriod'].get()
-            except tk.TclError: messagebox.showerror("输入错误", "通知周期必须是整数。"); return False
-            # Boolean flags
-            self.config['evaluateJobFit'] = self.vars['evaluateJobFit'].get(); self.config['debug'] = self.vars['debug'].get()
-            # Personal Info & EEO (Read from dynamic StringVars)
-            for key, var in self.vars['personalInfo'].items(): self.config['personalInfo'][key] = var.get()
-            for key, var in self.vars['eeo'].items(): self.config['eeo'][key] = var.get()
-            # Experience & Languages are updated directly via dialogs, no need to read here
-            # --- Checkboxes (Standard Y/N & Degrees) ---
-            if 'checkboxes' not in self.config: self.config['checkboxes'] = {}
-            for key, var in self.vars['checkboxes'].items(): # Standard Y/N
-                if isinstance(var, tk.BooleanVar): self.config['checkboxes'][key] = var.get()
-            self.config['checkboxes']['degreeCompleted'] = [ # Degrees
-                degree for degree, var in self.vars['degreeCompleted'].items() if var.get() ]
-            
-            # CustomQuestions is handled by the dialog methods, no need to read here
+            self.config['universityGpa'] = self.vars['universityGpa'].get()
+            self.config['salaryMinimum'] = self.vars['salaryMinimum'].get()
+            self.config['noticePeriod'] = self.vars['noticePeriod'].get()
+            self.config['evaluateJobFit'] = self.vars['evaluateJobFit'].get()
+            self.config['debug'] = self.vars['debug'].get()
+            # Completed degrees (use checked boolean vars to create list format from config)
+            self.config['checkboxes']['degreeCompleted'] = [
+                degree for degree, var in self.vars['degreeCompleted'].items() if var.get()
+            ]
+            # Simple Yes/No checkbox questions (just update with bool)
+            for chk_key, var in self.vars['checkboxes'].items():
+                if isinstance(var, tk.BooleanVar):  # Skip over degreeCompleted in the checkboxes dict
+                    self.config['checkboxes'][chk_key] = var.get()
+            # We dont need to do anything with customQuestions as those are already managed via the dialog methods
 
             return True
-        except tk.TclError as e: messagebox.showerror("获取值错误", f"无法从界面获取配置值: {e}"); return False
-        except Exception as e: messagebox.showerror("更新错误", f"从界面更新配置时出错: {e}"); return False
+        except Exception as e:
+            traceback.print_exc()
+            messagebox.showerror("配置更新错误", f"更新配置时出错:\n{str(e)}")
+            return False
 
 
     # --- Other Methods (_save_gui_config, etc.) --- (No changes needed in these core logic methods)
