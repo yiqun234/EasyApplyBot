@@ -1,0 +1,593 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LinkedIn Easy Apply Bot - 使用指南</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            margin: 0;
+            padding: 0;
+            color: #333;
+        }
+        
+        .main-container {
+            display: flex;
+            position: relative;
+            min-height: 100vh;
+        }
+        
+        .content {
+            flex: 1;
+            max-width: 900px;
+            padding: 20px 40px;
+            margin: 0 auto;
+            padding-bottom: 80px;
+        }
+        
+        h1, h2, h3 {
+            color: #0077B5;
+        }
+        
+        h1 {
+            border-bottom: 2px solid #0077B5;
+            padding-bottom: 10px;
+        }
+        
+        h2 {
+            margin-top: 40px;
+            padding-top: 20px;
+            border-top: 1px solid #eee;
+        }
+        
+        code {
+            background-color: #f5f5f5;
+            padding: 2px 5px;
+            border-radius: 3px;
+            font-family: Consolas, Monaco, 'Andale Mono', monospace;
+        }
+        
+        pre {
+            background-color: #f5f5f5;
+            padding: 15px;
+            border-radius: 5px;
+            overflow-x: auto;
+        }
+        
+        .container {
+            background-color: #f9f9f9;
+            border-left: 4px solid #0077B5;
+            padding: 15px;
+            margin: 20px 0;
+        }
+        
+        .warning {
+            background-color: #fff8e1;
+            border-left: 4px solid #ffc107;
+            padding: 15px;
+            margin: 20px 0;
+        }
+        
+        .feature {
+            display: flex;
+            margin: 20px 0;
+            border-bottom: 1px dotted #ccc;
+            padding-bottom: 20px;
+        }
+        
+        .feature-icon {
+            font-size: 2em;
+            margin-right: 20px;
+            color: #0077B5;
+        }
+        
+        .feature-content {
+            flex: 1;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+        }
+        
+        th, td {
+            padding: 12px 15px;
+            border: 1px solid #ddd;
+            text-align: left;
+        }
+        
+        th {
+            background-color: #0077B5;
+            color: white;
+        }
+        
+        tr:nth-child(even) {
+            background-color: #f5f5f5;
+        }
+        
+        /* 右侧固定导航样式 */
+        .sidebar {
+            width: 260px;
+            height: 90vh;
+            position: sticky;
+            top: 20px;
+            right: 0;
+            padding: 20px;
+            padding-top: 30px;
+            background-color: #f9f9f9;
+            border-left: 1px solid #eee;
+            overflow-y: auto;
+        }
+        
+        .doc-nav {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+        
+        .doc-nav-title {
+            font-size: 1.2em;
+            font-weight: bold;
+            color: #0077B5;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #ddd;
+        }
+        
+        .doc-nav-item {
+            margin-bottom: 10px;
+        }
+        
+        .doc-nav-link {
+            display: block;
+            padding: 8px 10px;
+            color: #333;
+            text-decoration: none;
+            border-left: 2px solid transparent;
+            transition: all 0.3s ease;
+        }
+        
+        .doc-nav-link:hover, .doc-nav-link.active {
+            background-color: rgba(0, 119, 181, 0.05);
+            color: #0077B5;
+            border-left-color: #0077B5;
+        }
+        
+        /* 移动菜单按钮 */
+        .menu-toggle {
+            display: none;
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background-color: #0077B5;
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            font-size: 20px;
+            line-height: 50px;
+            text-align: center;
+            cursor: pointer;
+            z-index: 1100;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+        }
+        
+        /* 返回顶部按钮 */
+        .back-to-top {
+            position: fixed;
+            bottom: 80px;
+            right: 20px;
+            background-color: #0077B5;
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            text-align: center;
+            font-size: 20px;
+            cursor: pointer;
+            display: none;
+            z-index: 999;
+            opacity: 0.7;
+            transition: opacity 0.3s;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+        
+        .back-to-top:hover {
+            opacity: 1;
+        }
+        
+        /* 响应式调整 */
+        @media (max-width: 1200px) {
+            .main-container {
+                flex-direction: column;
+            }
+            
+            .content {
+                max-width: 100%;
+                padding: 20px;
+            }
+            
+            .sidebar {
+                width: 100%;
+                height: auto;
+                position: fixed;
+                top: 0;
+                left: 0;
+                right: 0;
+                bottom: 0;
+                transform: translateX(100%);
+                transition: transform 0.3s ease;
+                z-index: 1000;
+                border-left: none;
+                padding-top: 60px;
+            }
+            
+            .sidebar.active {
+                transform: translateX(0);
+            }
+            
+            .menu-toggle {
+                display: block;
+            }
+            
+            .close-menu {
+                position: absolute;
+                top: 20px;
+                right: 20px;
+                background: none;
+                border: none;
+                font-size: 24px;
+                color: #333;
+                cursor: pointer;
+            }
+            
+            .feature {
+                flex-direction: column;
+            }
+            
+            .feature-icon {
+                margin-bottom: 10px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="main-container">
+        <!-- 主内容区域 -->
+        <div class="content">
+            <h1>LinkedIn Easy Apply Bot - 使用指南</h1>
+            
+            <div id="overview" class="container">
+                <p>LinkedIn Easy Apply Bot 是一个强大的自动化工具，可以帮助您在 LinkedIn 上自动搜索和申请工作。该工具支持自动填写申请表格、上传简历和求职信，并可以使用 AI 自动生成回答面试问题。</p>
+            </div>
+
+            <h2 id="features">功能特点</h2>
+
+            <div class="feature">
+                <div class="feature-icon">🔍</div>
+                <div class="feature-content">
+                    <h3>自动搜索工作</h3>
+                    <p>根据您设置的职位、地点和筛选条件自动搜索 LinkedIn 上的工作机会。</p>
+                </div>
+            </div>
+
+            <div class="feature">
+                <div class="feature-icon">📝</div>
+                <div class="feature-content">
+                    <h3>自动填写申请表格</h3>
+                    <p>自动填写个人信息、工作经验、教育背景等申请表格内容，大大节省申请时间。</p>
+                </div>
+            </div>
+
+            <div class="feature">
+                <div class="feature-icon">📄</div>
+                <div class="feature-content">
+                    <h3>上传简历和求职信</h3>
+                    <p>自动上传您的简历和求职信（如果需要）。</p>
+                </div>
+            </div>
+
+            <div class="feature">
+                <div class="feature-icon">🤖</div>
+                <div class="feature-content">
+                    <h3>AI 回答生成</h3>
+                    <p>支持使用云服务 API 自动生成对申请问题的回答。</p>
+                </div>
+            </div>
+
+            <div class="feature">
+                <div class="feature-icon">⚖️</div>
+                <div class="feature-content">
+                    <h3>职位匹配度评估</h3>
+                    <p>使用 AI 分析职位描述和您的资历，评估职位是否值得申请。</p>
+                </div>
+            </div>
+
+            <div class="feature">
+                <div class="feature-icon">📊</div>
+                <div class="feature-content">
+                    <h3>应用记录</h3>
+                    <p>记录已申请的职位，方便后续跟踪。</p>
+                </div>
+            </div>
+
+            <h2 id="installation">安装和准备</h2>
+
+            <h3>系统要求</h3>
+            <ul>
+                <li>Windows 操作系统（批处理文件基于 Windows 编写）</li>
+                <li>Python 3.8 或更高版本 <a target="_blank" href="https://www.python.org/downloads/">下载python</a></li>
+                <li>Chrome 浏览器</li>
+                <li>LinkedIn 账号</li>
+            </ul>
+
+            <h3>环境准备</h3>
+            <ol>
+                <li>确保已安装 Python 和 pip</li>
+                <li>确保有可用的 LinkedIn 账号</li>
+                <li>准备好您的简历 PDF 文件</li>
+                <li>如果使用 OpenAI API，准备好 API 密钥</li>
+            </ol>
+
+            <h2 id="batch-files">使用批处理文件</h2>
+
+            <h3>start.bat 文件</h3>
+            <div class="container">
+                <p><code>start.bat</code> 是主要的启动脚本，用于启动图形界面配置工具。使用方法：</p>
+                <ol>
+                    <li>在第一次使用时双击 setup.bat 安装程序必备的依赖包</li>
+                    <li>双击 start.bat 文件</li>
+                    <li>等待程序启动</li>
+                    <li>在图形界面中配置您的设置</li>
+                </ol>
+            </div>
+
+            <div class="warning">
+                <p><strong>注意：</strong> 首次运行时，如果没有 config.yaml 文件，系统会提示您创建一个配置文件。</p>
+            </div>
+
+            <h3>运行机器人</h3>
+            <p>配置完成后，您可以选择：</p>
+            <ul>
+                <li>通过图形界面-操作与状态中启动机器人（推荐新用户使用）</li>
+            </ul>
+
+            <h2 id="configuration">配置说明</h2>
+
+            <h3>基本设置</h3>
+            <table>
+                <tr>
+                    <th>设置项</th>
+                    <th>说明</th>
+                </tr>
+                <tr>
+                    <td>LinkedIn 邮箱</td>
+                    <td>您的 LinkedIn 账号邮箱</td>
+                </tr>
+                <tr>
+                    <td>LinkedIn 密码</td>
+                    <td>您的 LinkedIn 账号密码</td>
+                </tr>
+                <tr>
+                    <td>OpenAI API 密钥</td>
+                    <td>可选，提供后可使用 AI 功能，不提供时将使用云服务 API</td>
+                </tr>
+                <tr>
+                    <td>使用云服务 API</td>
+                    <td>是否使用云服务 API（默认启用）</td>
+                </tr>
+                <tr>
+                    <td>简历路径</td>
+                    <td>您的简历 PDF 文件路径</td>
+                </tr>
+                <tr>
+                    <td>求职信路径</td>
+                    <td>可选，您的求职信文件路径</td>
+                </tr>
+            </table>
+
+            <h3>搜索设置</h3>
+            <table>
+                <tr>
+                    <th>设置项</th>
+                    <th>说明</th>
+                </tr>
+                <tr>
+                    <td>职位关键词</td>
+                    <td>要搜索的职位关键词，如 "Software Engineer"</td>
+                </tr>
+                <tr>
+                    <td>地点</td>
+                    <td>搜索的地理位置，如 "New York"</td>
+                </tr>
+                <tr>
+                    <td>搜索距离</td>
+                    <td>从中心位置搜索的距离（单位：英里）</td>
+                </tr>
+                <tr>
+                    <td>远程工作</td>
+                    <td>是否只搜索远程工作</td>
+                </tr>
+                <tr>
+                    <td>最新发布优先</td>
+                    <td>是否优先显示最新发布的职位</td>
+                </tr>
+            </table>
+
+            <h3>个人信息</h3>
+            <p>在此部分填写您的详细个人信息，这些信息将用于自动填写申请表格：</p>
+            <ul>
+                <li>姓名、性别、年龄</li>
+                <li>联系方式</li>
+                <li>地址信息</li>
+                <li>自我介绍</li>
+            </ul>
+
+            <h3>工作经验</h3>
+            <p>添加您的工作经验，包括：</p>
+            <ul>
+                <li>公司名称</li>
+                <li>职位名称</li>
+                <li>工作时间（年月）</li>
+                <li>工作描述</li>
+                <li>是否为当前工作</li>
+            </ul>
+
+            <h3>教育背景</h3>
+            <p>添加您的教育经历，包括：</p>
+            <ul>
+                <li>学校名称</li>
+                <li>学位</li>
+                <li>专业</li>
+                <li>就读时间（年月）</li>
+                <li>是否在读</li>
+            </ul>
+
+            <h2 id="ai-features">AI 功能说明</h2>
+
+            <h3>云服务 API 使用说明</h3>
+            <p>系统使用云服务 API 处理申请问题和职位评估：</p>
+            <ul>
+                <li><strong>使用默认密钥</strong>：不提供 OpenAI API 密钥时，系统将使用云服务的默认 API 密钥</li>
+                <li><strong>使用自定义密钥</strong>：提供自己的 OpenAI API 密钥后，云服务将使用您的密钥进行请求</li>
+            </ul>
+
+            <div class="container">
+                <p>当您在设置中填写了自己的 OpenAI API 密钥时，系统会将此密钥传递给云服务，云服务将优先使用您的密钥来处理请求。这样可以确保请求使用您自己的账户额度。</p>
+            </div>
+
+            <h3>AI 答题和职位评估</h3>
+            <p>AI 服务会帮助：</p>
+            <ul>
+                <li>自动生成申请问题的回答</li>
+                <li>评估职位是否与您的资历匹配</li>
+            </ul>
+
+            <h2 id="faq">常见问题</h2>
+
+            <h3>Q: 机器人无法登录 LinkedIn 怎么办？</h3>
+            <p>A: 可能是因为 LinkedIn 要求安全验证。程序会提示您手动完成验证，然后继续运行。</p>
+
+    <h3>Q: 为什么有些字段没有自动填写？</h3>
+    <p>A: 某些特殊或不常见的字段可能无法自动识别。您可以在 "unprepared_questions.csv" 日志中查看这些字段，并在下次运行前添加自定义答案。</p>
+
+            <h3>Q: AI 生成的回答不够准确怎么办？</h3>
+            <p>A: 您可以通过配置自定义问题和答案来覆盖 AI 的回答。</p>
+
+            <h3>Q: 如何限制机器人只申请特定类型的工作？</h3>
+            <p>A: 您可以在配置中设置黑名单（公司、职位、发布者）和使用职位匹配度评估功能。</p>
+
+            <div class="warning">
+                <p><strong>免责声明：</strong> 请负责任地使用此工具，并遵守 LinkedIn 的服务条款。此工具仅用于帮助求职者提高效率，不应用于发送垃圾申请或其他违反平台规则的行为。</p>
+            </div>
+
+            <h2 id="help">更多帮助</h2>
+            <p>如需更多帮助，请查看项目源代码或联系开发者。</p>
+
+            <footer style="margin-top: 50px; border-top: 1px solid #ddd; padding-top: 20px; text-align: center;">
+                <p>LinkedIn Easy Apply Bot 使用指南 &copy; 2023</p>
+            </footer>
+        </div>
+        
+        <!-- 右侧固定导航 -->
+        <div class="sidebar">
+            <div class="doc-nav-title">文档目录</div>
+            <ul class="doc-nav">
+                <li class="doc-nav-item"><a href="#overview" class="doc-nav-link">概览</a></li>
+                <li class="doc-nav-item"><a href="#features" class="doc-nav-link">功能特点</a></li>
+                <li class="doc-nav-item"><a href="#installation" class="doc-nav-link">安装和准备</a></li>
+                <li class="doc-nav-item"><a href="#batch-files" class="doc-nav-link">批处理文件</a></li>
+                <li class="doc-nav-item"><a href="#configuration" class="doc-nav-link">配置说明</a></li>
+                <li class="doc-nav-item"><a href="#ai-features" class="doc-nav-link">AI功能</a></li>
+                <li class="doc-nav-item"><a href="#faq" class="doc-nav-link">常见问题</a></li>
+                <li class="doc-nav-item"><a href="#help" class="doc-nav-link">更多帮助</a></li>
+            </ul>
+            <button class="close-menu" style="display: none;">&times;</button>
+        </div>
+    </div>
+    
+    <!-- 移动设备菜单按钮 -->
+    <button class="menu-toggle">☰</button>
+    
+    <!-- 返回顶部按钮 -->
+    <button class="back-to-top" title="返回顶部">↑</button>
+    
+    <script>
+        // 移动菜单控制
+        document.querySelector('.menu-toggle').addEventListener('click', function() {
+            document.querySelector('.sidebar').classList.add('active');
+            document.querySelector('.close-menu').style.display = 'block';
+        });
+        
+        document.querySelector('.close-menu').addEventListener('click', function() {
+            document.querySelector('.sidebar').classList.remove('active');
+            this.style.display = 'none';
+        });
+        
+        // 自动高亮当前浏览的部分
+        window.addEventListener('scroll', function() {
+            const sections = document.querySelectorAll('h2[id]');
+            const navLinks = document.querySelectorAll('.doc-nav-link');
+            
+            let currentSection = '';
+            
+            sections.forEach(section => {
+                const sectionTop = section.offsetTop;
+                
+                if (window.pageYOffset >= sectionTop - 100) {
+                    currentSection = section.getAttribute('id');
+                }
+            });
+            
+            navLinks.forEach(link => {
+                link.classList.remove('active');
+                if (link.getAttribute('href') === '#' + currentSection) {
+                    link.classList.add('active');
+                }
+            });
+            
+            // 显示/隐藏返回顶部按钮
+            const backToTop = document.querySelector('.back-to-top');
+            if (window.pageYOffset > 300) {
+                backToTop.style.display = 'block';
+            } else {
+                backToTop.style.display = 'none';
+            }
+        });
+        
+        // 返回顶部按钮功能
+        document.querySelector('.back-to-top').addEventListener('click', function() {
+            window.scrollTo({
+                top: 0,
+                behavior: 'smooth'
+            });
+        });
+        
+        // 平滑滚动到锚点
+        document.querySelectorAll('.doc-nav-link').forEach(anchor => {
+            anchor.addEventListener('click', function(e) {
+                e.preventDefault();
+                
+                const targetId = this.getAttribute('href');
+                const targetElement = document.querySelector(targetId);
+                
+                window.scrollTo({
+                    top: targetElement.offsetTop - 20,
+                    behavior: 'smooth'
+                });
+                
+                // 在移动设备上点击导航项后关闭菜单
+                if (window.innerWidth <= 1200) {
+                    document.querySelector('.sidebar').classList.remove('active');
+                    document.querySelector('.close-menu').style.display = 'none';
+                }
+            });
+        });
+    </script>
+</body>
+</html> 
