@@ -1,21 +1,20 @@
 @echo off
-chcp 65001 >nul
-echo ===== 启动 LinkedIn Easy Apply Bot =====
+echo ===== Starting LinkedIn Easy Apply Bot =====
 
-REM 激活虚拟环境
+REM Activate virtual environment
 call venv\Scripts\activate.bat
 
-REM 检查配置文件是否存在
+REM Check if config file exists
 if not exist config.yaml (
-    echo [警告] 未找到配置文件(config.yaml)
-    echo 将启动GUI以创建配置文件
+    echo [WARNING] Config file (config.yaml) not found.
+    echo The GUI will be launched to create a config file.
 )
 
-echo 正在启动图形界面...
+echo Launching GUI...
 python gui_tkinter.py
 
-REM 如果想直接运行机器人(无GUI)，可以取消下面这行的注释
+REM If you want to run the bot directly (without GUI), uncomment the line below
 REM python main.py
 
-echo ===== 程序已退出 =====
+echo ===== Program exited =====
 pause

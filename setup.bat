@@ -1,31 +1,30 @@
 @echo off
-chcp 65001 >nul
-echo ===== LinkedIn Easy Apply Bot - 环境设置 =====
-echo 正在创建虚拟环境...
+echo ===== LinkedIn Easy Apply Bot - Setup =====
+echo Creating virtual environment...
 
-REM 检查Python是否安装
+REM Check if Python is installed
 python --version >nul 2>&1
 if %errorlevel% neq 0 (
-    echo [错误] 未检测到Python，请安装Python 3.8或更高版本
-    echo 请访问 https://www.python.org/downloads/ 下载并安装
+    echo [ERROR] Python not detected. Please install Python 3.8 or higher.
+    echo Please visit https://www.python.org/downloads/
     pause
     exit /b 1
 )
 
-REM 创建虚拟环境
+REM Create virtual environment
 if not exist venv\ (
     python -m venv venv
-    echo 虚拟环境已创建
+    echo Virtual environment created.
 ) else (
-    echo 检测到现有虚拟环境
+    echo Existing virtual environment detected.
 )
 
-REM 激活虚拟环境并安装依赖
-echo 正在安装依赖包...
+REM Activate virtual environment and install dependencies
+echo Installing dependencies...
 call venv\Scripts\activate.bat
 python -m pip install --upgrade pip
 pip install -r requirements.txt
 
-echo ===== 安装完成! =====
-echo 现在您可以运行 start.bat 启动LinkedIn Easy Apply Bot
+echo ===== Installation complete! =====
+echo You can now run start.bat to launch LinkedIn Easy Apply Bot.
 pause
