@@ -490,7 +490,10 @@ class LinkedinEasyApply:
         self.debug = parameters.get('debug', False)
         self.evaluate_job_fit = parameters.get('evaluateJobFit', True)
         self.customQuestions = parameters.get('customQuestions', {})
-        
+
+        self.workExperiences = parameters.get('workExperiences', [])
+        self.education = parameters.get('educations', [])
+
         # 从配置中获取是否使用云服务AI的设置
         use_cloud_ai = True
         
@@ -921,7 +924,7 @@ class LinkedinEasyApply:
                         print("Trying to fill up city field")
                         print(self.personal_info['City'])
                         self.enter_text(input_field, self.personal_info['City'])
-                        time.sleep(0.5)
+                        time.sleep(1.5)
                         input_field.send_keys(Keys.DOWN)
                         input_field.send_keys(Keys.RETURN)
                     elif 'zip' in lb or 'zip / postal code' in lb or 'postal' in lb:
@@ -944,7 +947,7 @@ class LinkedinEasyApply:
                             print("Trying to fill up city field")
                             print(self.personal_info['City'])
                             self.enter_text(input_field, self.personal_info['City'])
-                            time.sleep(0.5)
+                            time.sleep(1.5)
                             input_field.send_keys(Keys.DOWN)
                             input_field.send_keys(Keys.RETURN)
                         elif 'zip' in lb or 'zip / postal code' in lb or 'postal' in lb:
@@ -1509,10 +1512,10 @@ class LinkedinEasyApply:
                     self.contact_info(form)
                 elif 'resume' in label:
                     self.send_resume()
-                # elif 'work experience' in label:
-                #     self.work_experience(form)
-                # elif 'education' in label:
-                #     self.education(form)
+                elif 'work experience' in label and len(self.workExperiences) > 0:
+                    self.work_experience(form)
+                elif 'education' in label and len(self.education) > 0:
+                    self.education_fun(form)
                 else:
                     self.additional_questions(form)
             except Exception as e:
@@ -1700,6 +1703,10 @@ class LinkedinEasyApply:
         if len(frm_el) > 0:
             for el in frm_el:
                 text = el.text.lower()
+                input_id = el.get_attribute('for')
+                input_field = None
+                if input_id:
+                    input_field = form.find_element(By.ID, input_id)
                 if 'email address' in text:
                     continue
                 elif 'phone number' in text:
@@ -1718,3 +1725,324 @@ class LinkedinEasyApply:
                     except Exception as e:
                         print("Could not enter phone number:")
                         print(e)
+
+                elif 'city' in text or (input_field and 'GEO-LOCATION' in input_field.get_attribute('id')):
+                    print("Trying to fill up city field")
+                    print(self.personal_info['City'])
+                    self.enter_text(input_field, self.personal_info['City'])
+                    time.sleep(1.5)
+                    input_field.send_keys(Keys.DOWN)
+                    input_field.send_keys(Keys.RETURN)
+
+    def handle_current_checkbox(self, question, form, item, form_type):
+        """
+        Handle "current" status checkboxes for both work experience and education
+        
+        Args:
+            question: Current question element
+            form: Form element
+            item: Current item being processed (work experience or education)
+            form_type: Form type, either 'work' or 'education'
+        
+        Returns:
+            bool: True if checkbox was successfully handled, False otherwise
+        """
+        # Define keywords based on form type
+        keywords = {
+            'work': ['present', 'current'],
+            'education': ['currently attend', 'current student']
+        }
+        # Define log messages based on form type
+        log_messages = {
+            'work': 'Current position',
+            'education': 'Currently attending'
+        }
+        
+        try:
+            # Get question text
+            checkbox_text = question.find_element(By.TAG_NAME, 'label').text.lower()
+            # Check if it contains relevant keywords
+            if any(keyword in checkbox_text for keyword in keywords.get(form_type, [])):
+                is_current = item.get('current', False)
+                print(f"{log_messages.get(form_type, 'Current')}: {is_current}")
+                if is_current:
+                    print('Attempting to click')
+                    try:
+                        # Try to get input_id and click the corresponding label
+                        input_id = question.find_element(By.TAG_NAME, 'label').get_attribute('for')
+                        if input_id:
+                            label = form.find_element(By.XPATH, f"//label[@for='{input_id}']")
+                            label.click()
+                        else:
+                            # If input_id not found, click the label directly
+                            question.find_element(By.TAG_NAME, 'label').click()
+                    except Exception as inner_e:
+                        print(f"Could not click on '{log_messages.get(form_type, 'current')}' checkbox: {inner_e}")
+                return True
+        except Exception as e:
+            print(f"Error handling current checkbox: {e}")
+        return False
+
+    def fill_repeatable_form(self, form, form_type):
+        """
+        Fill repeatable form sections like work experience or education
+        
+        Args:
+            form: The form element to fill
+            form_type: Type of form, either 'work' or 'education'
+        """
+        # Determine which data source and field mapping to use
+        if form_type == 'work':
+            items = self.workExperiences
+            item_name = "work experience"
+            field_mapping = {
+                'title': ['title', 'position'],
+                'company': ['company', 'employer'],
+                'city': ['city', 'location'],
+                'description': ['description']
+            }
+        else:  # form_type == 'education'
+            items = self.education
+            item_name = "education"
+            field_mapping = {
+                'school': ['school'],
+                'degree': ['degree'],
+                'major': ['field', 'major'],
+                'city': ['city', 'location'],
+            }
+        
+        if len(items) == 0:
+            return
+        
+        print(f"Filling {item_name} fields")
+        
+        # Check for existing entries and remove them
+        try:
+            # Find cards in the form
+            cards = form.find_elements(By.CLASS_NAME, 'artdeco-card')
+            
+            # If cards found and there's more than 0, we have old data
+            if cards and len(cards) > 0:
+                print(f"Found {len(cards)} existing {item_name} entries, removing them")
+
+                for card in cards:
+                    try:
+                        # Find delete button (at same level as card, not inside it)
+                        # Get parent element of the card
+                        parent_element = card.find_element(By.XPATH, "./..")
+                        
+                        # Find delete buttons in parent element (at same level as card)
+                        remove_buttons = parent_element.find_elements(By.XPATH, 
+                            ".//button[contains(@aria-label, 'Remove') or contains(@aria-label, '删除') or contains(@aria-label, 'Delete')]")
+                        
+                        if not remove_buttons:
+                            # Try other ways to find delete buttons
+                            remove_buttons = form.find_elements(By.XPATH, 
+                                "//button[contains(@aria-label, 'Remove') or contains(@aria-label, '删除') or contains(@aria-label, 'Delete')]")
+                        
+                        if remove_buttons:
+                            print("Found delete button, clicking to remove")
+                            remove_buttons[0].click()
+                            time.sleep(0.5)
+                            
+                            # Click confirm delete button
+                            confirm_buttons = self.browser.find_elements(By.CLASS_NAME, 'artdeco-modal__confirm-dialog-btn')
+                            if confirm_buttons:
+                                confirm_buttons[-1].click()
+                                print(f"Removed an existing {item_name} entry")
+                                time.sleep(1)
+                            else:
+                                print("Confirm delete button not found")
+                        else:
+                            print("Delete button not found")
+                    except Exception as e:
+                        print(f"Error deleting existing {item_name} entry: {e}")
+
+                # Click 'Add more' button to add new form
+                try:
+                    print("Clicking 'Add more' button to add new form")
+                    add_buttons = self.browser.find_elements(By.CLASS_NAME, 'jobs-easy-apply-repeatable-groupings__add-button')
+                    if add_buttons:
+                        add_buttons[0].click()
+                        print("Add button clicked")
+                        time.sleep(0.5)
+                    else:
+                        print(f"Add button not found, cannot add more {item_name} entries")
+                except Exception as e:
+                    print(f"Error clicking add button: {e}")
+
+            else:
+                print(f"No existing {item_name} data found, filling new data directly")
+        except Exception as e:
+            print(f"Error checking for existing {item_name} data: {e}")
+        
+        # Loop through all items
+        for index, item in enumerate(items):
+            print(f"Filling {item_name} entry #{index+1}")
+            if index > 0:
+                try:
+                    print("Clicking 'Add more' button to add new form")
+                    add_buttons = self.browser.find_elements(By.CLASS_NAME, 'jobs-easy-apply-repeatable-groupings__add-button')
+                    if add_buttons:
+                        add_buttons[0].click()
+                        print("Add button clicked")
+                        time.sleep(0.5)
+                    else:
+                        print(f"Add button not found, cannot add more {item_name} entries")
+                        break
+                except Exception as e:
+                    print(f"Error clicking add button: {e}")
+                    break
+            
+            # Search for elements in the form
+            questions = form.find_elements(By.CLASS_NAME, 'fb-dash-form-element')
+            
+            for question in questions:
+                try:
+                    # Handle date range fields
+                    try:
+                        # Find date range component
+                        date_range_component = question.find_element(By.XPATH, "./div[@data-test-date-range-form-component]")
+                        if date_range_component:
+                            print("Found date range component")
+                            
+                            # Handle start date (From)
+                            from_fieldset = date_range_component.find_element(By.XPATH, ".//fieldset[@data-test-date-dropdown='start']")
+                            if from_fieldset:
+                                # Find month selector
+                                month_select = from_fieldset.find_element(By.XPATH, ".//select[@data-test-month-select]")
+                                select = Select(month_select)
+                                try:
+                                    # Get month from data
+                                    month_to_select = item.get('from_month', "January")
+                                    select.select_by_visible_text(month_to_select)
+                                except:
+                                    # Select first non-empty option
+                                    options = select.options
+                                    for option in options:
+                                        if option.get_attribute('value'):
+                                            option.click()
+                                            break
+                                            
+                                # Find year selector
+                                year_select = from_fieldset.find_element(By.XPATH, ".//select[@data-test-year-select]")
+                                select = Select(year_select)
+                                try:
+                                    # Get year from data
+                                    default_year = "2020" if form_type == 'work' else "2015"
+                                    year_to_select = item.get('from_year', default_year)
+                                    select.select_by_visible_text(year_to_select)
+                                except:
+                                    # Select a reasonable year
+                                    options = select.options
+                                    for option in options:
+                                        option_text = option.text
+                                        if option_text.isdigit() and len(option_text) == 4 and int(option_text) > 2010:
+                                            option.click()
+                                            break
+                            
+                            # Handle end date (To)
+                            to_fieldset = date_range_component.find_element(By.XPATH, ".//fieldset[@data-test-date-dropdown='end']")
+                            if to_fieldset:
+                                # Find month selector
+                                month_select = to_fieldset.find_element(By.XPATH, ".//select[@data-test-month-select]")
+                                select = Select(month_select)
+                                try:
+                                    # Get month from data
+                                    month_to_select = item.get('to_month', "January")
+                                    select.select_by_visible_text(month_to_select)
+                                except:
+                                    # Select first non-empty option
+                                    options = select.options
+                                    for option in options:
+                                        if option.get_attribute('value'):
+                                            option.click()
+                                            break
+
+                                # Find year selector
+                                year_select = to_fieldset.find_element(By.XPATH, ".//select[@data-test-year-select]")
+                                select = Select(year_select)
+                                try:
+                                    # Get year from data
+                                    default_year = "2020" if form_type == 'work' else "2019"
+                                    year_to_select = item.get('to_year', default_year)
+                                    select.select_by_visible_text(year_to_select)
+                                except:
+                                    # Select a reasonable year
+                                    options = select.options
+                                    for option in options:
+                                        option_text = option.text
+                                        if option_text.isdigit() and len(option_text) == 4 and int(option_text) > 2010:
+                                            option.click()
+                                            break
+                            
+                            continue  # Date handling complete, continue to next element
+                    except Exception as e:
+                        pass
+                    
+                    # Handle "current" status checkbox for work experience or education
+                    if self.handle_current_checkbox(question, form, item, form_type):
+                        continue
+                    
+                    # Handle regular input fields
+                    try:
+                        question_text = question.find_element(By.TAG_NAME, 'label').text.lower()
+                        print(f"Input field: {question_text}")
+                        
+                        txt_field = None
+                        try:
+                            txt_field = question.find_element(By.TAG_NAME, 'input')
+                        except:
+                            try:
+                                txt_field = question.find_element(By.TAG_NAME, 'textarea')
+                            except:
+                                pass
+                        
+                        if txt_field:
+                            # Fill fields based on field mapping
+                            field_filled = False
+                            for field, keywords in field_mapping.items():
+                                if any(keyword in question_text for keyword in keywords):
+                                    value = item.get(field, "")
+                                    self.enter_text(txt_field, value)
+                                    
+                                    # Special handling for city field
+                                    if field == 'city' and value:
+                                        time.sleep(1.5)
+                                        try:
+                                            txt_field.send_keys(Keys.DOWN)
+                                            txt_field.send_keys(Keys.RETURN)
+                                        except:
+                                            pass
+                                    
+                                    field_filled = True
+                                    break
+                            
+                            if field_filled:
+                                continue
+                    except Exception as e:
+                        pass
+                    
+                except Exception as e:
+                    print(f"Error processing form element: {e}")
+        
+            # Save all entries
+            try:
+                # First look for buttons with explicit "Save" or "保存" text
+                save_buttons = form.find_elements(By.XPATH, "//button[contains(., 'Save') or contains(., '保存')]")
+                if save_buttons:
+                    save_buttons[0].click()
+                    time.sleep(1)
+                    print(f"{item_name.capitalize()} form saved")
+            except Exception as e:
+                print(f"Error clicking save button: {e}")
+        
+        print(f"{item_name.capitalize()} filling complete, filled {len(items)} entries")
+
+    def work_experience(self, form):
+        """Process and fill work experience fields in application forms"""
+        self.fill_repeatable_form(form, 'work')
+
+    def education_fun(self, form):
+        """Process and fill education history fields in application forms"""
+        self.fill_repeatable_form(form, 'education')

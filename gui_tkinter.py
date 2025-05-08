@@ -10,6 +10,7 @@ import collections.abc # Used for deep update
 import traceback
 import time
 import json
+import datetime  # 导入datetime模块用于获取当前年份
 
 CONFIG_FILE = "config.yaml"
 # DEFAULT_CONFIG now primarily defines structure and default *values* if a key *exists* but has no value,
@@ -203,12 +204,28 @@ class EasyApplyApp(tk.Tk):
             self.vars['degreeCompleted'][degree] = tk.BooleanVar(value=(degree in degrees_in_config))
 
         # --- GUI Structure --- (Setup remains similar)
-        self.notebook = ttk.Notebook(self); self.basic_tab = ttk.Frame(self.notebook); self.job_tab = ttk.Frame(self.notebook)
-        self.preferences_tab = ttk.Frame(self.notebook); self.advanced_tab = ttk.Frame(self.notebook); self.control_tab = ttk.Frame(self.notebook)
-        self.notebook.add(self.basic_tab, text='基本设置'); self.notebook.add(self.job_tab, text='职位和位置'); self.notebook.add(self.preferences_tab, text='偏好设置')
-        self.notebook.add(self.advanced_tab, text='高级设置'); self.notebook.add(self.control_tab, text='操作与状态'); self.notebook.pack(expand=True, fill='both', padx=10, pady=5)
-        self._create_basic_tab(); self._create_job_tab(); self._create_preferences_tab(); self._create_advanced_tab(); self._create_control_tab()
-        self.status_label = tk.Label(self, text="就绪", bd=1, relief=tk.SUNKEN, anchor=tk.W); self.status_label.pack(side=tk.BOTTOM, fill=tk.X)
+        self.notebook = ttk.Notebook(self)
+        self.basic_tab = ttk.Frame(self.notebook)
+        self.job_tab = ttk.Frame(self.notebook)
+        self.preferences_tab = ttk.Frame(self.notebook)
+        self.advanced_tab = ttk.Frame(self.notebook)
+        self.experience_tab = ttk.Frame(self.notebook)  # 新增经历管理Tab
+        self.control_tab = ttk.Frame(self.notebook)
+        self.notebook.add(self.basic_tab, text='基本设置')
+        self.notebook.add(self.job_tab, text='职位和位置')
+        self.notebook.add(self.preferences_tab, text='偏好设置')
+        self.notebook.add(self.advanced_tab, text='高级设置')
+        self.notebook.add(self.experience_tab, text='经历管理')  # 新增
+        self.notebook.add(self.control_tab, text='操作与状态')
+        self.notebook.pack(expand=True, fill='both', padx=10, pady=5)
+        self._create_basic_tab()
+        self._create_job_tab()
+        self._create_preferences_tab()
+        self._create_advanced_tab()
+        self._create_experience_tab()  # 新增
+        self._create_control_tab()
+        self.status_label = tk.Label(self, text="就绪", bd=1, relief=tk.SUNKEN, anchor=tk.W)
+        self.status_label.pack(side=tk.BOTTOM, fill=tk.X)
         self.protocol("WM_DELETE_WINDOW", self._on_closing)
 
     # --- Helper and Tab Creation Methods ---
@@ -1503,6 +1520,345 @@ class EasyApplyApp(tk.Tk):
 
         with open('config.yaml', 'w', encoding='utf-8') as stream:
             yaml.dump(config_to_save, stream, default_flow_style=False, allow_unicode=True, sort_keys=False)
+
+    def _create_experience_tab(self):
+        frame = ttk.Frame(self.experience_tab, padding=(10, 5))
+        frame.pack(expand=True, fill="both", padx=10, pady=5)
+        frame.columnconfigure(0, weight=1)
+        frame.columnconfigure(1, weight=1)
+        # 工作经历区
+        work_frame = ttk.LabelFrame(frame, text="工作经历", padding=(10, 5))
+        work_frame.grid(row=0, column=0, sticky=tk.NSEW, padx=5, pady=5)
+        self.work_listbox = tk.Listbox(work_frame, height=10, width=38)
+        self.work_listbox.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
+        work_btn_frame = ttk.Frame(work_frame)
+        work_btn_frame.pack(side=tk.TOP, fill=tk.X, pady=3)
+        ttk.Button(work_btn_frame, text="添加", command=self._add_work_dialog, width=8).pack(side=tk.LEFT, padx=5)
+        ttk.Button(work_btn_frame, text="编辑", command=self._edit_work_dialog, width=8).pack(side=tk.LEFT, padx=5)
+        ttk.Button(work_btn_frame, text="删除", command=self._remove_work, width=8).pack(side=tk.LEFT, padx=5)
+        self._update_work_listbox()
+        # 学历经历区
+        edu_frame = ttk.LabelFrame(frame, text="学历经历", padding=(10, 5))
+        edu_frame.grid(row=0, column=1, sticky=tk.NSEW, padx=5, pady=5)
+        self.edu_listbox = tk.Listbox(edu_frame, height=10, width=38)
+        self.edu_listbox.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
+        edu_btn_frame = ttk.Frame(edu_frame)
+        edu_btn_frame.pack(side=tk.TOP, fill=tk.X, pady=3)
+        ttk.Button(edu_btn_frame, text="添加", command=self._add_edu_dialog, width=8).pack(side=tk.LEFT, padx=5)
+        ttk.Button(edu_btn_frame, text="编辑", command=self._edit_edu_dialog, width=8).pack(side=tk.LEFT, padx=5)
+        ttk.Button(edu_btn_frame, text="删除", command=self._remove_edu, width=8).pack(side=tk.LEFT, padx=5)
+        self._update_edu_listbox()
+
+    def _update_work_listbox(self):
+        self.work_listbox.delete(0, tk.END)
+        works = self.config.get('workExperiences', [])
+        for w in works:
+            title = w.get('title', '')
+            company = w.get('company', '')
+            city = w.get('city', '')
+            
+            # 调整日期显示，考虑Month/Year占位符
+            from_date = f"{w.get('from_month', 'Month')}/{w.get('from_year', 'Year')}"
+            if w.get('current', False):
+                period = f"{from_date} - 至今"
+            else:
+                to_date = f"{w.get('to_month', 'Month')}/{w.get('to_year', 'Year')}"
+                period = f"{from_date} - {to_date}"
+            
+            self.work_listbox.insert(tk.END, f"{title} @ {company} ({city}) [{period}]")
+
+    def _update_edu_listbox(self):
+        self.edu_listbox.delete(0, tk.END)
+        edus = self.config.get('educations', [])
+        for e in edus:
+            school = e.get('school', '')
+            degree = e.get('degree', '')
+            major = e.get('major', '')
+            city = e.get('city', '')
+            
+            # 调整日期显示，考虑Month/Year占位符
+            from_date = f"{e.get('from_month', 'Month')}/{e.get('from_year', 'Year')}"
+            if e.get('current', False):
+                period = f"{from_date} - 至今"
+            else:
+                to_date = f"{e.get('to_month', 'Month')}/{e.get('to_year', 'Year')}"
+                period = f"{from_date} - {to_date}"
+            
+            self.edu_listbox.insert(tk.END, f"{school} {degree} {major} ({city}) [{period}]")
+
+    def _add_work_dialog(self):
+        self._work_dialog()
+    def _edit_work_dialog(self):
+        idx = self.work_listbox.curselection()
+        if not idx: return
+        self._work_dialog(idx[0])
+    def _remove_work(self):
+        idx = self.work_listbox.curselection()
+        if not idx: return
+        works = self.config.get('workExperiences', [])
+        works.pop(idx[0])
+        self.config['workExperiences'] = works
+        self._update_work_listbox()
+        
+    def _work_dialog(self, edit_idx=None):
+        works = self.config.get('workExperiences', [])
+        data = works[edit_idx] if edit_idx is not None else {}
+        dialog = tk.Toplevel(self)
+        dialog.title("编辑工作经历" if edit_idx is not None else "添加工作经历")
+        
+        # 获取当前年份
+        current_year = datetime.datetime.now().year
+        
+        # 定义月份和年份选项
+        months = ["Month", "January", "February", "March", "April", "May", "June", 
+                 "July", "August", "September", "October", "November", "December"]
+        # 开始年份范围：当前年份向前推100年
+        from_years = ["Year"] + [str(y) for y in range(current_year, current_year-101, -1)]
+        # 结束年份范围：当前年份向后推10年再加上向前推100年
+        to_years = ["Year"] + [str(y) for y in range(current_year+10, current_year-101, -1)]
+        
+        # 普通文本字段
+        text_fields = ['title', 'company', 'city', 'description']
+        text_labels = ['职位', '公司', '城市', '描述']
+        
+        # 创建基础变量字典
+        vars = {}
+        
+        # 添加文本字段
+        for i, (f, l) in enumerate(zip(text_fields, text_labels)):
+            ttk.Label(dialog, text=l+':').grid(row=i, column=0, sticky=tk.W, padx=5, pady=3)
+            v = tk.StringVar(value=data.get(f, ''))
+            vars[f] = v
+            ttk.Entry(dialog, textvariable=v, width=40).grid(row=i, column=1, padx=5, pady=3)
+        
+        # 添加日期字段 - 起始日期
+        row = len(text_fields)
+        ttk.Label(dialog, text="起始日期:").grid(row=row, column=0, sticky=tk.W, padx=5, pady=3)
+        date_frame = ttk.Frame(dialog)
+        date_frame.grid(row=row, column=1, sticky=tk.W, padx=5, pady=3)
+        
+        # 起始月份下拉框
+        from_month_var = tk.StringVar(value=data.get('from_month', 'Month'))
+        vars['from_month'] = from_month_var
+        ttk.Combobox(date_frame, textvariable=from_month_var, values=months, width=12, state="readonly").pack(side=tk.LEFT, padx=(0, 5))
+        
+        # 起始年份下拉框
+        from_year_var = tk.StringVar(value=data.get('from_year', 'Year'))
+        vars['from_year'] = from_year_var
+        ttk.Combobox(date_frame, textvariable=from_year_var, values=from_years, width=8, state="readonly").pack(side=tk.LEFT)
+        
+        # 添加日期字段 - 结束日期
+        row += 1
+        ttk.Label(dialog, text="结束日期:").grid(row=row, column=0, sticky=tk.W, padx=5, pady=3)
+        to_date_frame = ttk.Frame(dialog)
+        to_date_frame.grid(row=row, column=1, sticky=tk.W, padx=5, pady=3)
+        
+        # 结束月份下拉框
+        to_month_var = tk.StringVar(value=data.get('to_month', 'Month'))
+        vars['to_month'] = to_month_var
+        to_month_combo = ttk.Combobox(to_date_frame, textvariable=to_month_var, values=months, width=12, state="readonly")
+        to_month_combo.pack(side=tk.LEFT, padx=(0, 5))
+        
+        # 结束年份下拉框
+        to_year_var = tk.StringVar(value=data.get('to_year', 'Year'))
+        vars['to_year'] = to_year_var
+        to_year_combo = ttk.Combobox(to_date_frame, textvariable=to_year_var, values=to_years, width=8, state="readonly")
+        to_year_combo.pack(side=tk.LEFT)
+        
+        # 目前在职复选框
+        row += 1
+        current_var = tk.BooleanVar(value=data.get('current', False))
+        
+        def toggle_to_fields():
+            state = "disabled" if current_var.get() else "readonly"
+            to_month_combo.config(state=state)
+            to_year_combo.config(state=state)
+            if current_var.get():
+                to_month_var.set("Month")
+                to_year_var.set("Year")
+        
+        ttk.Checkbutton(dialog, text="目前在职", variable=current_var, command=toggle_to_fields).grid(row=row, column=0, sticky=tk.W, padx=5, pady=10)
+        toggle_to_fields()  # 初始化状态
+        
+        def on_ok():
+            entry = {f: vars[f].get() for f in text_fields}
+            
+            # 处理日期
+            from_month = vars['from_month'].get()
+            from_year = vars['from_year'].get()
+            to_month = vars['to_month'].get()
+            to_year = vars['to_year'].get()
+            
+            # 验证必填字段
+            if entry['title'].strip() == "" or entry['company'].strip() == "":
+                messagebox.showwarning("输入错误", "职位和公司是必填字段", parent=dialog)
+                return
+                
+            # 验证日期选择
+            if from_month == "Month" or from_year == "Year":
+                messagebox.showwarning("输入错误", "请选择起始日期", parent=dialog)
+                return
+                
+            if not current_var.get() and (to_month == "Month" or to_year == "Year"):
+                messagebox.showwarning("输入错误", "请选择结束日期或选择目前在职", parent=dialog)
+                return
+            
+            # 设置值
+            entry['from_month'] = from_month
+            entry['from_year'] = from_year
+            entry['to_month'] = "Month" if current_var.get() else to_month
+            entry['to_year'] = "Year" if current_var.get() else to_year
+            entry['current'] = current_var.get()
+            
+            # 保存结果
+            if edit_idx is not None:
+                works[edit_idx] = entry
+            else:
+                works.append(entry)
+            self.config['workExperiences'] = works
+            self._update_work_listbox()
+            dialog.destroy()
+            
+        # 按钮
+        ttk.Button(dialog, text="确定", command=on_ok).grid(row=row+1, column=0, padx=5, pady=10)
+        ttk.Button(dialog, text="取消", command=dialog.destroy).grid(row=row+1, column=1, padx=5, pady=10)
+
+    def _add_edu_dialog(self):
+        self._edu_dialog()
+    def _edit_edu_dialog(self):
+        idx = self.edu_listbox.curselection()
+        if not idx: return
+        self._edu_dialog(idx[0])
+    def _remove_edu(self):
+        idx = self.edu_listbox.curselection()
+        if not idx: return
+        edus = self.config.get('educations', [])
+        edus.pop(idx[0])
+        self.config['educations'] = edus
+        self._update_edu_listbox()
+        
+    def _edu_dialog(self, edit_idx=None):
+        edus = self.config.get('educations', [])
+        data = edus[edit_idx] if edit_idx is not None else {}
+        dialog = tk.Toplevel(self)
+        dialog.title("编辑学历经历" if edit_idx is not None else "添加学历经历")
+        
+        # 获取当前年份
+        current_year = datetime.datetime.now().year
+        
+        # 定义月份和年份选项
+        months = ["Month", "January", "February", "March", "April", "May", "June", 
+                 "July", "August", "September", "October", "November", "December"]
+        # 开始年份范围：当前年份向前推100年
+        from_years = ["Year"] + [str(y) for y in range(current_year, current_year-101, -1)]
+        # 结束年份范围：当前年份向后推10年再加上向前推100年
+        to_years = ["Year"] + [str(y) for y in range(current_year+10, current_year-101, -1)]
+        
+        # 普通文本字段
+        text_fields = ['school', 'city', 'degree', 'major']
+        text_labels = ['学校', '城市', '学位', '专业']
+        
+        # 创建基础变量字典
+        vars = {}
+        
+        # 添加文本字段
+        for i, (f, l) in enumerate(zip(text_fields, text_labels)):
+            ttk.Label(dialog, text=l+':').grid(row=i, column=0, sticky=tk.W, padx=5, pady=3)
+            v = tk.StringVar(value=data.get(f, ''))
+            vars[f] = v
+            ttk.Entry(dialog, textvariable=v, width=40).grid(row=i, column=1, padx=5, pady=3)
+        
+        # 添加日期字段 - 起始日期
+        row = len(text_fields)
+        ttk.Label(dialog, text="起始日期:").grid(row=row, column=0, sticky=tk.W, padx=5, pady=3)
+        date_frame = ttk.Frame(dialog)
+        date_frame.grid(row=row, column=1, sticky=tk.W, padx=5, pady=3)
+        
+        # 起始月份下拉框
+        from_month_var = tk.StringVar(value=data.get('from_month', 'Month'))
+        vars['from_month'] = from_month_var
+        ttk.Combobox(date_frame, textvariable=from_month_var, values=months, width=12, state="readonly").pack(side=tk.LEFT, padx=(0, 5))
+        
+        # 起始年份下拉框
+        from_year_var = tk.StringVar(value=data.get('from_year', 'Year'))
+        vars['from_year'] = from_year_var
+        ttk.Combobox(date_frame, textvariable=from_year_var, values=from_years, width=8, state="readonly").pack(side=tk.LEFT)
+        
+        # 添加日期字段 - 结束日期
+        row += 1
+        ttk.Label(dialog, text="结束日期:").grid(row=row, column=0, sticky=tk.W, padx=5, pady=3)
+        to_date_frame = ttk.Frame(dialog)
+        to_date_frame.grid(row=row, column=1, sticky=tk.W, padx=5, pady=3)
+        
+        # 结束月份下拉框
+        to_month_var = tk.StringVar(value=data.get('to_month', 'Month'))
+        vars['to_month'] = to_month_var
+        to_month_combo = ttk.Combobox(to_date_frame, textvariable=to_month_var, values=months, width=12, state="readonly")
+        to_month_combo.pack(side=tk.LEFT, padx=(0, 5))
+        
+        # 结束年份下拉框
+        to_year_var = tk.StringVar(value=data.get('to_year', 'Year'))
+        vars['to_year'] = to_year_var
+        to_year_combo = ttk.Combobox(to_date_frame, textvariable=to_year_var, values=to_years, width=8, state="readonly")
+        to_year_combo.pack(side=tk.LEFT)
+        
+        # 目前就读复选框
+        row += 1
+        current_var = tk.BooleanVar(value=data.get('current', False))
+        
+        def toggle_to_fields():
+            state = "disabled" if current_var.get() else "readonly"
+            to_month_combo.config(state=state)
+            to_year_combo.config(state=state)
+            if current_var.get():
+                to_month_var.set("Month")
+                to_year_var.set("Year")
+        
+        ttk.Checkbutton(dialog, text="目前就读", variable=current_var, command=toggle_to_fields).grid(row=row, column=0, sticky=tk.W, padx=5, pady=10)
+        toggle_to_fields()  # 初始化状态
+        
+        def on_ok():
+            entry = {f: vars[f].get() for f in text_fields}
+            
+            # 处理日期
+            from_month = vars['from_month'].get()
+            from_year = vars['from_year'].get()
+            to_month = vars['to_month'].get()
+            to_year = vars['to_year'].get()
+            
+            # 验证必填字段
+            if entry['school'].strip() == "" or entry['degree'].strip() == "":
+                messagebox.showwarning("输入错误", "学校和学位是必填字段", parent=dialog)
+                return
+                
+            # 验证日期选择
+            if from_month == "Month" or from_year == "Year":
+                messagebox.showwarning("输入错误", "请选择起始日期", parent=dialog)
+                return
+                
+            if not current_var.get() and (to_month == "Month" or to_year == "Year"):
+                messagebox.showwarning("输入错误", "请选择结束日期或选择目前就读", parent=dialog)
+                return
+            
+            # 设置值
+            entry['from_month'] = from_month
+            entry['from_year'] = from_year
+            entry['to_month'] = "Month" if current_var.get() else to_month
+            entry['to_year'] = "Year" if current_var.get() else to_year
+            entry['current'] = current_var.get()
+            
+            # 保存结果
+            if edit_idx is not None:
+                edus[edit_idx] = entry
+            else:
+                edus.append(entry)
+            self.config['educations'] = edus
+            self._update_edu_listbox()
+            dialog.destroy()
+            
+        # 按钮
+        ttk.Button(dialog, text="确定", command=on_ok).grid(row=row+1, column=0, padx=5, pady=10)
+        ttk.Button(dialog, text="取消", command=dialog.destroy).grid(row=row+1, column=1, padx=5, pady=10)
 
 if __name__ == '__main__':
     in_venv = hasattr(sys, 'real_prefix') or (hasattr(sys, 'base_prefix') and sys.base_prefix != sys.prefix)
