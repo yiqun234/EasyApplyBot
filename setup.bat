@@ -1,4 +1,5 @@
 @echo off
+chcp 65001 >nul
 echo ===== LinkedIn Easy Apply Bot - 环境设置 =====
 echo 正在创建虚拟环境...
 
@@ -13,8 +14,7 @@ if %errorlevel% neq 0 (
 
 REM 创建虚拟环境
 if not exist venv\ (
-    pip install virtualenv
-    virtualenv venv
+    python -m venv venv
     echo 虚拟环境已创建
 ) else (
     echo 检测到现有虚拟环境

@@ -1,4 +1,5 @@
 @echo off
+chcp 65001 >nul
 echo ===== 启动 LinkedIn Easy Apply Bot =====
 
 REM 激活虚拟环境
