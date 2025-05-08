@@ -5,10 +5,10 @@ REM Activate virtual environment
 call venv\Scripts\activate.bat
 
 REM Check if config file exists
-if not exist config.yaml (
-    echo [WARNING] Config file (config.yaml) not found.
-    echo The GUI will be launched to create a config file.
-)
+if exist config.yaml goto skipwarning
+echo [WARNING] Config file (config.yaml) not found.
+echo The GUI will be launched to create a config file.
+:skipwarning
 
 echo Launching GUI...
 python gui_tkinter.py
