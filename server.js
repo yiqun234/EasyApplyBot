@@ -1,8 +1,6 @@
 const express = require('express');
 const cors = require('cors');
 const OpenAI = require('openai');
-const { HttpsProxyAgent } = require('https-proxy-agent');
-const fetch = require('node-fetch');
 const app = express();
 const port = process.env.PORT || 3000;
 
@@ -14,8 +12,7 @@ app.post('/extract-from-resume', async (req, res) => {
     const { 
       resumeText, 
       options, 
-      apiKey, 
-      structure, 
+      structure,
       useProxy, 
       proxyUrl, 
       metadata 
@@ -33,27 +30,8 @@ app.post('/extract-from-resume', async (req, res) => {
     
     // 初始化OpenAI
     const openaiConfig = {
-      apiKey: apiKey || process.env.OPENAI_API_KEY,
+      apiKey: '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',
     };
-    
-    // 如果启用代理，添加代理配置
-    if (useProxy && proxyUrl) {
-      console.log(`使用代理: ${proxyUrl}`);
-      const agent = new HttpsProxyAgent(proxyUrl);
-      openaiConfig.httpAgent = agent;
-      openaiConfig.fetch = (url, options) => {
-        return fetch(url, { ...options, agent });
-      };
-    } else if (process.env.HTTP_PROXY || process.env.HTTPS_PROXY) {
-      // 如果设置了环境变量代理
-      const proxyFromEnv = process.env.HTTPS_PROXY || process.env.HTTP_PROXY;
-      console.log(`使用环境变量代理: ${proxyFromEnv}`);
-      const agent = new HttpsProxyAgent(proxyFromEnv);
-      openaiConfig.httpAgent = agent;
-      openaiConfig.fetch = (url, options) => {
-        return fetch(url, { ...options, agent });
-      };
-    }
     
     const openai = new OpenAI(openaiConfig);
     

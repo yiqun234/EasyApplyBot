@@ -2322,7 +2322,6 @@ class EasyApplyApp(tk.Tk):
                 'resumeText': resume_text,
                 'options': options,
                 'structure': structure,
-                'apiKey': self.config.get('openaiApiKey', ''),
                 'metadata': metadata
             }
             
