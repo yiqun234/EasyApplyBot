@@ -2782,7 +2782,7 @@ class EasyApplyApp(tk.Tk):
             # 保存配置
             if update_count > 0:
                 # save_config(self.config)
-                self._update_ai_log(f"成功更新了 {update_count} 项数据，请点击\"保存配置\"按钮保存更改")
+                self._update_ai_log(f"成功更新了 {update_count} 项数据，请检查确认后到\"操作与状态\"中点击\"保存配置\"按钮保存更改")
             else:
                 self._update_ai_log("没有发现可用的数据可以更新")
             
