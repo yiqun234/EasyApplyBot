@@ -791,7 +791,6 @@ class EasyApplyApp(tk.Tk):
             self.config['email'] = self.vars['email'].get(); self.config['password'] = self.vars['password'].get(); self.config['openaiApiKey'] = self.vars['openaiApiKey'].get()
             self.config['disableAntiLock'] = self.vars['disableAntiLock'].get(); self.config['uploads']['resume'] = self.vars['resume_path'].get(); self.config['textResume'] = self.vars['textResume_path'].get()
             self.config['uploads']['coverLetter'] = self.vars['coverletter_path'].get(); self.config['uploads']['photo'] = self.vars['photo_path'].get()
-            self.config['useCloudAI'] = self.vars['useCloudAI'].get() # 添加使用云服务API选项
             # Job Tab
             self.config['positions'] = parse_list_from_textarea(self.positions_widget.get("1.0", tk.END)); self.config['locations'] = parse_list_from_textarea(self.locations_widget.get("1.0", tk.END))
             self.config['distance'] = self.vars['distance'].get(); self.config['remote'] = self.vars['search_remote'].get()
@@ -821,6 +820,21 @@ class EasyApplyApp(tk.Tk):
                 if isinstance(var, tk.BooleanVar):  # Skip over degreeCompleted in the checkboxes dict
                     self.config['checkboxes'][chk_key] = var.get()
             # We dont need to do anything with customQuestions as those are already managed via the dialog methods
+            
+            # 个人资料和EEO信息
+            # 确保personalInfo和eeo字段存在
+            if 'personalInfo' not in self.config:
+                self.config['personalInfo'] = {}
+            if 'eeo' not in self.config:
+                self.config['eeo'] = {}
+                
+            # 更新个人信息
+            for key in self.vars['personalInfo']:
+                self.config['personalInfo'][key] = self.vars['personalInfo'][key].get()
+                
+            # 更新EEO信息
+            for key in self.vars['eeo']:
+                self.config['eeo'][key] = self.vars['eeo'][key].get()
 
             return True
         except Exception as e:
