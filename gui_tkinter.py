@@ -12,6 +12,85 @@ import time
 import json
 import datetime  # 导入datetime模块用于获取当前年份
 
+# 定义国家代码列表
+COUNTRY_CODES = [
+    "Select an option", "Canada (+1)", "United States (+1)", "Afghanistan (+93)", 
+    "Aland Islands (+358)", "Albania (+355)", "Algeria (+213)", "American Samoa (+1)", 
+    "Andorra (+376)", "Angola (+244)", "Anguilla (+1)", "Antarctica (+0)", 
+    "Antigua and Barbuda (+1)", "Argentina (+54)", "Armenia (+374)", "Aruba (+297)", 
+    "Australia (+61)", "Austria (+43)", "Azerbaijan (+994)", "Bahamas (+1)", 
+    "Bahrain (+973)", "Bangladesh (+880)", "Barbados (+1)", "Belarus (+375)", 
+    "Belgium (+32)", "Belize (+501)", "Benin (+229)", "Bermuda (+1)", 
+    "Bhutan (+975)", "Bolivia (+591)", "Bosnia and Herzegovina (+387)", 
+    "Botswana (+267)", "Bouvet Island (+0)", "Brazil (+55)", 
+    "British Indian Ocean Territory (+246)", "Brunei Darussalam (+673)", 
+    "Bulgaria (+359)", "Burkina Faso (+226)", "Burundi (+257)", "Cambodia (+855)", 
+    "Cameroon (+237)", "Cape Verde (+238)", "Caribbean Nations (+0)", 
+    "Cayman Islands (+1)", "Central African Republic (+236)", "Chad (+235)", 
+    "Chile (+56)", "China (+86)", "Christmas Island (+61)", 
+    "Cocos (Keeling) Islands (+61)", "Colombia (+57)", "Comoros (+269)", 
+    "Congo (+242)", "Cook Islands (+682)", "Costa Rica (+506)", 
+    "Cote D'Ivoire (Ivory Coast) (+225)", "Croatia (+385)", "Cuba (+53)", 
+    "Cyprus (+357)", "Czech Republic (+420)", "Democratic Republic of the Congo (+243)", 
+    "Denmark (+45)", "Djibouti (+253)", "Dominica (+1)", "Dominican Republic (+1)", 
+    "Ecuador (+593)", "Egypt (+20)", "El Salvador (+503)", "Equatorial Guinea (+240)", 
+    "Eritrea (+291)", "Estonia (+372)", "Ethiopia (+251)", 
+    "Falkland Islands (Malvinas) (+500)", "Faroe Islands (+298)", 
+    "Federated States of Micronesia (+691)", "Fiji (+679)", "Finland (+358)", 
+    "France (+33)", "French Guiana (+594)", "French Polynesia (+689)", 
+    "French Southern Territories (+0)", "Gabon (+241)", "Gambia (+220)", 
+    "Georgia (+995)", "Germany (+49)", "Ghana (+233)", "Gibraltar (+350)", 
+    "Greece (+30)", "Greenland (+299)", "Grenada (+1)", "Guadeloupe (+590)", 
+    "Guam (+1)", "Guatemala (+502)", "Guernsey (+44)", "Guinea (+224)", 
+    "Guinea-Bissau (+245)", "Guyana (+592)", "Haiti (+509)", 
+    "Heard Island and McDonald Islands (+0)", "Honduras (+504)", "Hong Kong (+852)", 
+    "Hungary (+36)", "Iceland (+354)", "India (+91)", "Indonesia (+62)", 
+    "Iran (+98)", "Iraq (+964)", "Ireland (+353)", "Isle of Man (+44)", 
+    "Israel (+972)", "Italy (+39)", "Jamaica (+1)", "Japan (+81)", 
+    "Jersey (+44)", "Jordan (+962)", "Kazakhstan (+7)", "Kenya (+254)", 
+    "Kiribati (+686)", "Korea (+82)", "Korea (North) (+850)", "Kosovo (+383)", 
+    "Kuwait (+965)", "Kyrgyzstan (+996)", "Laos (+856)", "Latvia (+371)", 
+    "Lebanon (+961)", "Lesotho (+266)", "Liberia (+231)", "Libya (+218)", 
+    "Liechtenstein (+423)", "Lithuania (+370)", "Luxembourg (+352)", 
+    "Macao (+853)", "Macedonia (+389)", "Madagascar (+261)", "Malawi (+265)", 
+    "Malaysia (+60)", "Maldives (+960)", "Mali (+223)", "Malta (+356)", 
+    "Marshall Islands (+692)", "Martinique (+596)", "Mauritania (+222)", 
+    "Mauritius (+230)", "Mayotte (+262)", "Mexico (+52)", "Moldova (+373)", 
+    "Monaco (+377)", "Mongolia (+976)", "Montenegro (+382)", "Montserrat (+1)", 
+    "Morocco (+212)", "Mozambique (+258)", "Myanmar (+95)", "Namibia (+264)", 
+    "Nauru (+674)", "Nepal (+977)", "Netherlands (+31)", 
+    "Netherlands Antilles (+0)", "New Caledonia (+687)", "New Zealand (+64)", 
+    "Nicaragua (+505)", "Niger (+227)", "Nigeria (+234)", "Niue (+683)", 
+    "Norfolk Island (+672)", "Northern Mariana Islands (+1)", "Norway (+47)", 
+    "Pakistan (+92)", "Palau (+680)", "Palestinian Territory (+970)", 
+    "Panama (+507)", "Papua New Guinea (+675)", "Paraguay (+595)", "Peru (+51)", 
+    "Philippines (+63)", "Pitcairn (+0)", "Poland (+48)", "Portugal (+351)", 
+    "Puerto Rico (+1)", "Qatar (+974)", "Reunion (+262)", "Romania (+40)", 
+    "Russian Federation (+7)", "Rwanda (+250)", 
+    "S. Georgia and S. Sandwich Islands (+0)", "Saint Helena (+290)", 
+    "Saint Kitts and Nevis (+1)", "Saint Lucia (+1)", 
+    "Saint Pierre and Miquelon (+508)", "Saint Vincent and the Grenadines (+1)", 
+    "Samoa (+685)", "San Marino (+378)", "Sao Tome and Principe (+239)", 
+    "Saudi Arabia (+966)", "Senegal (+221)", "Serbia (+381)", 
+    "Serbia and Montenegro (+0)", "Seychelles (+248)", "Sierra Leone (+232)", 
+    "Singapore (+65)", "Slovak Republic (+421)", "Slovenia (+386)", 
+    "Solomon Islands (+677)", "Somalia (+252)", "South Africa (+27)", 
+    "South Sudan (+211)", "Spain (+34)", "Sri Lanka (+94)", "Sudan (+249)", 
+    "Sultanate of Oman (+968)", "Suriname (+597)", "Svalbard and Jan Mayen (+47)", 
+    "Swaziland (+268)", "Sweden (+46)", "Switzerland (+41)", "Syria (+963)", 
+    "Taiwan (+886)", "Tajikistan (+992)", "Tanzania (+255)", "Thailand (+66)", 
+    "Timor-Leste (+670)", "Togo (+228)", "Tokelau (+690)", "Tonga (+676)", 
+    "Trinidad and Tobago (+1)", "Tunisia (+216)", "Turkey (+90)", 
+    "Turkmenistan (+993)", "Turks and Caicos Islands (+1)", "Tuvalu (+688)", 
+    "Uganda (+256)", "Ukraine (+380)", "United Arab Emirates (+971)", 
+    "United Kingdom (+44)", "Uruguay (+598)", "Uzbekistan (+998)", 
+    "Vanuatu (+678)", "Vatican City State (Holy See) (+39)", "Venezuela (+58)", 
+    "Vietnam (+84)", "Virgin Islands (British) (+1)", "Virgin Islands (U.S.) (+1)", 
+    "Wallis and Futuna (+681)", "Western Sahara (+212)", "Yemen (+967)", 
+    "Zambia (+260)", "Zimbabwe (+263)"
+]
+
+
 CONFIG_FILE = "config.yaml"
 # DEFAULT_CONFIG now primarily defines structure and default *values* if a key *exists* but has no value,
 # or if the config file is entirely missing. It's less about forcing specific keys onto the user's config.
@@ -390,9 +469,9 @@ class EasyApplyApp(tk.Tk):
             self.adv_canvas.yview_scroll(delta, "units")
 
         # Bind mouse wheel events to the canvas
-        self.adv_canvas.bind_all("<MouseWheel>", _on_mousewheel) # Windows & macOS?
-        self.adv_canvas.bind_all("<Button-4>", _on_mousewheel)   # Linux scroll up
-        self.adv_canvas.bind_all("<Button-5>", _on_mousewheel)   # Linux scroll down
+        self.adv_canvas.bind_all("<MouseWheel>", _on_mousewheel) 
+        self.adv_canvas.bind_all("<Button-4>", _on_mousewheel)   
+        self.adv_canvas.bind_all("<Button-5>", _on_mousewheel)   
         # You might need to bind to self.scrollable_frame as well sometimes, depending on focus
         self.scrollable_frame.bind_all("<MouseWheel>", _on_mousewheel)
         self.scrollable_frame.bind_all("<Button-4>", _on_mousewheel)
@@ -502,9 +581,50 @@ class EasyApplyApp(tk.Tk):
         personal_keys = list(self.config.get('personalInfo', {}).keys()) # Iterate over keys present in loaded config
         for i, key in enumerate(personal_keys):
             col = (i % 2) * 2; row_offset = i // 2
-            ttk.Label(dynamic_frame, text=f"{key.replace('_',' ').title()}:").grid(row=sub_row + row_offset, column=col, sticky=tk.W, padx=5, pady=2)
-            entry = ttk.Entry(dynamic_frame, textvariable=self.vars['personalInfo'][key], width=25) # Var should exist from __init__
-            entry.grid(row=sub_row + row_offset, column=col + 1, sticky=tk.EW, padx=5, pady=2)
+            
+            # 为Phone Country Code字段添加特殊处理
+            if key.lower() == 'phone country code':
+                ttk.Label(dynamic_frame, text=f"{key.replace('_',' ').title()}:").grid(row=sub_row + row_offset, column=col, sticky=tk.W, padx=5, pady=2)
+                # 使用国家代码下拉框
+                if key not in self.vars['personalInfo']:
+                    self.vars['personalInfo'][key] = tk.StringVar(value=self.config.get('personalInfo', {}).get(key, 'United States (+1)'))
+                country_combo = ttk.Combobox(dynamic_frame, textvariable=self.vars['personalInfo'][key], 
+                                         values=COUNTRY_CODES, state="readonly", width=25, height=20)
+                country_combo.grid(row=sub_row + row_offset, column=col + 1, sticky=tk.EW, padx=5, pady=2)
+                
+                # 添加鼠标滚轮事件处理，阻止事件传播
+                def on_combobox_scroll(event):
+                    # 在下拉列表展开时允许滚动，但阻止事件传播
+                    if country_combo.winfo_class() == 'TCombobox':
+                        if country_combo.winfo_ismapped():
+                            return "break"  # 阻止事件继续传播
+                
+                # 绑定滚轮事件
+                country_combo.bind("<MouseWheel>", on_combobox_scroll)
+                country_combo.bind("<Button-4>", on_combobox_scroll)
+                country_combo.bind("<Button-5>", on_combobox_scroll)
+                
+                # 处理下拉列表展开状态
+                def on_combo_dropdown_open(event):
+                    # 临时取消父级窗口的滚轮绑定
+                    self.adv_canvas.unbind_all("<MouseWheel>")
+                    self.adv_canvas.unbind_all("<Button-4>")
+                    self.adv_canvas.unbind_all("<Button-5>")
+                
+                def on_combo_dropdown_close(event):
+                    # 恢复父级窗口的滚轮绑定
+                    self.adv_canvas.bind_all("<MouseWheel>", _on_mousewheel)
+                    self.adv_canvas.bind_all("<Button-4>", _on_mousewheel)
+                    self.adv_canvas.bind_all("<Button-5>", _on_mousewheel)
+                
+                country_combo.bind("<<ComboboxSelected>>", on_combo_dropdown_close)
+                country_combo.bind("<Escape>", on_combo_dropdown_close)
+                country_combo.bind("<FocusOut>", on_combo_dropdown_close)
+                country_combo.bind("<Button-1>", on_combo_dropdown_open)
+            else:
+                ttk.Label(dynamic_frame, text=f"{key.replace('_',' ').title()}:").grid(row=sub_row + row_offset, column=col, sticky=tk.W, padx=5, pady=2)
+                entry = ttk.Entry(dynamic_frame, textvariable=self.vars['personalInfo'][key], width=25)
+                entry.grid(row=sub_row + row_offset, column=col + 1, sticky=tk.EW, padx=5, pady=2)
         sub_row += (len(personal_keys) + 1) // 2
 
         # EEO Fields (Dynamically created based on loaded config keys)
