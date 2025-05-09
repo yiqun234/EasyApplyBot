@@ -592,7 +592,7 @@ class LinkedinEasyApply:
 
         try:
             easy_apply_button = self.browser.find_element(By.CLASS_NAME, 'jobs-apply-button')
-            if easy_apply_button.text.lower() != 'easy apply' or easy_apply_button.text.lower() != '快速申请':
+            if not ('easy apply' in easy_apply_button.text.lower()) and not ('快速申请' in easy_apply_button.text.lower()):
                 print(f"Easy apply button not found: {easy_apply_button.text}")
                 return False
         except:
