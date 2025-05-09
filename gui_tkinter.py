@@ -11,6 +11,7 @@ import traceback
 import time
 import json
 import datetime  # 导入datetime模块用于获取当前年份
+import requests
 
 # 定义国家代码列表
 COUNTRY_CODES = [
@@ -254,6 +255,8 @@ class EasyApplyApp(tk.Tk):
             # Advanced - Dynamic/Complex (Managed by dedicated widgets/logic)
             'personalInfo': {}, 'eeo': {}, 'degreeCompleted': {}, 'checkboxes': {},
             'useCloudAI': tk.BooleanVar(value=self.config.get('useCloudAI', False)),
+            # AI服务器设置
+            'aiServerUrl': tk.StringVar(value=self.config.get('aiServerUrl', 'http://localhost:3000')),
         }
 
         # --- Dynamic Variables Init --- (More robust against missing keys in loaded config)
@@ -289,12 +292,14 @@ class EasyApplyApp(tk.Tk):
         self.preferences_tab = ttk.Frame(self.notebook)
         self.advanced_tab = ttk.Frame(self.notebook)
         self.experience_tab = ttk.Frame(self.notebook)  # 新增经历管理Tab
+        self.ai_assistant_tab = ttk.Frame(self.notebook)  # 新增AI助手Tab
         self.control_tab = ttk.Frame(self.notebook)
         self.notebook.add(self.basic_tab, text='基本设置')
         self.notebook.add(self.job_tab, text='职位和位置')
         self.notebook.add(self.preferences_tab, text='偏好设置')
         self.notebook.add(self.advanced_tab, text='高级设置')
         self.notebook.add(self.experience_tab, text='经历管理')  # 新增
+        self.notebook.add(self.ai_assistant_tab, text='AI助手')  # 新增
         self.notebook.add(self.control_tab, text='操作与状态')
         self.notebook.pack(expand=True, fill='both', padx=10, pady=5)
         self._create_basic_tab()
@@ -302,12 +307,31 @@ class EasyApplyApp(tk.Tk):
         self._create_preferences_tab()
         self._create_advanced_tab()
         self._create_experience_tab()  # 新增
+        self._create_ai_assistant_tab()  # 新增
         self._create_control_tab()
         self.status_label = tk.Label(self, text="就绪", bd=1, relief=tk.SUNKEN, anchor=tk.W)
         self.status_label.pack(side=tk.BOTTOM, fill=tk.X)
         self.protocol("WM_DELETE_WINDOW", self._on_closing)
 
+        # 绑定标签页切换事件
+        self.notebook.bind("<<NotebookTabChanged>>", self._on_tab_changed)
+
     # --- Helper and Tab Creation Methods ---
+    def _on_tab_changed(self, event):
+        """当标签页切换时调用"""
+        selected_tab_index = self.notebook.index(self.notebook.select())
+        # 假设AI助手标签页是第6个标签页 (索引从0开始)
+        # 您可能需要根据实际的标签页顺序调整此索引
+        ai_assistant_tab_index = -1
+        for i, tab_text in enumerate([self.notebook.tab(i, "text") for i in self.notebook.tabs()]) :
+            if tab_text == "AI助手":
+                ai_assistant_tab_index = i
+                break
+        
+        if selected_tab_index == ai_assistant_tab_index:
+            if hasattr(self, 'resume_status_label') and self.resume_status_label.winfo_exists():
+                self._check_resume_file()
+
     def _get_current_date_pref(self):
         date_prefs = self.config.get('date', {}); # Default to empty dict if missing
         if isinstance(date_prefs, dict):
@@ -334,7 +358,7 @@ class EasyApplyApp(tk.Tk):
         ttk.Label(frame, text="仅支持PDF格式 (最大2MB)").grid(row=current_row, column=1, sticky=tk.W, padx=5)
         current_row+=1
         
-        ttk.Label(frame, text="文本简历文件路径:").grid(row=current_row, column=0, sticky=tk.W, padx=5, pady=3); text_resume_frame = ttk.Frame(frame); ttk.Entry(text_resume_frame, textvariable=self.vars['textResume_path'], width=52).pack(side=tk.LEFT, fill=tk.X, expand=True); ttk.Button(text_resume_frame, text="浏览", command=lambda: self._browse_file(self.vars['textResume_path'], "Text", "*.txt")).pack(side=tk.LEFT, padx=(5,0)); text_resume_frame.grid(row=current_row, column=1, sticky=tk.EW, padx=5, pady=3); current_row+=1
+        ttk.Label(frame, text="文本简历文件路径:").grid(row=current_row, column=0, sticky=tk.W, padx=5, pady=3); text_resume_frame = ttk.Frame(frame); ttk.Entry(text_resume_frame, textvariable=self.vars['textResume_path'], width=52).pack(side=tk.LEFT, fill=tk.X, expand=True); ttk.Button(text_resume_frame, text="浏览", command=lambda: self._browse_text_resume_and_update_ai_tab()).pack(side=tk.LEFT, padx=(5,0)); text_resume_frame.grid(row=current_row, column=1, sticky=tk.EW, padx=5, pady=3); current_row+=1
         
         # 更新求职信上传提示和文件类型
         ttk.Label(frame, text="求职信文件路径:").grid(row=current_row, column=0, sticky=tk.W, padx=5, pady=3)
@@ -376,6 +400,15 @@ class EasyApplyApp(tk.Tk):
                 return
                 
             path_var.set(filepath)
+
+    def _browse_text_resume_and_update_ai_tab(self):
+        """浏览文本简历文件并更新AI助手标签页中的状态"""
+        filepath = filedialog.askopenfilename(title="选择文本简历文件", filetypes=(("Text Files", "*.txt"), ("All Files", "*.*")))
+        if filepath:
+            self.vars['textResume_path'].set(filepath)
+            # 如果AI助手标签页已创建，则调用其更新方法
+            if hasattr(self, 'resume_status_label') and self.resume_status_label.winfo_exists():
+                self._check_resume_file() 
 
     def _create_job_tab(self):
         # (No significant changes needed)
@@ -2127,6 +2160,916 @@ class EasyApplyApp(tk.Tk):
         # 按钮
         ttk.Button(dialog, text="确定", command=on_ok).grid(row=row+1, column=0, padx=5, pady=10)
         ttk.Button(dialog, text="取消", command=dialog.destroy).grid(row=row+1, column=1, padx=5, pady=10)
+
+    def _create_ai_assistant_tab(self):
+        """创建AI助手标签页 - 使用远程服务器API从文本简历中提取内容""" 
+        main_frame = ttk.Frame(self.ai_assistant_tab, padding=(10, 5))
+        main_frame.pack(expand=True, fill="both", padx=10, pady=5)
+        
+        # 标题和说明
+        ttk.Label(main_frame, text="AI助手 - 从简历提取内容", font=("Helvetica", 12, "bold")).pack(pady=(0, 5))
+        ttk.Label(main_frame, text="AI将从您的文本简历中提取内容自动填充表单").pack(anchor=tk.W, pady=(0, 10))
+        
+        # 简历文件提示
+        resume_frame = ttk.LabelFrame(main_frame, text="简历文件", padding=(10, 5))
+        resume_frame.pack(fill=tk.X, padx=5, pady=5)
+        
+        ttk.Label(resume_frame, text="系统将使用您在\"基本设置\"标签页中指定的文本简历文件:").grid(row=0, column=0, sticky=tk.W, padx=5, pady=5)
+        self.resume_status_label = ttk.Label(resume_frame, text="未设置文本简历文件")
+        self.resume_status_label.grid(row=1, column=0, sticky=tk.W, padx=5, pady=5)
+        ttk.Button(resume_frame, text="检查文件", command=self._check_resume_file).grid(row=1, column=1, padx=5, pady=5)
+        resume_frame.columnconfigure(0, weight=1)
+        
+        # 服务器配置区域
+        server_frame = ttk.LabelFrame(main_frame, text="服务器配置", padding=(10, 5))
+        server_frame.pack(fill=tk.X, padx=5, pady=5)
+        
+        ttk.Label(server_frame, text="服务器URL:").grid(row=0, column=0, sticky=tk.W, padx=5, pady=5)
+        ttk.Entry(server_frame, textvariable=self.vars['aiServerUrl'], width=50).grid(row=0, column=1, sticky=tk.EW, padx=5, pady=5)
+        ttk.Button(server_frame, text="测试连接", command=self._test_ai_server).grid(row=0, column=2, padx=5, pady=5)
+        server_frame.columnconfigure(1, weight=1)
+        
+        # 创建功能选择区域
+        options_frame = ttk.LabelFrame(main_frame, text="选择要从简历中提取的内容", padding=(10, 5))
+        options_frame.pack(fill=tk.X, padx=5, pady=5)
+        
+        # 选项变量
+        self.ai_options = {
+            'languages': tk.BooleanVar(value=True),
+            'skills': tk.BooleanVar(value=True),
+            'personal_info': tk.BooleanVar(value=True),
+            'eeo': tk.BooleanVar(value=False),
+            'salary': tk.BooleanVar(value=False),
+            'work_experience': tk.BooleanVar(value=True),
+            'education': tk.BooleanVar(value=True),
+        }
+        
+        # 选项复选框 - 使用Grid布局以保持一致性
+        options_cols = 4  # 每行显示的选项数
+        for i, (option_key, option_var) in enumerate(self.ai_options.items()):
+            row, col = divmod(i, options_cols)
+            
+            # 根据选项键显示友好名称
+            option_labels = {
+                'languages': '语言能力',
+                'skills': '技能经验',
+                'personal_info': '个人资料',
+                'eeo': 'EEO信息',
+                'salary': '最低期望薪资',
+                'work_experience': '工作经历',
+                'education': '学历经历',
+            }
+            
+            ttk.Checkbutton(options_frame, text=option_labels.get(option_key, option_key), 
+                          variable=option_var).grid(row=row, column=col, sticky=tk.W, padx=10, pady=3)
+        
+        # 对每列进行权重设置
+        for i in range(options_cols):
+            options_frame.columnconfigure(i, weight=1)
+        
+        # 进度和执行区域
+        action_frame = ttk.Frame(main_frame)
+        action_frame.pack(fill=tk.X, padx=5, pady=10)
+        
+        # 进度条
+        self.ai_progress = ttk.Progressbar(action_frame, orient="horizontal", length=300, mode="determinate")
+        self.ai_progress.pack(side=tk.LEFT, padx=(0, 10), fill=tk.X, expand=True)
+        
+        # 运行按钮
+        self.run_ai_btn = ttk.Button(action_frame, text="从简历提取", command=self._run_ai_assistant, width=15)
+        self.run_ai_btn.pack(side=tk.LEFT, padx=5)
+        
+        # 输出区域
+        output_frame = ttk.LabelFrame(main_frame, text="AI输出日志", padding=(10, 5))
+        output_frame.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+        
+        self.ai_output = scrolledtext.ScrolledText(output_frame, wrap=tk.WORD, height=10)
+        self.ai_output.pack(fill=tk.BOTH, expand=True)
+        self.ai_output.config(state=tk.DISABLED)
+        
+        # 初始化检查简历状态
+        self.after(100, self._check_resume_file)
+        
+        # 设置默认提示文本 - 不再显示在界面上，但后端仍然需要
+        self.ai_prompt = "请根据我的简历内容提取信息，不要编造任何内容。"
+    
+    def _run_ai_assistant(self):
+        """运行AI助手，分析简历"""
+        # 更新按钮状态
+        self.run_ai_btn.config(state=tk.DISABLED)
+        
+        # 重置输出区
+        self.ai_output.config(state=tk.NORMAL)
+        self.ai_output.delete('1.0', tk.END)
+        self.ai_output.insert(tk.END, "准备分析简历...\n")
+        self.ai_output.config(state=tk.DISABLED)
+        
+        # 获取选项
+        options = []
+        if self.ai_options['languages'].get():
+            options.append('languages')
+        if self.ai_options['skills'].get():
+            options.append('skills')
+        if self.ai_options['personal_info'].get():
+            options.append('personal_info')
+        if self.ai_options['eeo'].get():
+            options.append('eeo')
+        if self.ai_options['salary'].get():
+            options.append('salary')
+        if self.ai_options['work_experience'].get():
+            options.append('work_experience')
+        if self.ai_options['education'].get():
+            options.append('education')
+        
+        if not options:
+            self._update_ai_log("错误: 请至少选择一个提取选项")
+            self.run_ai_btn.config(state=tk.NORMAL)
+            return
+        
+        # 检查文件
+        if not self._check_resume_file():
+            self.run_ai_btn.config(state=tk.NORMAL)
+            return
+        
+        # 获取服务器URL
+        server_url = self.vars['aiServerUrl'].get()
+        if not server_url:
+            self._update_ai_log("错误: 请输入服务器URL")
+            self.run_ai_btn.config(state=tk.NORMAL)
+            return
+        
+        # 在线程中处理以避免UI冻结
+        thread = threading.Thread(target=self._process_resume, args=(server_url, options))
+        thread.daemon = True
+        thread.start()
+    
+    def _process_resume(self, server_url, options):
+        """在线程中处理简历分析"""
+        try:
+            # 读取简历文件内容
+            resume_path = self.vars['textResume_path'].get()
+            with open(resume_path, 'r', encoding='utf-8') as file:
+                resume_text = file.read()
+            
+            # 获取数据结构
+            structure = self._get_data_structure(options)
+            
+            # 获取元数据
+            metadata = self._get_metadata()
+            
+            # 准备请求参数
+            payload = {
+                'resumeText': resume_text,
+                'options': options,
+                'structure': structure,
+                'apiKey': self.config.get('openaiApiKey', ''),
+                'metadata': metadata
+            }
+            
+            self._update_ai_log("正在发送请求到服务器...")
+            
+            # 发送请求到服务器
+            extract_url = f"{server_url}/extract-from-resume"
+            response = requests.post(
+                extract_url,
+                json=payload,
+                headers={'Content-Type': 'application/json'},
+                timeout=120  # 增加超时时间为2分钟
+            )
+            
+            # 处理响应
+            if response.status_code == 200:
+                ai_result = response.json()
+                self._update_ai_log("收到AI分析结果，正在处理...")
+                
+                # 使用服务器返回的结果与客户端元数据进行增强
+                enhanced_result = self._enhance_result(ai_result, metadata)
+                
+                # 显示结果摘要
+                result_text = json.dumps(enhanced_result, indent=2, ensure_ascii=False)
+                self._update_ai_log("分析完成！结果如下:\n\n" + result_text)
+                
+                # 将结果应用到界面配置中
+                self._update_ai_log("\n正在更新界面...")
+                self._apply_ai_data(enhanced_result)
+                self._update_ai_log("界面更新完成！")
+            else:
+                error_msg = f"服务器错误: {response.status_code} - {response.text}"
+                self._update_ai_log(error_msg)
+        except requests.exceptions.Timeout:
+            self._update_ai_log("请求超时，可能是因为简历内容过大或网络问题。\n如需更好的体验，请考虑使用代理或运行本地服务器。")
+        except requests.exceptions.RequestException as e:
+            self._update_ai_log(f"请求错误: {str(e)}")
+        except Exception as e:
+            traceback_str = traceback.format_exc()
+            self._update_ai_log(f"处理错误: {str(e)}\n{traceback_str}")
+        finally:
+            # 恢复按钮状态
+            self.after(0, lambda: self.run_ai_btn.config(state=tk.NORMAL))
+    
+    def _enhance_result(self, result, metadata):
+        """使用元数据增强结果"""
+        # 这个函数可以根据需要调整元数据中的值，或者进行额外处理
+        return result
+    
+    def _apply_ai_data(self, ai_result):
+        """将AI结果应用到界面配置中"""
+        try:
+            update_count = 0  # 记录成功更新的项目数
+            self._update_ai_log("开始应用AI识别结果到配置...")
+            
+            # 更新语言能力
+            if 'languages' in ai_result and isinstance(ai_result['languages'], list) and ai_result['languages']:
+                lang_count = 0
+                # 清空当前语言设置
+                if 'languages' in self.config:
+                    self.config['languages'] = {}
+                
+                # 遍历AI识别的语言
+                for lang_item in ai_result['languages']:
+                    if lang_item and 'language' in lang_item and lang_item['language'] and 'level' in lang_item and lang_item['level']:
+                        lang_name = lang_item['language'].strip()
+                        lang_level = lang_item['level'].strip()
+                        
+                        # 确保language不为空
+                        if not lang_name:
+                            continue
+                        
+                        # 确保level在允许的值中
+                        if lang_level not in LANGUAGE_LEVELS:
+                            # 找到最接近的值
+                            lang_level = LANGUAGE_LEVELS[1]  # 默认使用第二级别
+                            
+                        # 更新配置
+                        self.config['languages'][lang_name] = lang_level
+                        lang_count += 1
+                
+                # 更新界面
+                self._update_language_listbox()
+                if lang_count > 0:
+                    self._update_ai_log(f"已更新 {lang_count} 个语言")
+                    update_count += 1
+            
+            # 更新技能经验
+            if 'skills' in ai_result and isinstance(ai_result['skills'], list) and ai_result['skills']:
+                skill_count = 0
+                # 清除当前经验设置，但保留default
+                default_exp = self.config.get('experience', {}).get('default', 0)
+                self.config['experience'] = {'default': default_exp}
+                
+                # 遍历AI识别的技能
+                for skill_item in ai_result['skills']:
+                    if skill_item and 'skill' in skill_item and skill_item['skill'] and 'years' in skill_item:
+                        skill_name = skill_item['skill'].strip()
+                        years = skill_item['years']
+                        
+                        # 确保skill不为空
+                        if not skill_name:
+                            continue
+                            
+                        # 确保years是数字
+                        try:
+                            years = int(float(years))
+                        except:
+                            years = 0
+                            
+                        # 更新配置
+                        self.config['experience'][skill_name] = years
+                        skill_count += 1
+                
+                # 更新界面
+                self._update_experience_listbox()
+                if skill_count > 0:
+                    self._update_ai_log(f"已更新 {skill_count} 个技能")
+                    update_count += 1
+            
+            # 更新个人信息 - 严格按照现有格式
+            if 'personal_info' in ai_result and isinstance(ai_result['personal_info'], dict) and ai_result['personal_info']:
+                pi_data = ai_result['personal_info']
+                pi_count = 0
+                
+                # 确保个人信息字典存在
+                if 'personalInfo' not in self.config:
+                    self.config['personalInfo'] = {}
+                
+                # 获取现有字段列表进行匹配
+                existing_pi_fields = list(self.config['personalInfo'].keys())
+                field_mapping = {
+                    # API返回格式 -> 配置文件中的实际字段名
+                    'firstName': 'First Name',
+                    'lastName': 'Last Name', 
+                    'email': 'Email',
+                    'phone': 'Mobile Phone Number',
+                    'country_code': 'Phone Country Code',
+                    'address1': 'Street address',
+                    'address2': 'Address Line 2',
+                    'city': 'City',
+                    'state': 'State',
+                    'zip': 'Zip',
+                    'country': 'Country'
+                }
+                
+                # 遍历个人信息字段并更新
+                for api_key, value in pi_data.items():
+                    if api_key == 'confidence':  # 跳过confidence字段
+                        continue
+                        
+                    # 如果值为空，跳过更新
+                    if not value:
+                        continue
+                    
+                    # 尝试映射到配置中的字段名
+                    config_key = field_mapping.get(api_key)
+                    
+                    # 如果没有映射，查找匹配的现有字段
+                    if not config_key:
+                        # 尝试使用API键本身
+                        if api_key in existing_pi_fields:
+                            config_key = api_key
+                        # 尝试将API键转换为标题格式并查找匹配
+                        elif api_key.title() in existing_pi_fields:
+                            config_key = api_key.title()
+                    
+                    # 如果找到匹配的字段，更新配置和界面
+                    if config_key and config_key in existing_pi_fields:
+                        # 处理电话国家代码特殊情况
+                        if config_key == 'Phone Country Code' and value:
+                            # 处理国家代码(例如: US -> United States (+1))
+                            best_match = None
+                            if value in ["US", "USA", "United States"]:
+                                # 查找美国代码
+                                for code in COUNTRY_CODES:
+                                    if "(+1)" in code and "United States" in code:
+                                        best_match = code
+                                        break
+                            else:
+                                # 尝试通过代码或国家名匹配
+                                for code in COUNTRY_CODES:
+                                    if value in code:
+                                        best_match = code
+                                        break
+                            
+                            # 如果找到匹配，使用它
+                            if best_match:
+                                value = best_match
+                            else:
+                                # 如果找不到匹配，跳过此更新
+                                continue
+                        
+                        # 更新配置
+                        self.config['personalInfo'][config_key] = value
+                        
+                        # 如果GUI中有对应的变量，更新它
+                        if config_key in self.vars.get('personalInfo', {}):
+                            self.vars['personalInfo'][config_key].set(value)
+                            pi_count += 1
+                
+                if pi_count > 0:
+                    self._update_ai_log(f"已更新 {pi_count} 个个人信息字段")
+                    update_count += 1
+            
+            # 更新EEO信息 - 跳过空值
+            if 'eeo' in ai_result and isinstance(ai_result['eeo'], dict) and ai_result['eeo']:
+                eeo_data = ai_result['eeo']
+                eeo_count = 0
+                
+                # 确保EEO字典存在
+                if 'eeo' not in self.config:
+                    self.config['eeo'] = {}
+                
+                # 获取现有字段列表进行匹配
+                existing_eeo_fields = list(self.config['eeo'].keys())
+                field_mapping = {
+                    # API返回格式 -> 配置文件中的实际字段名
+                    'gender': 'gender',
+                    'race': 'race',
+                    'veteran': 'veteran',
+                    'disability': 'disability',
+                    'veteran_status': 'veteran',
+                    'disability_status': 'disability',
+                    'citizenship': 'citizenship',
+                    'clearance': 'clearance'
+                }
+                
+                # 遍历EEO字段并更新
+                for api_key, value in eeo_data.items():
+                    if api_key == 'confidence':  # 跳过confidence字段
+                        continue
+                        
+                    # 如果值为空，跳过更新
+                    if not value:
+                        continue
+                    
+                    # 尝试映射到配置中的字段名
+                    config_key = field_mapping.get(api_key)
+                    
+                    # 如果没有映射，查找匹配的现有字段
+                    if not config_key:
+                        # 尝试使用API键本身
+                        if api_key in existing_eeo_fields:
+                            config_key = api_key
+                        # 尝试将API键转换为标题格式并查找匹配
+                        elif api_key.title() in existing_eeo_fields:
+                            config_key = api_key.title()
+                    
+                    # 如果找到匹配的字段，且字段存在于配置中，更新配置和界面
+                    if config_key and config_key in existing_eeo_fields:
+                        # 标准化值格式
+                        if config_key in ['veteran', 'disability'] and isinstance(value, str):
+                            # 将"Yes"/"No"标准化为小写的"yes"/"no"
+                            value = value.lower()
+                            if value in ["false", "f", "n"]:
+                                value = "no"
+                            elif value in ["true", "t", "y"]:
+                                value = "yes"
+                        
+                        # 更新配置
+                        self.config['eeo'][config_key] = value
+                        
+                        # 如果GUI中有对应的变量，更新它
+                        if config_key in self.vars.get('eeo', {}):
+                            self.vars['eeo'][config_key].set(value)
+                            eeo_count += 1
+                
+                if eeo_count > 0:
+                    self._update_ai_log(f"已更新 {eeo_count} 个EEO信息字段")
+                    update_count += 1
+            
+            # 更新薪资信息
+            if 'salary' in ai_result and isinstance(ai_result['salary'], dict) and ai_result['salary'].get('amount'):
+                salary_data = ai_result['salary']
+                
+                if 'amount' in salary_data and salary_data['amount']:
+                    try:
+                        amount = int(float(salary_data['amount']))
+                        self.config['salaryMinimum'] = amount
+                        self.vars['salaryMinimum'].set(amount)
+                        self._update_ai_log(f"已更新薪资: {amount}")
+                        update_count += 1
+                    except:
+                        pass
+            
+            # 更新工作经历
+            if 'work_experience' in ai_result and isinstance(ai_result['work_experience'], list) and ai_result['work_experience']:
+                work_count = 0
+                work_entries = []
+                
+                # 遍历工作经历并添加到列表
+                for work_item in ai_result['work_experience']:
+                    # 检查必要字段是否存在且非空
+                    if (work_item and 'company' in work_item and work_item['company'] and 
+                            'title' in work_item and work_item['title']):
+                        
+                        # 创建工作经历对象
+                        work_entry = {
+                            'company': work_item.get('company', ''),
+                            'title': work_item.get('title', ''),
+                            'city': work_item.get('city', ''),
+                            'state': work_item.get('state', ''),
+                            'country': work_item.get('country', ''),
+                            'from_month': work_item.get('from_month', 'Month'),
+                            'from_year': work_item.get('from_year', 'Year'),
+                            'to_month': work_item.get('to_month', 'Month'),
+                            'to_year': work_item.get('to_year', 'Year'),
+                            'current': work_item.get('current', False),
+                            'description': work_item.get('description', '')
+                        }
+                        
+                        # 处理城市为空的情况
+                        if not work_entry['city']:
+                            # 如果城市为空但国家或州有值，尝试使用州或国家值作为城市占位符
+                            if work_entry['state']:
+                                work_entry['city'] = work_entry['state']
+                            elif work_entry['country']:
+                                work_entry['city'] = work_entry['country']
+                            else:
+                                # 无法推断，添加占位符
+                                work_entry['city'] = "[城市不详]"
+                        
+                        # 确保日期字段是正确的格式
+                        # from_month如果是数字，转换为月份名称
+                        if isinstance(work_entry['from_month'], (int, float)) or work_entry['from_month'].isdigit():
+                            try:
+                                month_idx = int(work_entry['from_month'])
+                                if 1 <= month_idx <= 12:
+                                    months = ["January", "February", "March", "April", "May", "June", 
+                                             "July", "August", "September", "October", "November", "December"]
+                                    work_entry['from_month'] = months[month_idx-1]
+                            except:
+                                pass
+                        
+                        # to_month如果是数字，转换为月份名称
+                        if isinstance(work_entry['to_month'], (int, float)) or work_entry['to_month'].isdigit():
+                            try:
+                                month_idx = int(work_entry['to_month'])
+                                if 1 <= month_idx <= 12:
+                                    months = ["January", "February", "March", "April", "May", "June", 
+                                             "July", "August", "September", "October", "November", "December"]
+                                    work_entry['to_month'] = months[month_idx-1]
+                            except:
+                                pass
+                        
+                        work_entries.append(work_entry)
+                        work_count += 1
+                
+                # 更新配置
+                if work_count > 0:
+                    self.config['workExperiences'] = work_entries
+                    self._update_work_listbox()
+                    self._update_ai_log(f"已更新 {work_count} 个工作经历")
+                    update_count += 1
+            
+            # 更新教育背景
+            if 'education' in ai_result and isinstance(ai_result['education'], list) and ai_result['education']:
+                edu_count = 0
+                edu_entries = []
+                
+                # 遍历教育经历并添加到列表
+                for edu_item in ai_result['education']:
+                    # 检查必要字段是否存在且非空
+                    if (edu_item and 'school' in edu_item and edu_item['school'] and 
+                            'degree' in edu_item and edu_item['degree']):
+                        
+                        # 创建教育经历对象
+                        edu_entry = {
+                            'school': edu_item.get('school', ''),
+                            'degree': edu_item.get('degree', ''),
+                            'major': edu_item.get('major', ''),
+                            'city': edu_item.get('city', ''),
+                            'state': edu_item.get('state', ''),
+                            'country': edu_item.get('country', ''),
+                            'from_month': edu_item.get('from_month', 'Month'),
+                            'from_year': edu_item.get('from_year', 'Year'),
+                            'to_month': edu_item.get('to_month', 'Month'),
+                            'to_year': edu_item.get('to_year', 'Year'),
+                            'current': edu_item.get('current', False)
+                        }
+                        
+                        # 处理城市为空的情况
+                        if not edu_entry['city']:
+                            # 如果城市为空但国家或州有值，尝试使用州或国家值作为城市占位符
+                            if edu_entry['state']:
+                                edu_entry['city'] = edu_entry['state']
+                            elif edu_entry['country']:
+                                edu_entry['city'] = edu_entry['country']
+                            else:
+                                # 无法推断，添加占位符
+                                edu_entry['city'] = "[学校所在地不详]"
+                        
+                        # 确保日期字段是正确的格式
+                        # from_month如果是数字，转换为月份名称
+                        if isinstance(edu_entry['from_month'], (int, float)) or str(edu_entry['from_month']).isdigit():
+                            try:
+                                month_idx = int(edu_entry['from_month'])
+                                if 1 <= month_idx <= 12:
+                                    months = ["January", "February", "March", "April", "May", "June", 
+                                             "July", "August", "September", "October", "November", "December"]
+                                    edu_entry['from_month'] = months[month_idx-1]
+                            except:
+                                pass
+                        
+                        # to_month如果是数字，转换为月份名称
+                        if isinstance(edu_entry['to_month'], (int, float)) or str(edu_entry['to_month']).isdigit():
+                            try:
+                                month_idx = int(edu_entry['to_month'])
+                                if 1 <= month_idx <= 12:
+                                    months = ["January", "February", "March", "April", "May", "June", 
+                                             "July", "August", "September", "October", "November", "December"]
+                                    edu_entry['to_month'] = months[month_idx-1]
+                            except:
+                                pass
+                        
+                        edu_entries.append(edu_entry)
+                        edu_count += 1
+                
+                # 更新配置
+                if edu_count > 0:
+                    self.config['educations'] = edu_entries
+                    self._update_edu_listbox()
+                    self._update_ai_log(f"已更新 {edu_count} 个教育经历")
+                    update_count += 1
+                
+                # 更新已完成学位复选框
+                if edu_count > 0:
+                    if 'checkboxes' not in self.config:
+                        self.config['checkboxes'] = {}
+                    
+                    # 提取所有学位
+                    degrees = []
+                    for edu_item in ai_result['education']:
+                        degree = edu_item.get('degree', '')
+                        # 尝试找到匹配的标准学位
+                        matched_degree = None
+                        for std_degree in STANDARD_DEGREES:
+                            if std_degree.lower() in degree.lower():
+                                matched_degree = std_degree
+                                break
+                        
+                        # 如果找到匹配的标准学位，添加到列表
+                        if matched_degree and matched_degree not in degrees:
+                            degrees.append(matched_degree)
+                    
+                    # 只有当找到至少一个标准学位时才更新
+                    if degrees:
+                        # 更新已完成学位配置
+                        self.config['checkboxes']['degreeCompleted'] = degrees
+                        
+                        # 更新界面上的复选框
+                        for degree, var in self.vars['degreeCompleted'].items():
+                            var.set(degree in degrees)
+                        
+                        self._update_ai_log(f"已更新完成学位: {', '.join(degrees)}")
+            
+            # 保存配置
+            if update_count > 0:
+                # save_config(self.config)
+                self._update_ai_log(f"成功更新了 {update_count} 项数据，请点击\"保存配置\"按钮保存更改")
+            else:
+                self._update_ai_log("没有发现可用的数据可以更新")
+            
+        except Exception as e:
+            self._update_ai_log(f"应用AI数据到界面时出错: {str(e)}")
+            traceback_str = traceback.format_exc()
+            print(f"GUI数据更新错误: {traceback_str}")  # 调试输出
+    
+    def _test_ai_server(self):
+        """测试AI服务器连接"""
+        server_url = self.vars['aiServerUrl'].get().strip()
+        if not server_url:
+            messagebox.showerror("错误", "请输入服务器URL")
+            return
+        
+        # 在AI输出区域显示测试信息
+        self.ai_output.config(state="normal")
+        self.ai_output.insert(tk.END, f"正在测试连接到: {server_url}/test...\n")
+        self.ai_output.config(state="disabled")
+        
+        def test_connection():
+            try:
+                # 使用requests库发送请求
+                response = requests.get(f"{server_url}/test", timeout=5)
+                
+                if response.status_code == 200:
+                    data = response.json()
+                    if data.get('status') == 'ok':
+                        self.after(0, lambda: self._update_test_result(f"连接成功! 服务器响应: {data.get('message', '服务器运行正常')}"))
+                    else:
+                        self.after(0, lambda: self._update_test_result(f"服务器响应异常: {data}"))
+                else:
+                    self.after(0, lambda: self._update_test_result(f"服务器返回错误代码: {response.status_code}"))
+            except Exception as e:
+                self.after(0, lambda: self._update_test_result(f"连接失败: {str(e)}"))
+        
+        # 在单独的线程中运行，避免阻塞GUI
+        threading.Thread(target=test_connection, daemon=True).start()
+    
+    def _update_test_result(self, message):
+        """更新测试结果到AI输出区域"""
+        self.ai_output.config(state="normal")
+        self.ai_output.insert(tk.END, message + "\n")
+        self.ai_output.see(tk.END)
+        self.ai_output.config(state="disabled")
+
+    def _get_data_structure(self, options):
+        """根据选项生成请求的数据结构"""
+        structure = {}
+        
+        if 'languages' in options:
+            structure['languages'] = [
+                {"language": "", "level": "", "confidence": 0}
+            ]
+            
+        if 'skills' in options:
+            structure['skills'] = [
+                {"skill": "", "years": 0, "confidence": 0}
+            ]
+            
+        if 'personal_info' in options:
+            structure['personal_info'] = {
+                "firstName": "",
+                "lastName": "",
+                "email": "",
+                "phone": "",
+                "address1": "",
+                "address2": "",
+                "city": "",
+                "state": "",
+                "zip": "",
+                "country": "",
+                "country_code": "",
+                "confidence": 0
+            }
+            
+        if 'eeo' in options:
+            structure['eeo'] = {
+                "gender": "",
+                "race": "",
+                "veteran": "",
+                "disability": "",
+                "confidence": 0
+            }
+            
+        if 'salary' in options:
+            structure['salary'] = {
+                "amount": 0,
+                "currency": "",
+                "period": "",  # annual, monthly, hourly
+                "confidence": 0
+            }
+            
+        if 'work_experience' in options:
+            structure['work_experience'] = [
+                {
+                    "company": "",
+                    "title": "",
+                    "city": "",
+                    "state": "",
+                    "country": "", 
+                    "from_month": 1,
+                    "from_year": 2020,
+                    "to_month": 1,
+                    "to_year": 2023,
+                    "current": False,
+                    "description": "",
+                    "confidence": 0
+                }
+            ]
+            
+        if 'education' in options:
+            structure['education'] = [
+                {
+                    "school": "",
+                    "degree": "",
+                    "major": "",
+                    "city": "",
+                    "state": "",
+                    "country": "",
+                    "from_month": 1,
+                    "from_year": 2015,
+                    "to_month": 1,
+                    "to_year": 2019,
+                    "current": False,
+                    "confidence": 0
+                }
+            ]
+            
+        return structure
+        
+    def _get_metadata(self):
+        """获取所有元数据和选项数据，以便AI能够根据预设选项进行选择"""
+        metadata = {}
+        
+        # 添加语言熟练度选项
+        metadata['languages'] = {
+            'label': '语言熟练度',
+            'options': LANGUAGE_LEVELS
+        }
+        
+        # 添加个人信息的预设选项
+        metadata['personal_info'] = {
+            'label': '个人信息',
+            'fields': {
+                'country_code': {
+                    'label': '国家/地区代码',
+                    'options': [code.split('(')[1].replace(')', '') if '(' in code else code 
+                               for code in COUNTRY_CODES if code != "Select an option"]
+                }
+            }
+        }
+        
+        # 添加学历选项
+        metadata['education'] = {
+            'label': '教育背景',
+            'fields': {
+                'degree': {
+                    'label': '学位',
+                    'options': STANDARD_DEGREES
+                },
+                'month': {
+                    'label': '月份',
+                    'options': ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12'],
+                    'month_names': ['January', 'February', 'March', 'April', 'May', 'June', 
+                                   'July', 'August', 'September', 'October', 'November', 'December'],
+                    'month_abbr': ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 
+                                  'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+                },
+                'year': {
+                    'label': '年份',
+                    'options': [str(year) for year in range(datetime.datetime.now().year - 50, 
+                                                           datetime.datetime.now().year + 5)]
+                }
+            }
+        }
+        
+        # 添加工作经验的预设选项
+        metadata['work_experience'] = {
+            'label': '工作经验',
+            'fields': {
+                'month': {
+                    'label': '月份',
+                    'options': ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12'],
+                    'month_names': ['January', 'February', 'March', 'April', 'May', 'June', 
+                                   'July', 'August', 'September', 'October', 'November', 'December'],
+                    'month_abbr': ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 
+                                  'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+                },
+                'year': {
+                    'label': '年份',
+                    'options': [str(year) for year in range(datetime.datetime.now().year - 50, 
+                                                           datetime.datetime.now().year + 5)]
+                }
+            }
+        }
+        
+        # 添加技能经验年限的预设选项
+        experience_years = []
+        for i in range(11):  # 0-10年
+            experience_years.append(str(i))
+        for i in range(15, 51, 5):  # 15, 20, ..., 50年
+            experience_years.append(str(i))
+        
+        metadata['skills'] = {
+            'label': '技能经验',
+            'options': experience_years,
+            'skill_list': list(self.config.get('experience', {}).keys())
+        }
+        
+        # 添加EEO(Equal Employment Opportunity)相关选项
+        metadata['eeo'] = {
+            'label': 'EEO信息',
+            'fields': {
+                'gender': {
+                    'label': '性别',
+                    'options': ['Male', 'Female', 'Non-binary', 'Prefer not to disclose']
+                },
+                'race': {
+                    'label': '种族',
+                    'options': ['American Indian', 'Alaska Native', 'Asian', 'Black/African American', 
+                               'Hispanic/Latino', 'Native Hawaiian', 'Pacific Islander', 'White', 
+                               'Two or More Races', 'Prefer not to disclose']
+                },
+                'veteran_status': {
+                    'label': '退伍军人状态',
+                    'options': ['Protected Veteran', 'Not a Protected Veteran', 'Prefer not to disclose']
+                },
+                'disability_status': {
+                    'label': '残障状态',
+                    'options': ['Yes', 'No', 'Prefer not to disclose']
+                }
+            }
+        }
+        
+        # 添加薪资周期选项
+        metadata['salary'] = {
+            'label': '期望薪资',
+            'fields': {
+                'period': {
+                    'label': '薪资周期',
+                    'options': ['hourly', 'monthly', 'yearly']
+                }
+            }
+        }
+        
+        # 从配置中添加其他可能的字段和选项
+        # 例如，如果有其他在YAML中定义的固定选项列表，可以在这里添加
+        
+        return metadata
+
+    def _check_resume_file(self):
+        """检查文本简历文件是否存在并可读"""
+        resume_path = self.vars['textResume_path'].get().strip()
+        if not resume_path:
+            self.resume_status_label.config(text="未设置文本简历文件", foreground="red")
+            return False
+        
+        if not os.path.exists(resume_path):
+            self.resume_status_label.config(text=f"找不到文件: {resume_path}", foreground="red")
+            return False
+        
+        try:
+            with open(resume_path, 'r', encoding='utf-8') as f:
+                content = f.read().strip()
+                if not content:
+                    self.resume_status_label.config(text="文件内容为空", foreground="red")
+                    return False
+                size = len(content)
+                self.resume_status_label.config(text=f"文件正常: {os.path.basename(resume_path)} ({size} 字符)", foreground="green")
+                return True
+        except Exception as e:
+            self.resume_status_label.config(text=f"读取文件错误: {str(e)}", foreground="red")
+            return False
+
+    def _update_ai_log(self, message):
+        """在AI助手日志区域更新信息"""
+        # 确保在主线程中更新UI
+        if threading.current_thread() is threading.main_thread():
+            self.ai_output.config(state=tk.NORMAL)
+            self.ai_output.insert(tk.END, message + "\n")
+            self.ai_output.see(tk.END)
+            self.ai_output.config(state=tk.DISABLED)
+        else:
+            # 如果在子线程中，使用after方法在主线程中调度
+            self.after(0, lambda: self._update_ai_log(message))
 
 if __name__ == '__main__':
     in_venv = hasattr(sys, 'real_prefix') or (hasattr(sys, 'base_prefix') and sys.base_prefix != sys.prefix)
