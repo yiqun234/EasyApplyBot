@@ -466,7 +466,18 @@ class EasyApplyApp(tk.Tk):
                  if event.num == 4: delta = -1
                  elif event.num == 5: delta = 1
                  else: delta = 0 # Should not happen
+                 
+            # 检查下拉框是否激活 - 如果激活则不滚动
+            if hasattr(self, 'dropdown_active') and self.dropdown_active:
+                return "break"  # 阻止事件传播
+                
             self.adv_canvas.yview_scroll(delta, "units")
+
+        # 保存函数引用以供后续使用
+        self._on_mousewheel_func = _on_mousewheel
+        
+        # 初始化下拉框状态标志
+        self.dropdown_active = False
 
         # Bind mouse wheel events to the canvas
         self.adv_canvas.bind_all("<MouseWheel>", _on_mousewheel) 
@@ -584,43 +595,166 @@ class EasyApplyApp(tk.Tk):
             
             # 为Phone Country Code字段添加特殊处理
             if key.lower() == 'phone country code':
+                # 添加标签
                 ttk.Label(dynamic_frame, text=f"{key.replace('_',' ').title()}:").grid(row=sub_row + row_offset, column=col, sticky=tk.W, padx=5, pady=2)
-                # 使用国家代码下拉框
+                
+                # 确保变量存在
                 if key not in self.vars['personalInfo']:
                     self.vars['personalInfo'][key] = tk.StringVar(value=self.config.get('personalInfo', {}).get(key, 'United States (+1)'))
-                country_combo = ttk.Combobox(dynamic_frame, textvariable=self.vars['personalInfo'][key], 
-                                         values=COUNTRY_CODES, state="readonly", width=25, height=20)
-                country_combo.grid(row=sub_row + row_offset, column=col + 1, sticky=tk.EW, padx=5, pady=2)
                 
-                # 添加鼠标滚轮事件处理，阻止事件传播
-                def on_combobox_scroll(event):
-                    # 在下拉列表展开时允许滚动，但阻止事件传播
-                    if country_combo.winfo_class() == 'TCombobox':
-                        if country_combo.winfo_ismapped():
-                            return "break"  # 阻止事件继续传播
+                # 使用简单的两列布局，而不是嵌套框架
+                # 创建只读输入框，直接放在grid布局中
+                entry_code = ttk.Entry(dynamic_frame, textvariable=self.vars['personalInfo'][key], state="readonly", width=17)
+                entry_code.grid(row=sub_row + row_offset, column=col+1, sticky=tk.W, padx=5, pady=2)
                 
-                # 绑定滚轮事件
-                country_combo.bind("<MouseWheel>", on_combobox_scroll)
-                country_combo.bind("<Button-4>", on_combobox_scroll)
-                country_combo.bind("<Button-5>", on_combobox_scroll)
+                # 直接创建选择按钮，放在输入框旁边
+                btn_code = ttk.Button(dynamic_frame, text="选择", width=5)
+                btn_code.grid(row=sub_row + row_offset, column=col+1, sticky=tk.E, padx=5, pady=2)
                 
-                # 处理下拉列表展开状态
-                def on_combo_dropdown_open(event):
-                    # 临时取消父级窗口的滚轮绑定
-                    self.adv_canvas.unbind_all("<MouseWheel>")
-                    self.adv_canvas.unbind_all("<Button-4>")
-                    self.adv_canvas.unbind_all("<Button-5>")
+                # 保存当前key避免闭包问题
+                saved_key = key
                 
-                def on_combo_dropdown_close(event):
-                    # 恢复父级窗口的滚轮绑定
-                    self.adv_canvas.bind_all("<MouseWheel>", _on_mousewheel)
-                    self.adv_canvas.bind_all("<Button-4>", _on_mousewheel)
-                    self.adv_canvas.bind_all("<Button-5>", _on_mousewheel)
+                # 定义选择函数
+                def open_code_dialog():
+                    # 备份当前的全局滚轮事件绑定
+                    widget_dict = {}
+                    widget_dict['root'] = self
+                    widget_dict['canvas'] = self.adv_canvas
+                    widget_dict['frame'] = self.scrollable_frame
+                    
+                    # 存储所有要恢复的绑定
+                    bindings_to_restore = []
+                    
+                    # 解除所有绑定
+                    for widget_name, widget in widget_dict.items():
+                        # 滚轮事件
+                        for event in ["<MouseWheel>", "<Button-4>", "<Button-5>"]:
+                            # 获取所有绑定
+                            curr_binding = widget.bind(event)
+                            if curr_binding:
+                                bindings_to_restore.append((widget, event, curr_binding))
+                                widget.unbind(event)
+                            
+                            # 获取所有全局绑定
+                            curr_all_binding = widget.bind_all(event)
+                            if curr_all_binding:
+                                bindings_to_restore.append((widget, f"all:{event}", curr_all_binding))
+                                widget.unbind_all(event)
+                    
+                    # 创建简单对话框
+                    dialog = tk.Toplevel(self)
+                    dialog.title("选择国家代码")
+                    dialog.transient(self)
+                    dialog.grab_set()  # 强制模态
+                    dialog.focus_set()  # 强制获取焦点
+                    dialog.resizable(False, False)
+                    
+                    # 在对话框关闭时恢复所有绑定
+                    def on_dialog_close():
+                        # 恢复所有绑定
+                        for widget, event, binding in bindings_to_restore:
+                            if event.startswith("all:"):
+                                widget.bind_all(event[4:], binding)
+                            else:
+                                widget.bind(event, binding)
+                        dialog.destroy()
+                    
+                    dialog.protocol("WM_DELETE_WINDOW", on_dialog_close)
+                    
+                    # 创建列表框
+                    list_frame = ttk.Frame(dialog, padding=10)
+                    list_frame.pack(fill=tk.BOTH, expand=True)
+                    
+                    # 搜索框
+                    search_var = tk.StringVar()
+                    ttk.Label(list_frame, text="搜索:").grid(row=0, column=0, sticky=tk.W, padx=5, pady=5)
+                    search_entry = ttk.Entry(list_frame, textvariable=search_var, width=30)
+                    search_entry.grid(row=0, column=1, sticky=tk.EW, padx=5, pady=5)
+                    search_entry.focus_set()
+                    
+                    # 创建滚动条和列表框
+                    scrollbar = ttk.Scrollbar(list_frame)
+                    scrollbar.grid(row=1, column=2, sticky='ns', padx=(0,5), pady=5)
+                    
+                    country_listbox = tk.Listbox(list_frame, yscrollcommand=scrollbar.set, width=30, height=15)
+                    country_listbox.grid(row=1, column=0, columnspan=2, sticky='nsew', padx=5, pady=5)
+                    scrollbar.config(command=country_listbox.yview)
+                    
+                    # 加载数据
+                    for code in COUNTRY_CODES:
+                        country_listbox.insert(tk.END, code)
+                    
+                    # 当前选中的值
+                    current = self.vars['personalInfo'][saved_key].get()
+                    for i, code in enumerate(COUNTRY_CODES):
+                        if code == current:
+                            country_listbox.selection_set(i)
+                            country_listbox.see(i)
+                            break
+                    
+                    # 搜索函数
+                    def filter_codes(*args):
+                        search_text = search_var.get().lower()
+                        country_listbox.delete(0, tk.END)
+                        for code in COUNTRY_CODES:
+                            if search_text in code.lower():
+                                country_listbox.insert(tk.END, code)
+                    
+                    search_var.trace("w", filter_codes)
+                    
+                    # 选择函数
+                    def on_select():
+                        selected = country_listbox.curselection()
+                        if selected:
+                            value = country_listbox.get(selected[0])
+                            self.vars['personalInfo'][saved_key].set(value)
+                            on_dialog_close()  # 使用自定义关闭函数
+                    
+                    # 双击选择
+                    country_listbox.bind("<Double-1>", lambda e: on_select())
+                    
+                    # 按钮区域
+                    btn_frame = ttk.Frame(dialog, padding=(10, 0, 10, 10))
+                    btn_frame.pack(fill=tk.X)
+                    
+                    ttk.Button(btn_frame, text="确定", command=on_select, width=10).pack(side=tk.LEFT, padx=5)
+                    ttk.Button(btn_frame, text="取消", command=on_dialog_close, width=10).pack(side=tk.LEFT, padx=5)
+                    
+                    # 调整对话框位置
+                    dialog.update_idletasks()
+                    width = dialog.winfo_width()
+                    height = dialog.winfo_height()
+                    x = (dialog.winfo_screenwidth() // 2) - (width // 2)
+                    y = (dialog.winfo_screenheight() // 2) - (height // 2)
+                    dialog.geometry(f"{width}x{height}+{x}+{y}")
+                    
+                    # 让对话框独立处理自己的滚轮事件，实现完全隔离
+                    def handle_local_scroll(event, widget):
+                        # 局部滚轮事件处理
+                        if sys.platform == "win32":
+                            delta = -int(event.delta / 120)
+                        elif sys.platform == "darwin":  # macOS
+                            delta = -event.delta
+                        else:  # Linux
+                            if event.num == 4:
+                                delta = -1
+                            elif event.num == 5:
+                                delta = 1
+                            else:
+                                delta = 0
+                        widget.yview_scroll(delta, "units")
+                        return "break"  # 阻止事件传播
+                    
+                    # 为对话框中的列表框绑定专用滚轮处理
+                    country_listbox.bind("<MouseWheel>", lambda e: handle_local_scroll(e, country_listbox))
+                    country_listbox.bind("<Button-4>", lambda e: handle_local_scroll(e, country_listbox))
+                    country_listbox.bind("<Button-5>", lambda e: handle_local_scroll(e, country_listbox))
+                    
+                    # 强制等待，直到对话框关闭
+                    dialog.wait_window(dialog)
                 
-                country_combo.bind("<<ComboboxSelected>>", on_combo_dropdown_close)
-                country_combo.bind("<Escape>", on_combo_dropdown_close)
-                country_combo.bind("<FocusOut>", on_combo_dropdown_close)
-                country_combo.bind("<Button-1>", on_combo_dropdown_open)
+                # 设置按钮命令
+                btn_code.config(command=open_code_dialog)
             else:
                 ttk.Label(dynamic_frame, text=f"{key.replace('_',' ').title()}:").grid(row=sub_row + row_offset, column=col, sticky=tk.W, padx=5, pady=2)
                 entry = ttk.Entry(dynamic_frame, textvariable=self.vars['personalInfo'][key], width=25)
