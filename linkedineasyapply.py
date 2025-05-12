@@ -18,7 +18,7 @@ from openai import OpenAI
 class CloudAIResponseGenerator:
     """基于AWS Lambda的AI响应生成器，将请求发送到AWS API Gateway处理"""
     
-    def __init__(self, api_key=None, personal_info=None, experience=None, languages=None, resume_path=None, text_resume_path=None, debug=False):
+    def __init__(self, api_key=None, personal_info=None, experience=None, languages=None, resume_path=None, text_resume_path=None,customQuestions={}, debug=False):
         """
         初始化云端AI响应生成器
         
@@ -33,6 +33,8 @@ class CloudAIResponseGenerator:
         self._resume_content = None
         self.debug = debug
         self.openai_api_key = api_key  # 保存用户提供的OpenAI API密钥
+
+        self.customQuestions = customQuestions
         
         # 直接硬编码AWS API配置
         self.api_url = "https://9l0xkwbp0j.execute-api.us-east-2.amazonaws.com/prod"
@@ -68,6 +70,9 @@ class CloudAIResponseGenerator:
         return self._resume_content
         
     def _build_context(self):
+        # 格式化自定义问答字典
+        custom_answers = "\n".join(f"- {q} => {a}" for q, a in self.customQuestions.items()) if self.customQuestions else ""
+        custom_block = f"\nCustom Application Answers:\n{custom_answers}\n" if custom_answers else ""
         return f"""
         Personal Information:
         - Name: {self.personal_info['First Name']} {self.personal_info['Last Name']}
@@ -75,7 +80,7 @@ class CloudAIResponseGenerator:
         - Skills: {', '.join(self.experience.keys())}
         - Languages: {', '.join(f'{lang}: {level}' for lang, level in self.languages.items())}
         - Professional Summary: {self.personal_info.get('MessageToManager', '')}
-
+        {custom_block}
         Resume Content (Give the greatest weight to this information, if specified) (If you have similar questions to the Personal Information above, please refer to the following resume content):
         {self.resume_content}
         """
@@ -302,6 +307,7 @@ class LinkedinEasyApply:
             languages=self.languages,
             resume_path=self.resume_dir,
             text_resume_path=self.text_resume,
+            customQuestions = self.customQuestions,
             debug=self.debug
         )
 
