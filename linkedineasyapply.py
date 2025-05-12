@@ -379,7 +379,7 @@ class LinkedinEasyApply:
                     job_page_number += 1
                     print("Going to job page " + str(job_page_number))
                     self.next_job_page(position, location_url, job_page_number)
-                    time.sleep(random.uniform(0.5, 1))
+                    time.sleep(random.uniform(1, 2))
                     print("Starting the application process for this page...")
                     self.apply_jobs(location)
                     print("Job applications on this page have been successfully completed.")
@@ -541,7 +541,7 @@ class LinkedinEasyApply:
                             retries += 1
                             continue
 
-                    time.sleep(random.uniform(1, 2))
+                    time.sleep(random.uniform(3, 5))
 
                     # TODO: Check if the job is already applied or the application has been reached
                     # "You've reached the Easy Apply application limit for today. Save this job and come back tomorrow to continue applying."
@@ -631,9 +631,9 @@ class LinkedinEasyApply:
                         self.unfollow()
                     except:
                         print("Failed to unfollow company.")
-                time.sleep(random.uniform(1, 2))
+                time.sleep(random.uniform(1.5, 2.5))
                 next_button.click()
-                time.sleep(random.uniform(2.0, 3.0))
+                time.sleep(random.uniform(3.0, 5.0))
 
                 # Newer error handling
                 error_messages = [
@@ -674,13 +674,13 @@ class LinkedinEasyApply:
             except:
                 traceback.print_exc()
                 self.browser.find_element(By.CLASS_NAME, 'artdeco-modal__dismiss').click()
-                time.sleep(random.uniform(1, 2))
+                time.sleep(random.uniform(2, 3))
                 self.browser.find_elements(By.CLASS_NAME, 'artdeco-modal__confirm-dialog-btn')[0].click()
-                time.sleep(random.uniform(1, 2))
+                time.sleep(random.uniform(2, 3))
                 raise Exception("Failed to apply to job!")
 
         closed_notification = False
-        time.sleep(random.uniform(1, 2))
+        time.sleep(random.uniform(2, 3))
         try:
             self.browser.find_element(By.CLASS_NAME, 'artdeco-modal__dismiss').click()
             closed_notification = True
@@ -697,7 +697,7 @@ class LinkedinEasyApply:
         except:
             pass
 
-        time.sleep(random.uniform(2, 3))
+        time.sleep(random.uniform(3, 5))
 
         if closed_notification is False:
             raise Exception("Could not close the applied confirmation window!")
@@ -1030,7 +1030,7 @@ class LinkedinEasyApply:
                     date_picker = question.find_element(By.CLASS_NAME, 'artdeco-datepicker__input ')
                     date_picker.clear()
                     date_picker.send_keys(date.today().strftime("%m/%d/%y"))
-                    time.sleep(1)
+                    time.sleep(1.5)
                     date_picker.send_keys(Keys.RETURN)
                     time.sleep(0.5)
                     continue
