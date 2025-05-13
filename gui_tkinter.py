@@ -200,6 +200,32 @@ class EasyApplyApp(tk.Tk):
 
         self.config = load_config()
         
+        # --- 旧配置迁移到 positionsWithCount ---
+        if (self.config.get('positions') and 
+            isinstance(self.config.get('positions'), list) and 
+            len(self.config.get('positions')) > 0 and
+            (not self.config.get('positionsWithCount') or 
+             (isinstance(self.config.get('positionsWithCount'), list) and len(self.config.get('positionsWithCount')) == 0))):
+            
+            print("检测到旧的职位配置，正在尝试迁移...")
+            migrated_positions_with_count = []
+            for old_position_name in self.config['positions']:
+                if isinstance(old_position_name, str) and old_position_name.strip():
+                    migrated_positions_with_count.append({
+                        "name": old_position_name.strip(),
+                        "count": 100  # 默认投递数量
+                    })
+            if migrated_positions_with_count:
+                self.config['positionsWithCount'] = migrated_positions_with_count
+                print(f"已迁移 {len(migrated_positions_with_count)} 个职位到新的配置格式。请检查并保存配置。")
+                # Optionally, clear the old positions to avoid confusion if needed, or let backend handle it
+                # self.config['positions'] = [] 
+
+        # 初始化带数量限制的职位配置 (确保在 self.vars 初始化之前或同步进行)
+        if 'positionsWithCount' not in self.config or not isinstance(self.config['positionsWithCount'], list):
+            self.config['positionsWithCount'] = []
+        # self.positions_with_count 成员变量将在 _create_job_tab 中直接引用 self.config['positionsWithCount']
+
         # 特殊处理customQuestions，确保问题文本正确解析
         if 'customQuestions' in self.config and self.config['customQuestions']:
             processed_questions = {}
@@ -411,16 +437,166 @@ class EasyApplyApp(tk.Tk):
                 self._check_resume_file() 
 
     def _create_job_tab(self):
-        # (No significant changes needed)
-        frame = ttk.LabelFrame(self.job_tab, text="工作搜索条件", padding=(10, 5)); frame.pack(expand=True, fill="both", padx=10, pady=5); frame.columnconfigure(1, weight=1)
-        ttk.Label(frame, text="目标职位 (每行一个):").grid(row=0, column=0, sticky=tk.NW, padx=5, pady=3)
-        self.positions_widget = scrolledtext.ScrolledText(frame, wrap=tk.WORD, height=5, width=60); self.positions_widget.grid(row=0, column=1, sticky=tk.EW, padx=5, pady=3); self.positions_widget.insert(tk.END, self.vars['positions'].get())
-        ttk.Label(frame, text="目标地点 (每行一个):").grid(row=1, column=0, sticky=tk.NW, padx=5, pady=3)
-        self.locations_widget = scrolledtext.ScrolledText(frame, wrap=tk.WORD, height=5, width=60); self.locations_widget.grid(row=1, column=1, sticky=tk.EW, padx=5, pady=3); self.locations_widget.insert(tk.END, self.vars['locations'].get())
-        dist_frame = ttk.Frame(frame); ttk.Label(dist_frame, text="搜索半径 (公里):").pack(side=tk.LEFT, padx=(0, 5)); ttk.Combobox(dist_frame, textvariable=self.vars['distance'], values=[0, 5, 10, 25, 50, 100], state="readonly", width=5).pack(side=tk.LEFT); dist_frame.grid(row=2, column=0, columnspan=2, sticky=tk.W, padx=5, pady=5)
-        chk_frame = ttk.Frame(frame); chk_frame.grid(row=3, column=0, columnspan=2, sticky=tk.W, padx=5, pady=5)
-        ttk.Checkbutton(chk_frame, text="只搜索远程工作", variable=self.vars['search_remote']).pack(anchor=tk.W); ttk.Checkbutton(chk_frame, text="筛选\"少于10名申请者\"的职位", variable=self.vars['lessthanTenApplicants']).pack(anchor=tk.W)
-        ttk.Checkbutton(chk_frame, text="按最新发布日期排序", variable=self.vars['newestPostingsFirst']).pack(anchor=tk.W); ttk.Checkbutton(chk_frame, text="居住在工作所在国家/地区", variable=self.vars['residentStatus']).pack(anchor=tk.W)
+        # 主框架，包含所有内容
+        main_job_frame = ttk.Frame(self.job_tab, padding=(10, 5))
+        main_job_frame.pack(expand=True, fill="both", padx=10, pady=5)
+        main_job_frame.columnconfigure(1, weight=1) # 允许第二列扩展
+
+        # --- 带数量限制的职位配置部分 ---
+        positions_config_frame = ttk.LabelFrame(main_job_frame, text="职位投递配置 (带数量限制)", padding=(10, 5))
+        positions_config_frame.grid(row=0, column=0, columnspan=2, padx=5, pady=5, sticky=tk.EW)
+        positions_config_frame.columnconfigure(0, weight=1) #让listbox部分能扩展
+
+        listbox_container = ttk.Frame(positions_config_frame)
+        listbox_container.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+
+        self.positions_listbox = tk.Listbox(listbox_container, height=8) # 调整高度
+        scrollbar = ttk.Scrollbar(listbox_container, orient=tk.VERTICAL, command=self.positions_listbox.yview)
+        self.positions_listbox.configure(yscrollcommand=scrollbar.set)
+        self.positions_listbox.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+
+        position_buttons_frame = ttk.Frame(positions_config_frame)
+        position_buttons_frame.pack(fill=tk.X, padx=5, pady=(0, 5))
+        ttk.Button(position_buttons_frame, text="添加职位", command=self._add_position_with_count_dialog).pack(side=tk.LEFT, padx=5)
+        ttk.Button(position_buttons_frame, text="修改职位", command=self._modify_position_with_count_dialog).pack(side=tk.LEFT, padx=5)
+        ttk.Button(position_buttons_frame, text="删除职位", command=self._remove_position_with_count).pack(side=tk.LEFT, padx=5)
+        
+        # 直接引用 self.config['positionsWithCount'] 来更新列表
+        self._update_positions_with_count_listbox()
+
+        # --- 其他搜索条件框架 ---
+        other_conditions_frame = ttk.LabelFrame(main_job_frame, text="全局搜索条件", padding=(10, 5))
+        other_conditions_frame.grid(row=1, column=0, columnspan=2, padx=5, pady=10, sticky=tk.EW)
+        other_conditions_frame.columnconfigure(1, weight=1)
+
+        # 目标地点 (恢复旧的地点输入方式)
+        ttk.Label(other_conditions_frame, text="目标地点 (每行一个):").grid(row=0, column=0, sticky=tk.NW, padx=5, pady=3)
+        self.locations_widget = scrolledtext.ScrolledText(other_conditions_frame, wrap=tk.WORD, height=5, width=60)
+        self.locations_widget.grid(row=0, column=1, sticky=tk.EW, padx=5, pady=3)
+        # 从 self.vars 加载地点数据, self.vars['locations'] 在 __init__ 中初始化
+        if self.vars['locations'].get(): # 确保不插入 None 或空字符串
+            self.locations_widget.insert(tk.END, self.vars['locations'].get())
+
+        # 搜索半径 (恢复)
+        dist_frame = ttk.Frame(other_conditions_frame)
+        ttk.Label(dist_frame, text="搜索半径 (公里):").pack(side=tk.LEFT, padx=(0, 5))
+        ttk.Combobox(dist_frame, textvariable=self.vars['distance'], values=[0, 5, 10, 25, 50, 100], state="readonly", width=5).pack(side=tk.LEFT)
+        dist_frame.grid(row=1, column=0, columnspan=2, sticky=tk.W, padx=5, pady=5)
+
+        # 其他复选框 (恢复)
+        chk_frame = ttk.Frame(other_conditions_frame)
+        chk_frame.grid(row=2, column=0, columnspan=2, sticky=tk.W, padx=5, pady=5)
+        ttk.Checkbutton(chk_frame, text="只搜索远程工作", variable=self.vars['search_remote']).pack(anchor=tk.W)
+        ttk.Checkbutton(chk_frame, text="筛选\"少于10名申请者\"的职位", variable=self.vars['lessthanTenApplicants']).pack(anchor=tk.W)
+        ttk.Checkbutton(chk_frame, text="按最新发布日期排序", variable=self.vars['newestPostingsFirst']).pack(anchor=tk.W)
+        ttk.Checkbutton(chk_frame, text="居住在工作所在国家/地区", variable=self.vars['residentStatus']).pack(anchor=tk.W)
+
+    def _add_position_with_count_dialog(self):
+        dialog = tk.Toplevel(self)
+        dialog.title("添加职位")
+        dialog.geometry("400x150")
+        dialog.transient(self)
+        dialog.grab_set()
+
+        main_frame = ttk.Frame(dialog, padding=(10, 5))
+        main_frame.pack(fill=tk.BOTH, expand=True)
+
+        ttk.Label(main_frame, text="职位名称:").grid(row=0, column=0, sticky=tk.W, pady=5)
+        name_entry = ttk.Entry(main_frame, width=40)
+        name_entry.grid(row=0, column=1, sticky=tk.EW, pady=5, padx=5)
+        name_entry.focus_set()
+
+        ttk.Label(main_frame, text="目标投递数量:").grid(row=1, column=0, sticky=tk.W, pady=5)
+        count_entry = ttk.Entry(main_frame, width=10)
+        count_entry.insert(0, "100")
+        count_entry.grid(row=1, column=1, sticky=tk.W, pady=5, padx=5)
+
+        def on_ok():
+            name = name_entry.get().strip()
+            if not name:
+                messagebox.showerror("错误", "请输入职位名称", parent=dialog); return
+            try:
+                count = int(count_entry.get().strip())
+                if count <= 0: raise ValueError("投递数量必须为正整数")
+            except ValueError as e:
+                messagebox.showerror("错误", f"请输入有效的投递数量: {e}", parent=dialog); return
+            
+            self.config['positionsWithCount'].append({"name": name, "count": count})
+            self._update_positions_with_count_listbox()
+            dialog.destroy()
+
+        button_frame = ttk.Frame(main_frame)
+        button_frame.grid(row=2, column=0, columnspan=2, pady=10)
+        ttk.Button(button_frame, text="确定", command=on_ok).pack(side=tk.LEFT, padx=5)
+        ttk.Button(button_frame, text="取消", command=dialog.destroy).pack(side=tk.LEFT, padx=5)
+        main_frame.columnconfigure(1, weight=1)
+
+    def _modify_position_with_count_dialog(self):
+        selection = self.positions_listbox.curselection()
+        if not selection: messagebox.showwarning("警告", "请先选择要修改的职位"); return
+        index = selection[0]
+        position_config_to_edit = self.config['positionsWithCount'][index]
+
+        dialog = tk.Toplevel(self)
+        dialog.title("修改职位")
+        dialog.geometry("400x150")
+        dialog.transient(self)
+        dialog.grab_set()
+
+        main_frame = ttk.Frame(dialog, padding=(10, 5))
+        main_frame.pack(fill=tk.BOTH, expand=True)
+
+        ttk.Label(main_frame, text="职位名称:").grid(row=0, column=0, sticky=tk.W, pady=5)
+        name_entry = ttk.Entry(main_frame, width=40)
+        name_entry.insert(0, position_config_to_edit["name"])
+        name_entry.grid(row=0, column=1, sticky=tk.EW, pady=5, padx=5)
+        name_entry.focus_set()
+
+        ttk.Label(main_frame, text="目标投递数量:").grid(row=1, column=0, sticky=tk.W, pady=5)
+        count_entry = ttk.Entry(main_frame, width=10)
+        count_entry.insert(0, str(position_config_to_edit.get("count", 100)))
+        count_entry.grid(row=1, column=1, sticky=tk.W, pady=5, padx=5)
+
+        def on_ok():
+            name = name_entry.get().strip()
+            if not name: messagebox.showerror("错误", "请输入职位名称", parent=dialog); return
+            try:
+                count = int(count_entry.get().strip())
+                if count <= 0: raise ValueError("投递数量必须为正整数")
+            except ValueError as e:
+                messagebox.showerror("错误", f"请输入有效的投递数量: {e}", parent=dialog); return
+
+            self.config['positionsWithCount'][index]["name"] = name
+            self.config['positionsWithCount'][index]["count"] = count
+            self._update_positions_with_count_listbox()
+            dialog.destroy()
+
+        button_frame = ttk.Frame(main_frame)
+        button_frame.grid(row=2, column=0, columnspan=2, pady=10)
+        ttk.Button(button_frame, text="确定", command=on_ok).pack(side=tk.LEFT, padx=5)
+        ttk.Button(button_frame, text="取消", command=dialog.destroy).pack(side=tk.LEFT, padx=5)
+        main_frame.columnconfigure(1, weight=1)
+
+    def _remove_position_with_count(self):
+        selection = self.positions_listbox.curselection()
+        if not selection: messagebox.showwarning("警告", "请先选择要删除的职位"); return
+        if messagebox.askyesno("确认", "确定要删除选中的职位吗？"):
+            indices = list(selection)
+            indices.sort(reverse=True)
+            for index in indices:
+                del self.config['positionsWithCount'][index]
+            self._update_positions_with_count_listbox()
+
+    def _update_positions_with_count_listbox(self):
+        self.positions_listbox.delete(0, tk.END)
+        if self.config.get('positionsWithCount'): #直接使用 self.config 中的列表
+            for config_item in self.config['positionsWithCount']:
+                if isinstance(config_item, dict) and 'name' in config_item:
+                    display_text = f"{config_item['name']} (目标数量: {config_item.get('count', 100)})"
+                    self.positions_listbox.insert(tk.END, display_text)
+                else:
+                    self.positions_listbox.insert(tk.END, f"无效条目: {str(config_item)}")
 
     def _create_preferences_tab(self):
         main_frame = ttk.Frame(self.preferences_tab, padding=(10, 5))
@@ -1078,11 +1254,26 @@ class EasyApplyApp(tk.Tk):
             self.config['email'] = self.vars['email'].get(); self.config['password'] = self.vars['password'].get(); self.config['openaiApiKey'] = self.vars['openaiApiKey'].get()
             self.config['disableAntiLock'] = self.vars['disableAntiLock'].get(); self.config['uploads']['resume'] = self.vars['resume_path'].get(); self.config['textResume'] = self.vars['textResume_path'].get()
             self.config['uploads']['coverLetter'] = self.vars['coverletter_path'].get(); self.config['uploads']['photo'] = self.vars['photo_path'].get()
-            # Job Tab
-            self.config['positions'] = parse_list_from_textarea(self.positions_widget.get("1.0", tk.END)); self.config['locations'] = parse_list_from_textarea(self.locations_widget.get("1.0", tk.END))
-            self.config['distance'] = self.vars['distance'].get(); self.config['remote'] = self.vars['search_remote'].get()
-            self.config['lessthanTenApplicants'] = self.vars['lessthanTenApplicants'].get(); self.config['newestPostingsFirst'] = self.vars['newestPostingsFirst'].get()
+            
+            # Job Tab - Update for new structure
+            # positionsWithCount is already updated directly in self.config by dialogs
+            # Ensure it exists, even if empty, for saving
+            if 'positionsWithCount' not in self.config or not isinstance(self.config['positionsWithCount'], list):
+                 self.config['positionsWithCount'] = []
+            
+            # Save global locations and other job search criteria
+            self.config['locations'] = parse_list_from_textarea(self.locations_widget.get("1.0", tk.END))
+            self.config['distance'] = self.vars['distance'].get()
+            self.config['remote'] = self.vars['search_remote'].get()
+            self.config['lessthanTenApplicants'] = self.vars['lessthanTenApplicants'].get()
+            self.config['newestPostingsFirst'] = self.vars['newestPostingsFirst'].get()
             self.config['residentStatus'] = self.vars['residentStatus'].get()
+            
+            # Old 'positions' key can be removed or left (backend handles it)
+            # If you want to explicitly remove it from config when new one is used:
+            # if self.config.get('positionsWithCount') and 'positions' in self.config:
+            #     del self.config['positions']
+
             # Preferences Tab - dynamically created checkboxes need manual update
             for level, var in self.vars['exp_level'].items(): self.config['experienceLevel'][level] = var.get()
             for jtype, var in self.vars['job_type'].items(): self.config['jobTypes'][jtype] = var.get()

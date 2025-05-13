@@ -261,8 +261,15 @@ class LinkedinEasyApply:
         self.company_blacklist = parameters.get('companyBlacklist', []) or []
         self.title_blacklist = parameters.get('titleBlacklist', []) or []
         self.poster_blacklist = parameters.get('posterBlacklist', []) or []
+        
+        # New: Configurations for positions with application counts
+        self.positions_with_count = parameters.get('positionsWithCount', []) or []
+        self.applied_counts = {} # Tracks the number of applications for each position name
+
+        # Existing position and location configurations
         self.positions = parameters.get('positions', [])
         self.locations = parameters.get('locations', [])
+        
         self.residency = parameters.get('residentStatus', [])
         self.base_search_url = self.get_base_search_url(parameters)
         self.seen_jobs = []
@@ -360,6 +367,86 @@ class LinkedinEasyApply:
         # time.sleep(random.uniform(5, 10))
 
     def start_applying(self):
+        # New logic: Prioritize positions_with_count if available
+        if self.positions_with_count:
+            print("Detected 'positionsWithCount' configuration. Engaging new application logic...")
+            page_sleep = 0
+            minimum_time = 60 * 2  # Minimum time bot should run before taking a break
+            minimum_page_time = time.time() + minimum_time
+
+            for position_config in self.positions_with_count:
+                position_name = position_config['name']
+                max_applications = position_config['count']
+                
+                current_applied_for_this_pos = self.applied_counts.get(position_name, 0)
+                if current_applied_for_this_pos >= max_applications:
+                    print(f"Position '{position_name}' has reached its application limit ({current_applied_for_this_pos}/{max_applications}). Skipping.")
+                    continue
+
+                print(f"Processing position: '{position_name}' (Applied: {current_applied_for_this_pos}, Limit: {max_applications})")
+
+                if not self.locations:
+                    print(f"Warning: Global locations list is empty. Cannot search for position '{position_name}'.")
+                    continue
+                
+                shuffled_locations = random.sample(self.locations, len(self.locations))
+                for location in shuffled_locations:
+                    current_applied_for_this_pos = self.applied_counts.get(position_name, 0) # Re-check count before processing a new location
+                    if current_applied_for_this_pos >= max_applications:
+                        print(f"Position '{position_name}' reached limit before processing location '{location}'. Stopping search for this position.")
+                        break  # Break from location loop, move to next position_config
+
+                    location_url = "&location=" + location + "&geoId=" + self.click_location_url(location)
+                    job_page_number = -1
+                    print(f"Searching for position '{position_name}' in '{location}'.")
+
+                    try:
+                        while True:
+                            current_applied_for_this_pos = self.applied_counts.get(position_name, 0) # Re-check count before fetching new page
+                            if current_applied_for_this_pos >= max_applications:
+                                print(f"Position '{position_name}' reached limit ({current_applied_for_this_pos}/{max_applications}) before fetching new page in '{location}'. Stopping.")
+                                break # Break from while loop (pages) for current location
+
+                            page_sleep += 1
+                            job_page_number += 1
+                            print(f"Position '{position_name}' @ '{location}': Going to job page {job_page_number}")
+                            self.next_job_page(position_name, location_url, job_page_number)
+                            time.sleep(random.uniform(1, 2))
+                            print("Starting the application process for this page...")
+                            # Pass current_position_config to apply_jobs for targeted application and counting
+                            self.apply_jobs(location, current_position_config=position_config) 
+                            print("Job applications on this page have been processed.")
+
+                            # Time control logic (similar to existing logic)
+                            time_left = minimum_page_time - time.time()
+                            if time_left > 0:
+                                print(f"Sleeping for {time_left:.2f} seconds.")
+                                time.sleep(time_left)
+                                minimum_page_time = time.time() + minimum_time
+                            if page_sleep % 5 == 0:
+                                sleep_time = random.randint(5, 10)
+                                print(f"Taking a short break for {sleep_time} seconds.")
+                                time.sleep(sleep_time)
+                                page_sleep +=1 # To avoid immediate re-trigger if loop is very fast
+                    except Exception as e:
+                        if "No more jobs on this page." not in str(e) and "Nothing to do here, moving forward..." not in str(e):
+                            print(f"Error processing position '{position_name}' in '{location}': {e}")
+                            traceback.print_exc()
+                        else: # Expected exceptions for end of job list or similar
+                             print(f"Position '{position_name}' @ '{location}': {str(e)}. Ending search for this location.")
+                        # Any exception (including no more jobs) breaks the while True loop for the current location
+                    
+                    # After a location is fully processed (or an error occurred), check count again.
+                    if self.applied_counts.get(position_name, 0) >= max_applications:
+                        print(f"Position '{position_name}' reached application limit after processing location '{location}'.")
+                        break # Break from location loop for this position_name
+            
+            print("All 'positionsWithCount' configurations have been processed.")
+            return # New logic finished, return to prevent old logic execution
+
+        # --- Existing logic starts below --- 
+        # This part will only execute if self.positions_with_count is empty.
+        print("'positionsWithCount' is not configured or is empty. Engaging original application logic...")
         searches = list(product(self.positions, self.locations))
         random.shuffle(searches)
 
@@ -409,7 +496,7 @@ class LinkedinEasyApply:
                 time.sleep(sleep_time)
                 page_sleep += 1
 
-    def apply_jobs(self, location):
+    def apply_jobs(self, location, current_position_config=None):
         no_jobs_text = ""
         try:
             no_jobs_element = self.browser.find_element(By.CLASS_NAME,
@@ -477,19 +564,30 @@ class LinkedinEasyApply:
 
         except NoSuchElementException:
             print("No job results found using the specified XPaths or class.")
-
+            # To prevent loop, ensure an exception is raised if job list can't be found, 
+            # which will be caught by start_applying to move to next location/position.
+            raise Exception("Job list UI elements not found, cannot proceed with this page.") 
         except Exception as e:
             print(f"An unexpected error occurred: {e}")
+            raise Exception(f"Unexpected error fetching job list: {e}")
 
         for i in range(len(job_list)):
+            # === START: New logic for position counting and matching ===
+            if current_position_config:
+                target_position_name = current_position_config['name']
+                max_allowed_applications = current_position_config['count']
+                current_applied_count = self.applied_counts.get(target_position_name, 0)
+
+                if current_applied_count >= max_allowed_applications:
+                    print(f"Target for '{target_position_name}' ({max_allowed_applications}) reached. Stopping further applications for this position on this page.")
+                    break # Stop processing jobs on this page for this position_config
+            # === END: New logic for position counting and matching ===
+
             job_title, company, poster, job_location, apply_method, link = "", "", "", "", "", ""
             job_tile = self.browser.find_elements(By.CLASS_NAME, ul_element_class)[0].find_elements(By.CLASS_NAME, 'scaffold-layout__list-item')[i]
             try:
-                ## patch to incorporate new 'verification' crap by LinkedIn
-                # job_title = job_tile.find_element(By.CLASS_NAME, 'job-card-list__title').text # original code
                 job_title_element = job_tile.find_element(By.TAG_NAME, 'a')
                 job_title = job_title_element.find_element(By.TAG_NAME, 'strong').text
-
                 link = job_title_element.get_attribute('href').split('?')[0]
             except:
                 pass
@@ -557,41 +655,61 @@ class LinkedinEasyApply:
                             # Evaluate if we should apply
                             if not self.ai_response_generator.evaluate_job_fit(job_title, job_description):
                                 print("Skipping application: Job requirements not aligned with candidate profile per AI evaluation.")
+                                if link and link not in self.seen_jobs: self.seen_jobs.append(link) # Mark as seen
                                 continue
-                        except:
-                            print("Could not load job description")
+                        except Exception as e:
+                            print(f"Could not load job description for AI evaluation: {e}")
+                            # Decide if you want to proceed without AI evaluation or skip
+                            # if link and link not in self.seen_jobs: self.seen_jobs.append(link)
+                            # continue 
 
                     try:
                         done_applying = self.apply_to_job()
                         if done_applying:
                             print(f"Application sent to {company} for the position of {job_title}.")
+                            # === START: New logic for incrementing count ===
+                            if current_position_config:
+                                target_position_name_for_count = current_position_config['name']
+                                self.applied_counts[target_position_name_for_count] = self.applied_counts.get(target_position_name_for_count, 0) + 1
+                                print(f"Applied count for '{target_position_name_for_count}' is now: {self.applied_counts[target_position_name_for_count]}/{current_position_config['count']}")
+                            # === END: New logic for incrementing count ===
                         else:
-                            print(f"An application for a job at {company} has been submitted earlier.")
-                    except:
+                            print(f"An application for '{job_title}' at {company} has been submitted earlier or was not EasyApply.")
+                    except Exception as e_apply:
                         temp = self.file_name
                         self.file_name = "failed"
-                        print("Failed to apply to job. Please submit a bug report with this link: " + link)
+                        print(f"Failed to apply to job: '{job_title}'. Link: {link}. Error: {e_apply}")
+                        traceback.print_exc()
                         try:
                             self.write_to_file(company, job_title, link, job_location, location)
                         except:
                             pass
                         self.file_name = temp
-                        print(f'updated {temp}.')
+                        # print(f'updated {temp}.') # Original comment
 
                     try:
-                        self.write_to_file(company, job_title, link, job_location, location)
-                    except Exception:
+                        # Write to file only if successfully applied, or based on your preference
+                        if done_applying: # Condition this write based on success if preferred
+                             self.write_to_file(company, job_title, link, job_location, location)
+                    except Exception as e_write:
                         print(
-                            f"Unable to save the job information in the file. The job title {job_title} or company {company} cannot contain special characters,")
-                        traceback.print_exc()
-                except:
+                            f"Unable to save the job information in the file for '{job_title}'. Error: {e_write}")
+                        # traceback.print_exc() # Already printed by the application failure usually
+                except Exception as e_outer_job_loop:
+                    print(f"Outer loop error for job '{job_title}': {e_outer_job_loop}")
                     traceback.print_exc()
-                    print(f"Could not apply to the job in {company}")
-                    pass
+                    # pass # Original was pass, consider if seen_jobs needs update here
             else:
-                print(f"Job for {company} by {poster} contains a blacklisted word {word}.")
+                # This 'else' corresponds to the blacklist/seen_jobs check
+                # print(f"Job for {company} by {poster} contains a blacklisted word or already seen.") # Original log was here
+                if link not in self.seen_jobs and link: # If skipped due to blacklist but not seen, mark seen
+                    self.seen_jobs.append(link)
+                # else: # If already in seen_jobs, no need to re-add or log verbosely
+                    # print(f"Skipping already seen or blacklisted job: {job_title if job_title else 'Unknown Title'} at {company if company else 'Unknown Company'}")
 
-            self.seen_jobs += link
+            # Ensure link is added to seen_jobs if it hasn't been for any reason above (e.g. an error before explicit add)
+            if link and link not in self.seen_jobs:
+                 self.seen_jobs.append(link)
 
     def apply_to_job(self):
         easy_apply_button = None
