@@ -12,6 +12,8 @@ import time
 import json
 import datetime  # 导入datetime模块用于获取当前年份
 import requests
+import base64  # 添加base64模块用于PDF编码
+from linkedineasyapply import CloudAIResponseGenerator  # 添加CloudAIResponseGenerator导入
 
 # 定义国家代码列表
 COUNTRY_CODES = [
@@ -377,8 +379,10 @@ class EasyApplyApp(tk.Tk):
         # 更新简历上传提示和文件类型
         ttk.Label(frame, text="简历文件路径:").grid(row=current_row, column=0, sticky=tk.W, padx=5, pady=3)
         resume_frame = ttk.Frame(frame)
-        ttk.Entry(resume_frame, textvariable=self.vars['resume_path'], width=52).pack(side=tk.LEFT, fill=tk.X, expand=True)
+        ttk.Entry(resume_frame, textvariable=self.vars['resume_path'], width=42).pack(side=tk.LEFT, fill=tk.X, expand=True)  # 调整宽度为42，为新按钮留出空间
         ttk.Button(resume_frame, text="浏览", command=lambda: self._browse_file(self.vars['resume_path'], "简历", "*.pdf")).pack(side=tk.LEFT, padx=(5,0))
+        # 添加新的按钮，用于提取PDF文本
+        ttk.Button(resume_frame, text="AI提取文本", command=self._trigger_aws_pdf_extraction_from_button).pack(side=tk.LEFT, padx=(5,0))
         resume_frame.grid(row=current_row, column=1, sticky=tk.EW, padx=5, pady=3)
         current_row+=1
         ttk.Label(frame, text="仅支持PDF格式 (最大2MB)").grid(row=current_row, column=1, sticky=tk.W, padx=5)
@@ -426,6 +430,77 @@ class EasyApplyApp(tk.Tk):
                 return
                 
             path_var.set(filepath)
+
+    def _trigger_aws_pdf_extraction_from_button(self):
+        """通过AWS提取PDF简历文本的按钮回调函数"""
+        # 获取PDF路径
+        pdf_filepath = self.vars['resume_path'].get()
+        if not pdf_filepath:
+            messagebox.showerror("错误", "请先选择PDF简历文件")
+            self._log_message("错误: 未选择PDF简历文件，无法进行AI提取")
+            return
+
+        if not pdf_filepath.lower().endswith(".pdf"):
+            messagebox.showerror("错误", "所选文件不是PDF格式")
+            self._log_message(f"错误: 所选文件 {os.path.basename(pdf_filepath)} 不是PDF格式")
+            return
+
+        self._log_message(f"开始从 {os.path.basename(pdf_filepath)} 提取文本...")
+
+        try:
+            # 读取PDF文件并进行Base64编码
+            with open(pdf_filepath, "rb") as f:
+                pdf_data = f.read()
+            base64_pdf_data = base64.b64encode(pdf_data).decode("utf-8")
+            pdf_filename = os.path.basename(pdf_filepath)
+
+            # 使用当前配置初始化CloudAIResponseGenerator
+            # 注意：不需要强制检查openaiApiKey是否已配置
+            cloud_ai = CloudAIResponseGenerator(
+                api_key=self.vars['openaiApiKey'].get(),  # 传递用户配置的API密钥（即使为空）
+                personal_info=self.config.get('personalInfo', {}),
+                experience=self.config.get('experience', {}),
+                languages=self.config.get('languages', {}),
+                resume_path=pdf_filepath,
+                text_resume_path=self.vars['textResume_path'].get(),
+                customQuestions=self.config.get('customQuestions', {}),
+                debug=self.config.get('debug', False)
+            )
+
+            # 检查extract_text_via_aws方法是否存在
+            if not hasattr(cloud_ai, 'extract_text_via_aws'):
+                self._log_message("错误: CloudAIResponseGenerator缺少extract_text_via_aws方法，请在linkedineasyapply.py中实现此方法")
+                messagebox.showerror("功能缺失", "CloudAIResponseGenerator中缺少extract_text_via_aws方法\n请先在linkedineasyapply.py文件中添加此方法")
+                return
+
+            # 调用extract_text_via_aws方法
+            extracted_text = cloud_ai.extract_text_via_aws(pdf_filename, base64_pdf_data)
+
+            if extracted_text is not None:
+                # 保存提取的文本到新文件
+                output_txt_filename = os.path.splitext(pdf_filename)[0] + "_aws.txt"
+                output_txt_path = os.path.join(os.path.dirname(pdf_filepath), output_txt_filename)
+
+                with open(output_txt_path, "w", encoding="utf-8") as f:
+                    f.write(extracted_text)
+                
+                self._log_message(f"成功: 已从 {pdf_filename} 提取文本并保存到 {output_txt_filename}")
+                messagebox.showinfo("提取成功", f"文本已提取并保存到:\n{output_txt_path}")
+
+                # 更新文本简历路径
+                self.vars['textResume_path'].set(output_txt_path)
+                self.config['textResume'] = output_txt_path
+                self._save_config(self.config)
+            else:
+                self._log_message(f"警告: 未能从 {pdf_filename} 提取到文本")
+                messagebox.showwarning("提取警告", f"未能从 {pdf_filename} 提取到文本")
+
+        except FileNotFoundError:
+            self._log_message(f"错误: 找不到文件 {pdf_filepath}")
+            messagebox.showerror("文件错误", f"找不到文件:\n{pdf_filepath}")
+        except Exception as e:
+            self._log_message(f"错误: 提取文本时发生错误: {str(e)}")
+            messagebox.showerror("提取失败", f"提取文本时发生错误:\n{str(e)}")
 
     def _browse_text_resume_and_update_ai_tab(self):
         """浏览文本简历文件并更新AI助手标签页中的状态"""
@@ -1568,10 +1643,10 @@ class EasyApplyApp(tk.Tk):
         if not selection:
             messagebox.showwarning("未选择", "请在列表中选择要删除的语言。")
             return
-        
+
         if not messagebox.askyesno("确认删除", f"确定要删除选中的 {len(selection)} 个语言吗？"):
             return
-        
+
         # 因为每次删除一项后索引会变化，所以从后往前删除
         selected_items = [self.lang_listbox.get(i) for i in selection]
         removed_count = 0
@@ -1943,8 +2018,8 @@ class EasyApplyApp(tk.Tk):
         )
         
         if not filepath:
-            return
-            
+                return
+
         try:
             with open(filepath, 'r', encoding='utf-8') as file:
                 content = file.read()
@@ -2005,7 +2080,7 @@ class EasyApplyApp(tk.Tk):
                         answer_value = json.dumps(answer, ensure_ascii=False)
                         
                     processed_questions[question_key] = answer_value
-                else:
+            else:
                     processed_questions[question] = answer
                     
             config_to_save['customQuestions'] = processed_questions

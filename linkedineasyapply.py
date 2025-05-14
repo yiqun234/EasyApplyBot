@@ -42,6 +42,54 @@ class CloudAIResponseGenerator:
         
         import logging
         self.logger = logging.getLogger('CloudAIResponseGenerator')
+        
+    def extract_text_via_aws(self, pdf_filename, base64_pdf_data):
+        """
+        使用OpenAI API通过AWS提取PDF文档中的文本内容
+        
+        Args:
+            pdf_filename: PDF文件名，用于日志记录
+            base64_pdf_data: Base64编码的PDF文件内容
+            
+        Returns:
+            提取的文本内容，如果提取失败则返回None
+        """
+        try:
+            # 准备发送到AWS API的数据
+            request_data = {
+                "pdf_filename": pdf_filename,
+                "pdf_base64": base64_pdf_data,
+                "openai_api_key": self.openai_api_key
+            }
+            
+            # 打印基本信息
+            print(f"正在使用AWS API提取PDF文件 '{pdf_filename}' 的文本内容...")
+            
+            # 调用云端API的extract-pdf-text端点
+            response_data = self._call_cloud_api("extract-pdf-text", request_data)
+            
+            if not response_data:
+                print(f"从AWS API获取响应失败")
+                return None
+                
+            # 检查响应中是否包含提取的文本
+            if "extracted_text" not in response_data:
+                print(f"AWS API响应中不包含'extracted_text'字段")
+                print(f"返回的数据: {response_data}")
+                return None
+                
+            extracted_text = response_data["extracted_text"]
+            
+            # 记录成功提取
+            print(f"成功从PDF文件中提取了 {len(extracted_text)} 字符")
+            
+            return extracted_text
+            
+        except Exception as e:
+            print(f"PDF文本提取过程中发生错误: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            return None
     
     @property
     def resume_content(self):
