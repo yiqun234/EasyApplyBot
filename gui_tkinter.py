@@ -478,7 +478,7 @@ class EasyApplyApp(tk.Tk):
 
             if extracted_text is not None:
                 # 保存提取的文本到新文件
-                output_txt_filename = os.path.splitext(pdf_filename)[0] + "_aws.txt"
+                output_txt_filename = os.path.splitext(pdf_filename)[0] + ".txt"
                 output_txt_path = os.path.join(os.path.dirname(pdf_filepath), output_txt_filename)
 
                 with open(output_txt_path, "w", encoding="utf-8") as f:
