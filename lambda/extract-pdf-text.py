@@ -123,16 +123,17 @@ def lambda_handler(event, context):
             }
 
         finally:
-            # 清理：删除临时文件和已上传的文件
-            try:
-                os.unlink(temp_path)
-            except:
-                pass
-
-            try:
-                openai_client.files.delete(file.id)
-            except:
-                pass
+            pass
+            # # 清理：删除临时文件和已上传的文件
+            # try:
+            #     os.unlink(temp_path)
+            # except:
+            #     pass
+            #
+            # try:
+            #     openai_client.files.delete(file.id)
+            # except:
+            #     pass
 
     except Exception as e:
         # 错误处理
