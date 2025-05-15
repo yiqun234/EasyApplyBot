@@ -4,6 +4,7 @@ import base64
 import tempfile
 from openai import OpenAI
 
+
 def lambda_handler(event, context):
     """
     Lambda函数，用于使用OpenAI API提取PDF文件中的文本内容
@@ -65,31 +66,32 @@ def lambda_handler(event, context):
         # 初始化OpenAI客户端
         openai_client = OpenAI(api_key=api_key)
 
-        # 解码Base64数据并临时保存为文件
-        pdf_data = base64.b64decode(pdf_base64)
-        
-        with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as temp_file:
-            temp_path = temp_file.name
-            temp_file.write(pdf_data)
-        
-        # 上传临时文件到OpenAI
-        with open(temp_path, 'rb') as f:
-            file = openai_client.files.create(
-                file=f,
-                purpose="user_data"
-            )
-        
+        # # 解码Base64数据并临时保存为文件
+        # pdf_data = base64.b64decode(pdf_base64)
+
+        # with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as temp_file:
+        #     temp_path = temp_file.name
+        #     temp_file.write(pdf_data)
+
+        # # 上传临时文件到OpenAI
+        # with open(temp_path, 'rb') as f:
+        #     file = openai_client.files.create(
+        #         file=f,
+        #         purpose="user_data"
+        #     )
+
         try:
             # 使用OpenAI的Responses API提取PDF文本
             response = openai_client.responses.create(
-                model="o4-mini",
+                model="gpt-4.1-mini",
                 input=[
                     {
                         "role": "user",
                         "content": [
                             {
                                 "type": "input_file",
-                                "file_id": file.id,
+                                "filename": pdf_filename,
+                                "file_data": f"data:application/pdf;base64,{pdf_base64}",
                             },
                             {
                                 "type": "input_text",
@@ -99,14 +101,14 @@ def lambda_handler(event, context):
                     }
                 ]
             )
-            
+
             # 提取文本
             extracted_text = ""
             if hasattr(response, 'output_text') and response.output_text:
                 extracted_text = response.output_text.strip()
             else:
                 extracted_text = "无法提取文本，请检查PDF文件"
-            
+
             # 返回成功响应
             return {
                 'statusCode': 200,
@@ -119,14 +121,14 @@ def lambda_handler(event, context):
                     'status': 'success'
                 })
             }
-            
+
         finally:
             # 清理：删除临时文件和已上传的文件
             try:
                 os.unlink(temp_path)
             except:
                 pass
-            
+
             try:
                 openai_client.files.delete(file.id)
             except:
