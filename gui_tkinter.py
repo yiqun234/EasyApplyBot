@@ -5,15 +5,11 @@ import subprocess
 import sys
 import os
 import threading
-import webbrowser
 import collections.abc # Used for deep update
 import traceback
-import time
 import json
 import datetime  # 导入datetime模块用于获取当前年份
 import requests
-import base64  # 添加base64模块用于PDF编码
-from linkedineasyapply import CloudAIResponseGenerator  # 添加CloudAIResponseGenerator导入
 from lang import load_language, AVAILABLE_LANGUAGES, DEFAULT_LANGUAGE  # 添加语言包支持
 
 # 定义国家代码列表
@@ -159,8 +155,12 @@ def load_config():
 
 
         return final_config
-    except yaml.YAMLError as exc: messagebox.showerror(self.texts['common']['error'], f"{self.texts['messages']['file_open_error']}: {exc}"); return final_config # Return merged defaults on error
-    except Exception as e: messagebox.showerror(self.texts['common']['error'], f"{self.texts['messages']['update_error']}: {e}"); return final_config
+    except yaml.YAMLError as exc:
+        messagebox.showerror("Configuration Error", f"Unable to parse config file: {exc}")
+        return final_config # Return merged defaults on error
+    except Exception as e:
+        messagebox.showerror("Configuration Error", f"Error updating configuration: {e}")
+        return final_config
 
 def save_config(config):
     try:
@@ -174,7 +174,9 @@ def save_config(config):
         with open(CONFIG_FILE, 'w', encoding='utf-8') as stream:
             yaml.dump(config_to_save, stream, default_flow_style=False, allow_unicode=True, sort_keys=False)
         return True
-    except Exception as e: messagebox.showerror(self.texts['common']['error'], f"{self.texts['messages']['save_error']}: {e}"); return False
+    except Exception as e: 
+        print(f"Error saving config: {e}")
+        return False
 
 def safe_join_list(config_value):
     if isinstance(config_value, list): return '\n'.join(map(str, config_value))
@@ -443,7 +445,7 @@ class EasyApplyApp(tk.Tk):
             path_var.set(filepath)
 
     def _trigger_aws_pdf_extraction_from_button(self):
-        """通过AWS提取PDF简历文本的按钮回调函数"""
+        """通过API将PDF转换为文本的按钮回调函数"""
         # 获取PDF路径
         pdf_filepath = self.vars['resume_path'].get()
         if not pdf_filepath:
@@ -459,54 +461,91 @@ class EasyApplyApp(tk.Tk):
         self._log_message(self.texts['messages']['start_extract'].format(os.path.basename(pdf_filepath)))
 
         try:
-            # 读取PDF文件并进行Base64编码
-            with open(pdf_filepath, "rb") as f:
-                pdf_data = f.read()
-            base64_pdf_data = base64.b64encode(pdf_data).decode("utf-8")
+            # 读取PDF文件
             pdf_filename = os.path.basename(pdf_filepath)
+            
+            # 创建加载进度弹窗
+            loading_dialog = tk.Toplevel(self)
+            loading_dialog.title(self.texts['messages']['pdf_processing'])
+            loading_dialog.geometry("300x150")
+            loading_dialog.transient(self)
+            loading_dialog.grab_set()
+            loading_dialog.resizable(False, False)
+            
+            # 居中弹窗
+            loading_dialog.update_idletasks()
+            width = loading_dialog.winfo_width()
+            height = loading_dialog.winfo_height()
+            x = (loading_dialog.winfo_screenwidth() // 2) - (width // 2)
+            y = (loading_dialog.winfo_screenheight() // 2) - (height // 2)
+            loading_dialog.geometry('{}x{}+{}+{}'.format(width, height, x, y))
+            
+            # 添加提示文本和进度条
+            ttk.Label(loading_dialog, text=self.texts['messages']['processing_file'].format(pdf_filename), 
+                     font=("Helvetica", 10, "bold")).pack(pady=(20, 10))
+            ttk.Label(loading_dialog, text=self.texts['messages']['please_wait']).pack(pady=5)
+            
+            progress = ttk.Progressbar(loading_dialog, mode="indeterminate", length=250)
+            progress.pack(pady=10, padx=20)
+            progress.start(10)
+            
+            # 在单独的线程中处理请求，避免阻塞GUI
+            def process_request():
+                try:
+                    # 使用requests库发送多部分表单数据（multipart/form-data）
+                    with open(pdf_filepath, 'rb') as pdf_file:
+                        files = {'pdf': (pdf_filename, pdf_file, 'application/pdf')}
+                        
+                        # 发送POST请求到OCR服务
+                        response = requests.post('http://34.209.242.37:3000/api/ocr', files=files, timeout=120)
+                        
+                        # 处理响应
+                        if response.status_code == 200:
+                            data = response.json()
 
-            # 使用当前配置初始化CloudAIResponseGenerator
-            # 注意：不需要强制检查openaiApiKey是否已配置
-            cloud_ai = CloudAIResponseGenerator(
-                api_key=self.vars['openaiApiKey'].get(),  # 传递用户配置的API密钥（即使为空）
-                personal_info=self.config.get('personalInfo', {}),
-                experience=self.config.get('experience', {}),
-                languages=self.config.get('languages', {}),
-                resume_path=pdf_filepath,
-                text_resume_path=self.vars['textResume_path'].get(),
-                customQuestions=self.config.get('customQuestions', {}),
-                debug=self.config.get('debug', False)
-            )
+                            if data.get('success'):
+                                extracted_text = data.get('text', '')
+                                if isinstance(extracted_text, list):
+                                    extracted_text = '\n'.join(str(x) for x in extracted_text)
+                                elif not isinstance(extracted_text, str):
+                                    extracted_text = str(extracted_text)
 
-            # 检查extract_text_via_aws方法是否存在
-            if not hasattr(cloud_ai, 'extract_text_via_aws'):
-                error_msg = "CloudAIResponseGenerator中缺少extract_text_via_aws方法\n请先在linkedineasyapply.py文件中添加此方法"
-                self._log_message(error_msg)
-                messagebox.showerror(self.texts['common']['error'], error_msg)
-                return
+                                output_txt_filename = os.path.splitext(pdf_filename)[0] + ".txt"
+                                output_txt_path = os.path.join(os.path.dirname(pdf_filepath), output_txt_filename)
 
-            # 调用extract_text_via_aws方法
-            extracted_text = cloud_ai.extract_text_via_aws(pdf_filename, base64_pdf_data)
-
-            if extracted_text is not None:
-                # 保存提取的文本到新文件
-                output_txt_filename = os.path.splitext(pdf_filename)[0] + ".txt"
-                output_txt_path = os.path.join(os.path.dirname(pdf_filepath), output_txt_filename)
-
-                with open(output_txt_path, "w", encoding="utf-8") as f:
-                    f.write(extracted_text)
-                
-                self._log_message(self.texts['messages']['extract_success'].format(pdf_filename, output_txt_filename))
-                messagebox.showinfo(self.texts['common']['success'], f"{self.texts['messages']['extract_success'].format(pdf_filename, output_txt_path)}")
-
-                # 更新文本简历路径
-                self.vars['textResume_path'].set(output_txt_path)
-                self.config['textResume'] = output_txt_path
-                self._save_config(self.config)
-            else:
-                self._log_message(self.texts['messages']['extract_fail'].format(pdf_filename))
-                messagebox.showwarning(self.texts['common']['warning'], self.texts['messages']['extract_fail'].format(pdf_filename))
-
+                                with open(output_txt_path, "w", encoding="utf-8") as f:
+                                    f.write(extracted_text)
+                                
+                                # 在主线程中更新UI
+                                self.after(0, lambda: self._log_message(self.texts['messages']['extract_success'].format(pdf_filename, output_txt_filename)))
+                                self.after(0, lambda: messagebox.showinfo(self.texts['common']['success'], 
+                                                                         f"{self.texts['messages']['extract_success'].format(pdf_filename, output_txt_path)}"))
+                                
+                                # 更新文本简历路径
+                                self.after(0, lambda: self.vars['textResume_path'].set(output_txt_path))
+                                self.after(0, lambda: self._save_config(self.config | {'textResume': output_txt_path}))
+                            else:
+                                error_msg = data.get('message', '未知错误')
+                                self.after(0, lambda: self._log_message(f"{self.texts['messages']['extract_fail'].format(pdf_filename)}: {error_msg}"))
+                                self.after(0, lambda: messagebox.showwarning(self.texts['common']['warning'], 
+                                                                           f"{self.texts['messages']['extract_fail'].format(pdf_filename)}: {error_msg}"))
+                        else:
+                            self.after(0, lambda: self._log_message(f"{self.texts['messages']['extract_fail'].format(pdf_filename)}: {response.status_code}"))
+                            self.after(0, lambda: messagebox.showwarning(self.texts['common']['warning'], 
+                                                                       f"{self.texts['messages']['extract_fail'].format(pdf_filename)}: 服务器返回状态码 {response.status_code}"))
+                except Exception as e:
+                    error_message = str(e)
+                    self.after(0, lambda: self._log_message(self.texts['messages']['extract_error'].format(error_message)))
+                    self.after(0, lambda: messagebox.showerror(self.texts['common']['error'], 
+                                                             self.texts['messages']['extract_error'].format(error_message)))
+                finally:
+                    # 无论成功与否，都关闭加载弹窗
+                    self.after(0, loading_dialog.destroy)
+            
+            # 启动处理线程
+            self._log_message(self.texts['messages']['sending_to_ocr'])
+            threading.Thread(target=process_request, daemon=True).start()
+            
         except FileNotFoundError:
             self._log_message(self.texts['messages']['file_not_found'].format(pdf_filepath))
             messagebox.showerror(self.texts['common']['error'], self.texts['messages']['file_not_found'].format(pdf_filepath))
@@ -1413,14 +1452,22 @@ class EasyApplyApp(tk.Tk):
 
     # --- Other Methods (_save_gui_config, etc.) --- (No changes needed in these core logic methods)
     def _save_gui_config(self):
-        if self._update_config_from_gui():
-            if save_config(self.config): self.status_label.config(text=self.texts['messages']['config_saved'])
-            else: self.status_label.config(text=self.texts['messages']['config_save_error'])
-        else: self.status_label.config(text=self.texts['messages']['config_update_error'])
+        try:
+            if save_config(self.config):
+                messagebox.showinfo(self.texts['common']['success'], self.texts['messages']['save_success'])
+        except Exception as e:
+            messagebox.showerror(self.texts['common']['error'], f"{self.texts['messages']['save_error']}: {e}")
     def _log_message(self, message):
-        def append_text(): self.output_area.config(state='normal'); self.output_area.insert(tk.END, message); self.output_area.see(tk.END); self.output_area.config(state='disabled')
-        if threading.current_thread() is threading.main_thread(): append_text()
-        else: self.after(0, append_text)
+        def append_text():
+            self.output_area.config(state='normal')
+            self.output_area.insert(tk.END, message)
+            self.output_area.see(tk.END)
+            self.output_area.config(state='disabled')
+        
+        if threading.current_thread() is threading.main_thread():
+            append_text()
+        else:
+            self.after(0, append_text)
     def _start_bot(self):
         """启动main.py并在GUI中显示输出"""
         self._save_gui_config()

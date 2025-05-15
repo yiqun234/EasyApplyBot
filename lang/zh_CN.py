@@ -394,6 +394,10 @@ TEXTS = {
         'missing_parameters': '请填写所有必填字段。',
         'invalid_value': '{0}必须是有效的{1}。',
         'missing_file': '{0} 不存在。',
+        'pdf_processing': '处理PDF文件',
+        'processing_file': '正在处理PDF文件: {0}',
+        'please_wait': '请稍候，正在提取文本...',
+        'sending_to_ocr': '正在发送PDF到OCR服务器...',
     },
     
     # 个人资料字段

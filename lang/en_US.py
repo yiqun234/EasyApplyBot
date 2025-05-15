@@ -394,6 +394,10 @@ TEXTS = {
         'invalid_value': '{0} must be a valid {1}.',
         'missing_file': '{0} does not exist.',
         'file_open_error': 'Cannot open configuration file: {0}',
+        'pdf_processing': 'Processing PDF',
+        'processing_file': 'Processing PDF file: {0}',
+        'please_wait': 'Please wait, extracting text...',
+        'sending_to_ocr': 'Sending PDF to OCR server...',
     },
     
     # Personal info fields
