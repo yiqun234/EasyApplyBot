@@ -14,6 +14,7 @@ import datetime  # 导入datetime模块用于获取当前年份
 import requests
 import base64  # 添加base64模块用于PDF编码
 from linkedineasyapply import CloudAIResponseGenerator  # 添加CloudAIResponseGenerator导入
+from lang import load_language, AVAILABLE_LANGUAGES, DEFAULT_LANGUAGE  # 添加语言包支持
 
 # 定义国家代码列表
 COUNTRY_CODES = [
@@ -103,7 +104,7 @@ DEFAULT_CONFIG = {
     'experienceLevel': {'internship': False, 'entry': True, 'associate': True, 'mid-senior level': True, 'director': False, 'executive': False},
     'jobTypes': {'full-time': True, 'contract': True, 'part-time': False, 'temporary': True, 'internship': False, 'other': False, 'volunteer': False},
     'date': {'all time': True, 'month': False, 'week': False, '24 hours': False},
-    'positions': ['sales'], 'locations': ['中国'], 'residentStatus': False, 'distance': 100,
+    'positions': ['sales'], 'locations': ['united states'], 'residentStatus': False, 'distance': 100,
     'outputFileDirectory': '~/Documents/EasyApplyBot/', 'companyBlacklist': [], 'titleBlacklist': [], 'posterBlacklist': [],
     'uploads': {'resume': '', 'coverLetter': '', 'photo': ''},
     'checkboxes': {'driversLicence': True, 'requireVisa': False, 'legallyAuthorized': False, 'certifiedProfessional': True, 'urgentFill': True, 'commute': True, 'remote': True, 'drugTest': True, 'assessment': True, 'securityClearance': False, 'degreeCompleted': ["High School Diploma", "Bachelor's Degree"], 'backgroundCheck': True},
@@ -112,6 +113,7 @@ DEFAULT_CONFIG = {
     'evaluateJobFit': False, 'debug': False,
     'customQuestions': {},  # 自定义问答配置
     'useCloudAI': True,  # 是否使用云服务API，默认为True
+    'language': DEFAULT_LANGUAGE,  # 添加语言设置，默认为中文
 }
 
 STANDARD_DEGREES = ["High School Diploma", "Associate's Degree", "Bachelor's Degree", "Master's Degree", "Master of Business Administration", "Doctor of Philosophy", "Doctor of Medicine", "Doctor of Law"]
@@ -157,8 +159,8 @@ def load_config():
 
 
         return final_config
-    except yaml.YAMLError as exc: messagebox.showerror("配置错误", f"读取配置文件时出错: {exc}"); return final_config # Return merged defaults on error
-    except Exception as e: messagebox.showerror("错误", f"加载配置时发生未知错误: {e}"); return final_config
+    except yaml.YAMLError as exc: messagebox.showerror(self.texts['common']['error'], f"{self.texts['messages']['file_open_error']}: {exc}"); return final_config # Return merged defaults on error
+    except Exception as e: messagebox.showerror(self.texts['common']['error'], f"{self.texts['messages']['update_error']}: {e}"); return final_config
 
 def save_config(config):
     try:
@@ -172,7 +174,7 @@ def save_config(config):
         with open(CONFIG_FILE, 'w', encoding='utf-8') as stream:
             yaml.dump(config_to_save, stream, default_flow_style=False, allow_unicode=True, sort_keys=False)
         return True
-    except Exception as e: messagebox.showerror("保存错误", f"无法保存配置: {e}"); return False
+    except Exception as e: messagebox.showerror(self.texts['common']['error'], f"{self.texts['messages']['save_error']}: {e}"); return False
 
 def safe_join_list(config_value):
     if isinstance(config_value, list): return '\n'.join(map(str, config_value))
@@ -197,7 +199,12 @@ def parse_list_from_textarea(text_content):
 class EasyApplyApp(tk.Tk):
     def __init__(self):
         super().__init__()
-        self.title("LinkedIn Easy Apply Bot - 配置工具 v3 (Tkinter)") # Version bump in title
+        # 从配置中加载语言设置
+        self.config = load_config()
+        self.lang_code = self.config.get('language', DEFAULT_LANGUAGE)
+        self.texts = load_language(self.lang_code)
+        
+        self.title(self.texts['common']['app_title'])
         self.geometry("900x800")
 
         self.config = load_config()
@@ -322,13 +329,13 @@ class EasyApplyApp(tk.Tk):
         self.experience_tab = ttk.Frame(self.notebook)  # 新增经历管理Tab
         self.ai_assistant_tab = ttk.Frame(self.notebook)  # 新增AI助手Tab
         self.control_tab = ttk.Frame(self.notebook)
-        self.notebook.add(self.basic_tab, text='基本设置')
-        self.notebook.add(self.job_tab, text='职位和位置')
-        self.notebook.add(self.preferences_tab, text='偏好设置')
-        self.notebook.add(self.advanced_tab, text='高级设置')
-        self.notebook.add(self.experience_tab, text='经历管理')  # 新增
-        self.notebook.add(self.ai_assistant_tab, text='AI助手')  # 新增
-        self.notebook.add(self.control_tab, text='操作与状态')
+        self.notebook.add(self.basic_tab, text=self.texts['tabs']['basic'])
+        self.notebook.add(self.job_tab, text=self.texts['tabs']['job'])
+        self.notebook.add(self.preferences_tab, text=self.texts['tabs']['preferences'])
+        self.notebook.add(self.advanced_tab, text=self.texts['tabs']['advanced'])
+        self.notebook.add(self.experience_tab, text=self.texts['tabs']['experience'])
+        self.notebook.add(self.ai_assistant_tab, text=self.texts['tabs']['ai_assistant'])
+        self.notebook.add(self.control_tab, text=self.texts['tabs']['control'])
         self.notebook.pack(expand=True, fill='both', padx=10, pady=5)
         self._create_basic_tab()
         self._create_job_tab()
@@ -337,7 +344,11 @@ class EasyApplyApp(tk.Tk):
         self._create_experience_tab()  # 新增
         self._create_ai_assistant_tab()  # 新增
         self._create_control_tab()
-        self.status_label = tk.Label(self, text="就绪", bd=1, relief=tk.SUNKEN, anchor=tk.W)
+        
+        # --- 添加语言选择下拉菜单 ---
+        self._create_language_selector()
+        
+        self.status_label = tk.Label(self, text=self.texts['common']['ready'], bd=1, relief=tk.SUNKEN, anchor=tk.W)
         self.status_label.pack(side=tk.BOTTOM, fill=tk.X)
         self.protocol("WM_DELETE_WINDOW", self._on_closing)
 
@@ -369,64 +380,64 @@ class EasyApplyApp(tk.Tk):
 
     def _create_basic_tab(self):
         # (No significant changes needed, uses _browse_file now)
-        frame = ttk.LabelFrame(self.basic_tab, text="账户和简历", padding=(10, 5)); frame.pack(expand=True, fill="both", padx=10, pady=5); frame.columnconfigure(1, weight=1); current_row=0
-        ttk.Label(frame, text="邮箱:").grid(row=current_row, column=0, sticky=tk.W, padx=5, pady=3); ttk.Entry(frame, textvariable=self.vars['email'], width=60).grid(row=current_row, column=1, sticky=tk.EW, padx=5, pady=3); current_row+=1
-        ttk.Label(frame, text="密码:").grid(row=current_row, column=0, sticky=tk.W, padx=5, pady=3); ttk.Entry(frame, textvariable=self.vars['password'], width=60).grid(row=current_row, column=1, sticky=tk.EW, padx=5, pady=3); current_row+=1
-        ttk.Label(frame, text="OpenAI API密钥:").grid(row=current_row, column=0, sticky=tk.W, padx=5, pady=3); ttk.Entry(frame, textvariable=self.vars['openaiApiKey'], width=60).grid(row=current_row, column=1, sticky=tk.EW, padx=5, pady=3); current_row+=1
-        ttk.Label(frame, text="(选填) 如果您有自己的OpenAI API密钥，可以在此处输入").grid(row=current_row, column=1, sticky=tk.W, padx=5); current_row+=1
+        frame = ttk.LabelFrame(self.basic_tab, text=self.texts['basic_tab']['account_resume'], padding=(10, 5)); frame.pack(expand=True, fill="both", padx=10, pady=5); frame.columnconfigure(1, weight=1); current_row=0
+        ttk.Label(frame, text=self.texts['basic_tab']['email']).grid(row=current_row, column=0, sticky=tk.W, padx=5, pady=3); ttk.Entry(frame, textvariable=self.vars['email'], width=60).grid(row=current_row, column=1, sticky=tk.EW, padx=5, pady=3); current_row+=1
+        ttk.Label(frame, text=self.texts['basic_tab']['password']).grid(row=current_row, column=0, sticky=tk.W, padx=5, pady=3); ttk.Entry(frame, textvariable=self.vars['password'], width=60).grid(row=current_row, column=1, sticky=tk.EW, padx=5, pady=3); current_row+=1
+        ttk.Label(frame, text=self.texts['basic_tab']['openai_api_key']).grid(row=current_row, column=0, sticky=tk.W, padx=5, pady=3); ttk.Entry(frame, textvariable=self.vars['openaiApiKey'], width=60).grid(row=current_row, column=1, sticky=tk.EW, padx=5, pady=3); current_row+=1
+        ttk.Label(frame, text=self.texts['basic_tab']['openai_api_key_note']).grid(row=current_row, column=1, sticky=tk.W, padx=5); current_row+=1
         
         
         # 更新简历上传提示和文件类型
-        ttk.Label(frame, text="简历文件路径:").grid(row=current_row, column=0, sticky=tk.W, padx=5, pady=3)
+        ttk.Label(frame, text=self.texts['basic_tab']['resume_path']).grid(row=current_row, column=0, sticky=tk.W, padx=5, pady=3)
         resume_frame = ttk.Frame(frame)
         ttk.Entry(resume_frame, textvariable=self.vars['resume_path'], width=42).pack(side=tk.LEFT, fill=tk.X, expand=True)  # 调整宽度为42，为新按钮留出空间
-        ttk.Button(resume_frame, text="浏览", command=lambda: self._browse_file(self.vars['resume_path'], "简历", "*.pdf")).pack(side=tk.LEFT, padx=(5,0))
+        ttk.Button(resume_frame, text=self.texts['common']['browse'], command=lambda: self._browse_file(self.vars['resume_path'], self.texts['basic_tab']['resume_path'], "*.pdf")).pack(side=tk.LEFT, padx=(5,0))
         # 添加新的按钮，用于提取PDF文本
-        ttk.Button(resume_frame, text="AI提取文本", command=self._trigger_aws_pdf_extraction_from_button).pack(side=tk.LEFT, padx=(5,0))
+        ttk.Button(resume_frame, text=self.texts['basic_tab']['extract_text'], command=self._trigger_aws_pdf_extraction_from_button).pack(side=tk.LEFT, padx=(5,0))
         resume_frame.grid(row=current_row, column=1, sticky=tk.EW, padx=5, pady=3)
         current_row+=1
-        ttk.Label(frame, text="仅支持PDF格式 (最大2MB)").grid(row=current_row, column=1, sticky=tk.W, padx=5)
+        ttk.Label(frame, text=self.texts['basic_tab']['pdf_only']).grid(row=current_row, column=1, sticky=tk.W, padx=5)
         current_row+=1
         
-        ttk.Label(frame, text="文本简历文件路径:").grid(row=current_row, column=0, sticky=tk.W, padx=5, pady=3); text_resume_frame = ttk.Frame(frame); ttk.Entry(text_resume_frame, textvariable=self.vars['textResume_path'], width=52).pack(side=tk.LEFT, fill=tk.X, expand=True); ttk.Button(text_resume_frame, text="浏览", command=lambda: self._browse_text_resume_and_update_ai_tab()).pack(side=tk.LEFT, padx=(5,0)); text_resume_frame.grid(row=current_row, column=1, sticky=tk.EW, padx=5, pady=3); current_row+=1
+        ttk.Label(frame, text=self.texts['basic_tab']['text_resume_path']).grid(row=current_row, column=0, sticky=tk.W, padx=5, pady=3); text_resume_frame = ttk.Frame(frame); ttk.Entry(text_resume_frame, textvariable=self.vars['textResume_path'], width=52).pack(side=tk.LEFT, fill=tk.X, expand=True); ttk.Button(text_resume_frame, text=self.texts['common']['browse'], command=lambda: self._browse_text_resume_and_update_ai_tab()).pack(side=tk.LEFT, padx=(5,0)); text_resume_frame.grid(row=current_row, column=1, sticky=tk.EW, padx=5, pady=3); current_row+=1
         
         # 更新求职信上传提示和文件类型
-        ttk.Label(frame, text="求职信文件路径:").grid(row=current_row, column=0, sticky=tk.W, padx=5, pady=3)
+        ttk.Label(frame, text=self.texts['basic_tab']['cover_letter_path']).grid(row=current_row, column=0, sticky=tk.W, padx=5, pady=3)
         cover_letter_frame = ttk.Frame(frame)
         ttk.Entry(cover_letter_frame, textvariable=self.vars['coverletter_path'], width=52).pack(side=tk.LEFT, fill=tk.X, expand=True)
-        ttk.Button(cover_letter_frame, text="浏览", command=lambda: self._browse_file(self.vars['coverletter_path'], "求职信", "*.pdf")).pack(side=tk.LEFT, padx=(5,0))
+        ttk.Button(cover_letter_frame, text=self.texts['common']['browse'], command=lambda: self._browse_file(self.vars['coverletter_path'], self.texts['basic_tab']['cover_letter_path'], "*.pdf")).pack(side=tk.LEFT, padx=(5,0))
         cover_letter_frame.grid(row=current_row, column=1, sticky=tk.EW, padx=5, pady=3)
         current_row+=1
-        ttk.Label(frame, text="仅支持PDF格式 (最大512KB)").grid(row=current_row, column=1, sticky=tk.W, padx=5)
+        ttk.Label(frame, text=self.texts['basic_tab']['cover_letter_note']).grid(row=current_row, column=1, sticky=tk.W, padx=5)
         current_row+=1
         
         # 更新照片上传提示和文件类型
-        ttk.Label(frame, text="照片文件路径:").grid(row=current_row, column=0, sticky=tk.W, padx=5, pady=3)
+        ttk.Label(frame, text=self.texts['basic_tab']['photo_path']).grid(row=current_row, column=0, sticky=tk.W, padx=5, pady=3)
         photo_frame = ttk.Frame(frame)
         ttk.Entry(photo_frame, textvariable=self.vars['photo_path'], width=52).pack(side=tk.LEFT, fill=tk.X, expand=True)
-        ttk.Button(photo_frame, text="浏览", command=lambda: self._browse_file(self.vars['photo_path'], "照片", "*.png *.jpg *.jpeg")).pack(side=tk.LEFT, padx=(5,0))
+        ttk.Button(photo_frame, text=self.texts['common']['browse'], command=lambda: self._browse_file(self.vars['photo_path'], self.texts['basic_tab']['photo_path'], "*.png *.jpg *.jpeg")).pack(side=tk.LEFT, padx=(5,0))
         photo_frame.grid(row=current_row, column=1, sticky=tk.EW, padx=5, pady=3)
         current_row+=1
-        ttk.Label(frame, text="支持PNG, JPG, JPEG (最大1MB)").grid(row=current_row, column=1, sticky=tk.W, padx=5)
+        ttk.Label(frame, text=self.texts['basic_tab']['photo_note']).grid(row=current_row, column=1, sticky=tk.W, padx=5)
         current_row+=1
         
-        ttk.Checkbutton(frame, text="禁用系统防锁定/休眠", variable=self.vars['disableAntiLock']).grid(row=current_row, column=0, columnspan=2, sticky=tk.W, padx=5, pady=10); current_row+=1
+        ttk.Checkbutton(frame, text=self.texts['basic_tab']['disable_antilock'], variable=self.vars['disableAntiLock']).grid(row=current_row, column=0, columnspan=2, sticky=tk.W, padx=5, pady=10); current_row+=1
 
     def _browse_file(self, path_var, file_desc, file_pattern):
-        filepath = filedialog.askopenfilename(title=f"选择 {file_desc} 文件", filetypes=((f"{file_desc} Files", file_pattern), ("All Files", "*.*")))
+        filepath = filedialog.askopenfilename(title=f"{self.texts['common']['select_file']} {file_desc}", filetypes=((f"{file_desc} Files", file_pattern), ("All Files", "*.*")))
         if filepath:
             # 检查文件大小
             filesize = os.path.getsize(filepath) / (1024 * 1024)  # 转换为MB
             
             # 根据文件类型检查大小限制
             if "简历" in file_desc and filesize > 2:
-                messagebox.showwarning("文件过大", f"简历文件大小不能超过2MB，当前大小：{filesize:.2f}MB")
+                messagebox.showwarning(self.texts['common']['warning'], self.texts['messages']['file_too_large'].format(file_desc, "2MB", f"{filesize:.2f}"))
                 return
             elif "求职信" in file_desc and filesize > 0.5:
-                messagebox.showwarning("文件过大", f"求职信文件大小不能超过512KB，当前大小：{filesize:.2f}MB")
+                messagebox.showwarning(self.texts['common']['warning'], self.texts['messages']['file_too_large'].format(file_desc, "512KB", f"{filesize:.2f}"))
                 return
             elif "照片" in file_desc and filesize > 1:
-                messagebox.showwarning("文件过大", f"照片文件大小不能超过1MB，当前大小：{filesize:.2f}MB")
+                messagebox.showwarning(self.texts['common']['warning'], self.texts['messages']['file_too_large'].format(file_desc, "1MB", f"{filesize:.2f}"))
                 return
                 
             path_var.set(filepath)
@@ -436,16 +447,16 @@ class EasyApplyApp(tk.Tk):
         # 获取PDF路径
         pdf_filepath = self.vars['resume_path'].get()
         if not pdf_filepath:
-            messagebox.showerror("错误", "请先选择PDF简历文件")
-            self._log_message("错误: 未选择PDF简历文件，无法进行AI提取")
+            messagebox.showerror(self.texts['common']['error'], self.texts['messages']['no_pdf'])
+            self._log_message(self.texts['messages']['no_pdf'])
             return
 
         if not pdf_filepath.lower().endswith(".pdf"):
-            messagebox.showerror("错误", "所选文件不是PDF格式")
-            self._log_message(f"错误: 所选文件 {os.path.basename(pdf_filepath)} 不是PDF格式")
+            messagebox.showerror(self.texts['common']['error'], self.texts['messages']['not_pdf'])
+            self._log_message(self.texts['messages']['not_pdf'].format(os.path.basename(pdf_filepath)))
             return
 
-        self._log_message(f"开始从 {os.path.basename(pdf_filepath)} 提取文本...")
+        self._log_message(self.texts['messages']['start_extract'].format(os.path.basename(pdf_filepath)))
 
         try:
             # 读取PDF文件并进行Base64编码
@@ -469,8 +480,9 @@ class EasyApplyApp(tk.Tk):
 
             # 检查extract_text_via_aws方法是否存在
             if not hasattr(cloud_ai, 'extract_text_via_aws'):
-                self._log_message("错误: CloudAIResponseGenerator缺少extract_text_via_aws方法，请在linkedineasyapply.py中实现此方法")
-                messagebox.showerror("功能缺失", "CloudAIResponseGenerator中缺少extract_text_via_aws方法\n请先在linkedineasyapply.py文件中添加此方法")
+                error_msg = "CloudAIResponseGenerator中缺少extract_text_via_aws方法\n请先在linkedineasyapply.py文件中添加此方法"
+                self._log_message(error_msg)
+                messagebox.showerror(self.texts['common']['error'], error_msg)
                 return
 
             # 调用extract_text_via_aws方法
@@ -484,27 +496,27 @@ class EasyApplyApp(tk.Tk):
                 with open(output_txt_path, "w", encoding="utf-8") as f:
                     f.write(extracted_text)
                 
-                self._log_message(f"成功: 已从 {pdf_filename} 提取文本并保存到 {output_txt_filename}")
-                messagebox.showinfo("提取成功", f"文本已提取并保存到:\n{output_txt_path}")
+                self._log_message(self.texts['messages']['extract_success'].format(pdf_filename, output_txt_filename))
+                messagebox.showinfo(self.texts['common']['success'], f"{self.texts['messages']['extract_success'].format(pdf_filename, output_txt_path)}")
 
                 # 更新文本简历路径
                 self.vars['textResume_path'].set(output_txt_path)
                 self.config['textResume'] = output_txt_path
                 self._save_config(self.config)
             else:
-                self._log_message(f"警告: 未能从 {pdf_filename} 提取到文本")
-                messagebox.showwarning("提取警告", f"未能从 {pdf_filename} 提取到文本")
+                self._log_message(self.texts['messages']['extract_fail'].format(pdf_filename))
+                messagebox.showwarning(self.texts['common']['warning'], self.texts['messages']['extract_fail'].format(pdf_filename))
 
         except FileNotFoundError:
-            self._log_message(f"错误: 找不到文件 {pdf_filepath}")
-            messagebox.showerror("文件错误", f"找不到文件:\n{pdf_filepath}")
+            self._log_message(self.texts['messages']['file_not_found'].format(pdf_filepath))
+            messagebox.showerror(self.texts['common']['error'], self.texts['messages']['file_not_found'].format(pdf_filepath))
         except Exception as e:
-            self._log_message(f"错误: 提取文本时发生错误: {str(e)}")
-            messagebox.showerror("提取失败", f"提取文本时发生错误:\n{str(e)}")
+            self._log_message(self.texts['messages']['extract_error'].format(str(e)))
+            messagebox.showerror(self.texts['common']['error'], self.texts['messages']['extract_error'].format(str(e)))
 
     def _browse_text_resume_and_update_ai_tab(self):
         """浏览文本简历文件并更新AI助手标签页中的状态"""
-        filepath = filedialog.askopenfilename(title="选择文本简历文件", filetypes=(("Text Files", "*.txt"), ("All Files", "*.*")))
+        filepath = filedialog.askopenfilename(title=self.texts['common']['select_file'], filetypes=(("Text Files", "*.txt"), ("All Files", "*.*")))
         if filepath:
             self.vars['textResume_path'].set(filepath)
             # 如果AI助手标签页已创建，则调用其更新方法
@@ -518,7 +530,7 @@ class EasyApplyApp(tk.Tk):
         main_job_frame.columnconfigure(1, weight=1) # 允许第二列扩展
 
         # --- 带数量限制的职位配置部分 ---
-        positions_config_frame = ttk.LabelFrame(main_job_frame, text="职位投递配置 (带数量限制)", padding=(10, 5))
+        positions_config_frame = ttk.LabelFrame(main_job_frame, text=self.texts['job_tab']['position_config'], padding=(10, 5))
         positions_config_frame.grid(row=0, column=0, columnspan=2, padx=5, pady=5, sticky=tk.EW)
         positions_config_frame.columnconfigure(0, weight=1) #让listbox部分能扩展
 
@@ -533,20 +545,20 @@ class EasyApplyApp(tk.Tk):
 
         position_buttons_frame = ttk.Frame(positions_config_frame)
         position_buttons_frame.pack(fill=tk.X, padx=5, pady=(0, 5))
-        ttk.Button(position_buttons_frame, text="添加职位", command=self._add_position_with_count_dialog).pack(side=tk.LEFT, padx=5)
-        ttk.Button(position_buttons_frame, text="修改职位", command=self._modify_position_with_count_dialog).pack(side=tk.LEFT, padx=5)
-        ttk.Button(position_buttons_frame, text="删除职位", command=self._remove_position_with_count).pack(side=tk.LEFT, padx=5)
+        ttk.Button(position_buttons_frame, text=self.texts['job_tab']['add_position'], command=self._add_position_with_count_dialog).pack(side=tk.LEFT, padx=5)
+        ttk.Button(position_buttons_frame, text=self.texts['job_tab']['modify_position'], command=self._modify_position_with_count_dialog).pack(side=tk.LEFT, padx=5)
+        ttk.Button(position_buttons_frame, text=self.texts['job_tab']['delete_position'], command=self._remove_position_with_count).pack(side=tk.LEFT, padx=5)
         
         # 直接引用 self.config['positionsWithCount'] 来更新列表
         self._update_positions_with_count_listbox()
 
         # --- 其他搜索条件框架 ---
-        other_conditions_frame = ttk.LabelFrame(main_job_frame, text="全局搜索条件", padding=(10, 5))
+        other_conditions_frame = ttk.LabelFrame(main_job_frame, text=self.texts['job_tab']['global_search'], padding=(10, 5))
         other_conditions_frame.grid(row=1, column=0, columnspan=2, padx=5, pady=10, sticky=tk.EW)
         other_conditions_frame.columnconfigure(1, weight=1)
 
         # 目标地点 (恢复旧的地点输入方式)
-        ttk.Label(other_conditions_frame, text="目标地点 (每行一个):").grid(row=0, column=0, sticky=tk.NW, padx=5, pady=3)
+        ttk.Label(other_conditions_frame, text=self.texts['job_tab']['target_location']).grid(row=0, column=0, sticky=tk.NW, padx=5, pady=3)
         self.locations_widget = scrolledtext.ScrolledText(other_conditions_frame, wrap=tk.WORD, height=5, width=60)
         self.locations_widget.grid(row=0, column=1, sticky=tk.EW, padx=5, pady=3)
         # 从 self.vars 加载地点数据, self.vars['locations'] 在 __init__ 中初始化
@@ -555,21 +567,21 @@ class EasyApplyApp(tk.Tk):
 
         # 搜索半径 (恢复)
         dist_frame = ttk.Frame(other_conditions_frame)
-        ttk.Label(dist_frame, text="搜索半径 (公里):").pack(side=tk.LEFT, padx=(0, 5))
+        ttk.Label(dist_frame, text=self.texts['job_tab']['search_radius']).pack(side=tk.LEFT, padx=(0, 5))
         ttk.Combobox(dist_frame, textvariable=self.vars['distance'], values=[0, 5, 10, 25, 50, 100], state="readonly", width=5).pack(side=tk.LEFT)
         dist_frame.grid(row=1, column=0, columnspan=2, sticky=tk.W, padx=5, pady=5)
 
         # 其他复选框 (恢复)
         chk_frame = ttk.Frame(other_conditions_frame)
         chk_frame.grid(row=2, column=0, columnspan=2, sticky=tk.W, padx=5, pady=5)
-        ttk.Checkbutton(chk_frame, text="只搜索远程工作", variable=self.vars['search_remote']).pack(anchor=tk.W)
-        ttk.Checkbutton(chk_frame, text="筛选\"少于10名申请者\"的职位", variable=self.vars['lessthanTenApplicants']).pack(anchor=tk.W)
-        ttk.Checkbutton(chk_frame, text="按最新发布日期排序", variable=self.vars['newestPostingsFirst']).pack(anchor=tk.W)
-        ttk.Checkbutton(chk_frame, text="居住在工作所在国家/地区", variable=self.vars['residentStatus']).pack(anchor=tk.W)
+        ttk.Checkbutton(chk_frame, text=self.texts['job_tab']['remote_only'], variable=self.vars['search_remote']).pack(anchor=tk.W)
+        ttk.Checkbutton(chk_frame, text=self.texts['job_tab']['less_than_ten'], variable=self.vars['lessthanTenApplicants']).pack(anchor=tk.W)
+        ttk.Checkbutton(chk_frame, text=self.texts['job_tab']['newest_first'], variable=self.vars['newestPostingsFirst']).pack(anchor=tk.W)
+        ttk.Checkbutton(chk_frame, text=self.texts['job_tab']['resident_status'], variable=self.vars['residentStatus']).pack(anchor=tk.W)
 
     def _add_position_with_count_dialog(self):
         dialog = tk.Toplevel(self)
-        dialog.title("添加职位")
+        dialog.title(self.texts['job_tab']['add_position'])
         dialog.geometry("400x150")
         dialog.transient(self)
         dialog.grab_set()
@@ -577,12 +589,12 @@ class EasyApplyApp(tk.Tk):
         main_frame = ttk.Frame(dialog, padding=(10, 5))
         main_frame.pack(fill=tk.BOTH, expand=True)
 
-        ttk.Label(main_frame, text="职位名称:").grid(row=0, column=0, sticky=tk.W, pady=5)
+        ttk.Label(main_frame, text=self.texts['job_tab']['position_name']).grid(row=0, column=0, sticky=tk.W, pady=5)
         name_entry = ttk.Entry(main_frame, width=40)
         name_entry.grid(row=0, column=1, sticky=tk.EW, pady=5, padx=5)
         name_entry.focus_set()
 
-        ttk.Label(main_frame, text="目标投递数量:").grid(row=1, column=0, sticky=tk.W, pady=5)
+        ttk.Label(main_frame, text=self.texts['job_tab']['target_count']).grid(row=1, column=0, sticky=tk.W, pady=5)
         count_entry = ttk.Entry(main_frame, width=10)
         count_entry.insert(0, "100")
         count_entry.grid(row=1, column=1, sticky=tk.W, pady=5, padx=5)
@@ -590,12 +602,12 @@ class EasyApplyApp(tk.Tk):
         def on_ok():
             name = name_entry.get().strip()
             if not name:
-                messagebox.showerror("错误", "请输入职位名称", parent=dialog); return
+                messagebox.showerror(self.texts['common']['error'], self.texts['messages']['input_error'].format(self.texts['job_tab']['position_name']), parent=dialog); return
             try:
                 count = int(count_entry.get().strip())
-                if count <= 0: raise ValueError("投递数量必须为正整数")
+                if count <= 0: raise ValueError(self.texts['messages']['invalid_integer'].format(self.texts['job_tab']['target_count']))
             except ValueError as e:
-                messagebox.showerror("错误", f"请输入有效的投递数量: {e}", parent=dialog); return
+                messagebox.showerror(self.texts['common']['error'], f"{self.texts['messages']['invalid_integer'].format(self.texts['job_tab']['target_count'])}: {e}", parent=dialog); return
             
             self.config['positionsWithCount'].append({"name": name, "count": count})
             self._update_positions_with_count_listbox()
@@ -603,18 +615,18 @@ class EasyApplyApp(tk.Tk):
 
         button_frame = ttk.Frame(main_frame)
         button_frame.grid(row=2, column=0, columnspan=2, pady=10)
-        ttk.Button(button_frame, text="确定", command=on_ok).pack(side=tk.LEFT, padx=5)
-        ttk.Button(button_frame, text="取消", command=dialog.destroy).pack(side=tk.LEFT, padx=5)
+        ttk.Button(button_frame, text=self.texts["common"]["ok"], command=on_ok).pack(side=tk.LEFT, padx=5)
+        ttk.Button(button_frame, text=self.texts["common"]["cancel"], command=dialog.destroy).pack(side=tk.LEFT, padx=5)
         main_frame.columnconfigure(1, weight=1)
 
     def _modify_position_with_count_dialog(self):
         selection = self.positions_listbox.curselection()
-        if not selection: messagebox.showwarning("警告", "请先选择要修改的职位"); return
+        if not selection: messagebox.showwarning(self.texts['common']['warning'], self.texts['messages']['no_selection'].format(self.texts['common']['modify'], self.texts['job_tab']['position_name'])); return
         index = selection[0]
         position_config_to_edit = self.config['positionsWithCount'][index]
 
         dialog = tk.Toplevel(self)
-        dialog.title("修改职位")
+        dialog.title(self.texts['job_tab']['modify_position'])
         dialog.geometry("400x150")
         dialog.transient(self)
         dialog.grab_set()
@@ -622,25 +634,25 @@ class EasyApplyApp(tk.Tk):
         main_frame = ttk.Frame(dialog, padding=(10, 5))
         main_frame.pack(fill=tk.BOTH, expand=True)
 
-        ttk.Label(main_frame, text="职位名称:").grid(row=0, column=0, sticky=tk.W, pady=5)
+        ttk.Label(main_frame, text=self.texts["job_tab"]["position_name"]).grid(row=0, column=0, sticky=tk.W, pady=5)
         name_entry = ttk.Entry(main_frame, width=40)
         name_entry.insert(0, position_config_to_edit["name"])
         name_entry.grid(row=0, column=1, sticky=tk.EW, pady=5, padx=5)
         name_entry.focus_set()
 
-        ttk.Label(main_frame, text="目标投递数量:").grid(row=1, column=0, sticky=tk.W, pady=5)
+        ttk.Label(main_frame, text=self.texts["job_tab"]["target_count"]).grid(row=1, column=0, sticky=tk.W, pady=5)
         count_entry = ttk.Entry(main_frame, width=10)
         count_entry.insert(0, str(position_config_to_edit.get("count", 100)))
         count_entry.grid(row=1, column=1, sticky=tk.W, pady=5, padx=5)
 
         def on_ok():
             name = name_entry.get().strip()
-            if not name: messagebox.showerror("错误", "请输入职位名称", parent=dialog); return
+            if not name: messagebox.showerror(self.texts['common']['error'], self.texts['messages']['input_error'].format(self.texts['job_tab']['position_name']), parent=dialog); return
             try:
                 count = int(count_entry.get().strip())
                 if count <= 0: raise ValueError("投递数量必须为正整数")
             except ValueError as e:
-                messagebox.showerror("错误", f"请输入有效的投递数量: {e}", parent=dialog); return
+                messagebox.showerror(self.texts['common']['error'], f"{self.texts['messages']['invalid_integer'].format(self.texts['job_tab']['target_count'])}: {e}", parent=dialog); return
 
             self.config['positionsWithCount'][index]["name"] = name
             self.config['positionsWithCount'][index]["count"] = count
@@ -649,14 +661,14 @@ class EasyApplyApp(tk.Tk):
 
         button_frame = ttk.Frame(main_frame)
         button_frame.grid(row=2, column=0, columnspan=2, pady=10)
-        ttk.Button(button_frame, text="确定", command=on_ok).pack(side=tk.LEFT, padx=5)
-        ttk.Button(button_frame, text="取消", command=dialog.destroy).pack(side=tk.LEFT, padx=5)
+        ttk.Button(button_frame, text=self.texts["common"]["ok"], command=on_ok).pack(side=tk.LEFT, padx=5)
+        ttk.Button(button_frame, text=self.texts["common"]["cancel"], command=dialog.destroy).pack(side=tk.LEFT, padx=5)
         main_frame.columnconfigure(1, weight=1)
 
     def _remove_position_with_count(self):
         selection = self.positions_listbox.curselection()
-        if not selection: messagebox.showwarning("警告", "请先选择要删除的职位"); return
-        if messagebox.askyesno("确认", "确定要删除选中的职位吗？"):
+        if not selection: messagebox.showwarning(self.texts['common']['warning'], self.texts['messages']['no_selection'].format(self.texts['common']['delete'], self.texts['job_tab']['position_name'])); return
+        if messagebox.askyesno(self.texts['common']['confirm'], self.texts['messages']['confirm_delete'].format(1, self.texts['job_tab']['position_name'])):
             indices = list(selection)
             indices.sort(reverse=True)
             for index in indices:
@@ -668,10 +680,10 @@ class EasyApplyApp(tk.Tk):
         if self.config.get('positionsWithCount'): #直接使用 self.config 中的列表
             for config_item in self.config['positionsWithCount']:
                 if isinstance(config_item, dict) and 'name' in config_item:
-                    display_text = f"{config_item['name']} (目标数量: {config_item.get('count', 100)})"
+                    display_text = f"{config_item['name']} ({self.texts['job_tab']['target_count_display']}: {config_item.get('count', 100)})"
                     self.positions_listbox.insert(tk.END, display_text)
                 else:
-                    self.positions_listbox.insert(tk.END, f"无效条目: {str(config_item)}")
+                    self.positions_listbox.insert(tk.END, f"{self.texts['common']['invalid_entry']}: {str(config_item)}")
 
     def _create_preferences_tab(self):
         main_frame = ttk.Frame(self.preferences_tab, padding=(10, 5))
@@ -681,7 +693,7 @@ class EasyApplyApp(tk.Tk):
         main_frame.columnconfigure(1, weight=1)
 
         # --- Experience Level Frame ---
-        exp_frame = ttk.LabelFrame(main_frame, text="经验等级", padding=(10, 5))
+        exp_frame = ttk.LabelFrame(main_frame, text=self.texts['preferences_labels']['experience_level_frame'], padding=(10, 5))
         exp_frame.grid(row=0, column=0, padx=5, pady=5, sticky=tk.NSEW)
         exp_levels_defaults = DEFAULT_CONFIG.get('experienceLevel', {})
         # Restore the original row/col logic
@@ -701,7 +713,7 @@ class EasyApplyApp(tk.Tk):
 
 
         # --- Job Type Frame ---
-        job_frame = ttk.LabelFrame(main_frame, text="工作类型", padding=(10, 5))
+        job_frame = ttk.LabelFrame(main_frame, text=self.texts['preferences_labels']['job_type_frame'], padding=(10, 5))
         job_frame.grid(row=0, column=1, padx=5, pady=5, sticky=tk.NSEW)
         job_types_defaults = DEFAULT_CONFIG.get('jobTypes', {})
         # Restore the original row/col logic
@@ -720,9 +732,9 @@ class EasyApplyApp(tk.Tk):
                     row += 1
 
         # --- Date Preference Frame --- (Remains the same)
-        date_frame = ttk.LabelFrame(main_frame, text="发布日期", padding=(10, 5))
+        date_frame = ttk.LabelFrame(main_frame, text=self.texts['preferences_labels']['date_posted_frame'], padding=(10, 5))
         date_frame.grid(row=1, column=0, columnspan=2, padx=5, pady=5, sticky=tk.EW)
-        date_prefs = {'all time': '任何时间', 'month': '过去一个月', 'week': '过去一周', '24 hours': '过去24小时'}
+        date_prefs = {'all time': self.texts['preferences_tab']['all_time'], 'month': self.texts['preferences_tab']['month'], 'week': self.texts['preferences_tab']['week'], '24 hours': self.texts['preferences_tab']['24_hours']}
         for i, (key, text) in enumerate(date_prefs.items()):
             ttk.Radiobutton(date_frame, text=text, variable=self.vars['date_pref'], value=key).pack(
                 anchor=tk.W, padx=5, pady=1
@@ -781,14 +793,14 @@ class EasyApplyApp(tk.Tk):
         current_row = 0
 
         # Blacklists Frame
-        blacklist_frame = ttk.LabelFrame(self.scrollable_frame, text="黑名单 (每行一个)", padding=(10, 5))
+        blacklist_frame = ttk.LabelFrame(self.scrollable_frame, text=self.texts['advanced_labels']['blacklist_frame'], padding=(10, 5))
         blacklist_frame.grid(row=current_row, column=0, columnspan=2, padx=10, pady=5, sticky=tk.EW); blacklist_frame.columnconfigure(1, weight=1); current_row += 1
-        ttk.Label(blacklist_frame, text="公司:").grid(row=0, column=0, sticky=tk.NW, padx=5, pady=3); self.company_bl_widget = scrolledtext.ScrolledText(blacklist_frame, wrap=tk.WORD, height=3, width=50); self.company_bl_widget.grid(row=0, column=1, sticky=tk.EW, padx=5, pady=3); self.company_bl_widget.insert(tk.END, self.vars['companyBlacklist'].get())
-        ttk.Label(blacklist_frame, text="职位:").grid(row=1, column=0, sticky=tk.NW, padx=5, pady=3); self.title_bl_widget = scrolledtext.ScrolledText(blacklist_frame, wrap=tk.WORD, height=3, width=50); self.title_bl_widget.grid(row=1, column=1, sticky=tk.EW, padx=5, pady=3); self.title_bl_widget.insert(tk.END, self.vars['titleBlacklist'].get())
-        ttk.Label(blacklist_frame, text="发布者:").grid(row=2, column=0, sticky=tk.NW, padx=5, pady=3); self.poster_bl_widget = scrolledtext.ScrolledText(blacklist_frame, wrap=tk.WORD, height=3, width=50); self.poster_bl_widget.grid(row=2, column=1, sticky=tk.EW, padx=5, pady=3); self.poster_bl_widget.insert(tk.END, self.vars['posterBlacklist'].get())
+        ttk.Label(blacklist_frame, text=self.texts['blacklist_fields']['company']).grid(row=0, column=0, sticky=tk.NW, padx=5, pady=3); self.company_bl_widget = scrolledtext.ScrolledText(blacklist_frame, wrap=tk.WORD, height=3, width=50); self.company_bl_widget.grid(row=0, column=1, sticky=tk.EW, padx=5, pady=3); self.company_bl_widget.insert(tk.END, self.vars['companyBlacklist'].get())
+        ttk.Label(blacklist_frame, text=self.texts['blacklist_fields']['title']).grid(row=1, column=0, sticky=tk.NW, padx=5, pady=3); self.title_bl_widget = scrolledtext.ScrolledText(blacklist_frame, wrap=tk.WORD, height=3, width=50); self.title_bl_widget.grid(row=1, column=1, sticky=tk.EW, padx=5, pady=3); self.title_bl_widget.insert(tk.END, self.vars['titleBlacklist'].get())
+        ttk.Label(blacklist_frame, text=self.texts['blacklist_fields']['poster']).grid(row=2, column=0, sticky=tk.NW, padx=5, pady=3); self.poster_bl_widget = scrolledtext.ScrolledText(blacklist_frame, wrap=tk.WORD, height=3, width=50); self.poster_bl_widget.grid(row=2, column=1, sticky=tk.EW, padx=5, pady=3); self.poster_bl_widget.insert(tk.END, self.vars['posterBlacklist'].get())
 
         # --- Languages Frame (Listbox + Buttons) ---
-        lang_frame = ttk.LabelFrame(self.scrollable_frame, text="语言能力", padding=(10, 5))
+        lang_frame = ttk.LabelFrame(self.scrollable_frame, text=self.texts['advanced_labels']['language_frame'], padding=(10, 5))
         lang_frame.grid(row=current_row, column=0, padx=10, pady=5, sticky=tk.NSEW); current_row += 1 # Takes one column now
         
         # 添加滚动条容器
@@ -806,14 +818,14 @@ class EasyApplyApp(tk.Tk):
         
         self._update_language_listbox() # Initial population
         lang_button_frame = ttk.Frame(lang_frame); lang_button_frame.pack(side=tk.LEFT, fill=tk.Y)
-        ttk.Button(lang_button_frame, text="添加", command=self._add_language_dialog, width=8).pack(pady=2, fill=tk.X)
-        ttk.Button(lang_button_frame, text="修改", command=self._modify_language_dialog, width=8).pack(pady=2, fill=tk.X)
-        ttk.Button(lang_button_frame, text="移除", command=self._remove_language, width=8).pack(pady=2, fill=tk.X)
-        ttk.Button(lang_button_frame, text="批量添加", command=self._batch_add_languages, width=8).pack(pady=2, fill=tk.X)
-        ttk.Button(lang_button_frame, text="批量删除", command=self._batch_remove_languages, width=8).pack(pady=2, fill=tk.X)
+        ttk.Button(lang_button_frame, text=self.texts['common']['add'], command=self._add_language_dialog, width=12).pack(pady=2, fill=tk.X)
+        ttk.Button(lang_button_frame, text=self.texts['common']['modify'], command=self._modify_language_dialog, width=12).pack(pady=2, fill=tk.X)
+        ttk.Button(lang_button_frame, text=self.texts['common']['remove'], command=self._remove_language, width=12).pack(pady=2, fill=tk.X)
+        ttk.Button(lang_button_frame, text=self.texts['advanced_tab']['batch_add'], command=self._batch_add_languages, width=12).pack(pady=2, fill=tk.X)
+        ttk.Button(lang_button_frame, text=self.texts['advanced_tab']['batch_delete'], command=self._batch_remove_languages, width=12).pack(pady=2, fill=tk.X)
 
         # --- Experience Frame (Listbox + Buttons) ---
-        exp_frame = ttk.LabelFrame(self.scrollable_frame, text="经验 (技能: 年数)", padding=(10, 5))
+        exp_frame = ttk.LabelFrame(self.scrollable_frame, text=self.texts['advanced_labels']['experience_frame'], padding=(10, 5))
         exp_frame.grid(row=current_row-1, column=1, padx=10, pady=5, sticky=tk.NSEW, rowspan=1) # Place next to languages
         exp_frame.grid(row=current_row, column=0, columnspan=2, padx=10, pady=5, sticky=tk.EW); current_row += 1
 
@@ -832,14 +844,14 @@ class EasyApplyApp(tk.Tk):
         
         self._update_experience_listbox() # Initial population
         exp_button_frame = ttk.Frame(exp_frame); exp_button_frame.pack(side=tk.LEFT, fill=tk.Y)
-        ttk.Button(exp_button_frame, text="添加", command=self._add_experience_dialog, width=8).pack(pady=2, fill=tk.X)
-        ttk.Button(exp_button_frame, text="修改", command=self._modify_experience_dialog, width=8).pack(pady=2, fill=tk.X)
-        ttk.Button(exp_button_frame, text="移除", command=self._remove_experience, width=8).pack(pady=2, fill=tk.X)
-        ttk.Button(exp_button_frame, text="批量添加", command=self._batch_add_experiences, width=8).pack(pady=2, fill=tk.X)
-        ttk.Button(exp_button_frame, text="批量删除", command=self._batch_remove_experiences, width=8).pack(pady=2, fill=tk.X)
+        ttk.Button(exp_button_frame, text=self.texts['common']['add'], command=self._add_experience_dialog, width=12).pack(pady=2, fill=tk.X)
+        ttk.Button(exp_button_frame, text=self.texts['common']['modify'], command=self._modify_experience_dialog, width=12).pack(pady=2, fill=tk.X)
+        ttk.Button(exp_button_frame, text=self.texts['common']['remove'], command=self._remove_experience, width=12).pack(pady=2, fill=tk.X)
+        ttk.Button(exp_button_frame, text=self.texts['advanced_tab']['batch_add'], command=self._batch_add_experiences, width=12).pack(pady=2, fill=tk.X)
+        ttk.Button(exp_button_frame, text=self.texts['advanced_tab']['batch_delete'], command=self._batch_remove_experiences, width=12).pack(pady=2, fill=tk.X)
 
         # --- 自定义问答 Frame ---
-        customq_frame = ttk.LabelFrame(self.scrollable_frame, text="自定义问答", padding=(10, 5))
+        customq_frame = ttk.LabelFrame(self.scrollable_frame, text=self.texts['advanced_labels']['custom_qa_frame'], padding=(10, 5))
         customq_frame.grid(row=current_row, column=0, columnspan=2, padx=10, pady=5, sticky=tk.EW); current_row += 1
         
         # 添加滚动条容器
@@ -860,19 +872,19 @@ class EasyApplyApp(tk.Tk):
         # 按钮
         customq_button_frame = ttk.Frame(customq_frame)
         customq_button_frame.pack(side=tk.LEFT, fill=tk.Y)
-        ttk.Button(customq_button_frame, text="添加", command=self._add_customquestion_dialog, width=8).pack(pady=2, fill=tk.X)
-        ttk.Button(customq_button_frame, text="修改", command=self._modify_customquestion_dialog, width=8).pack(pady=2, fill=tk.X)
-        ttk.Button(customq_button_frame, text="移除", command=self._remove_customquestion, width=8).pack(pady=2, fill=tk.X)
-        ttk.Button(customq_button_frame, text="批量添加", command=self._batch_add_customquestions, width=8).pack(pady=2, fill=tk.X)
-        ttk.Button(customq_button_frame, text="批量删除", command=self._batch_remove_customquestions, width=8).pack(pady=2, fill=tk.X)
+        ttk.Button(customq_button_frame, text=self.texts['advanced_tab']['add_qa'], command=self._add_customquestion_dialog, width=12).pack(pady=2, fill=tk.X)
+        ttk.Button(customq_button_frame, text=self.texts['advanced_tab']['modify_qa'], command=self._modify_customquestion_dialog, width=12).pack(pady=2, fill=tk.X)
+        ttk.Button(customq_button_frame, text=self.texts['advanced_tab']['remove_qa'], command=self._remove_customquestion, width=12).pack(pady=2, fill=tk.X)
+        ttk.Button(customq_button_frame, text=self.texts['advanced_tab']['batch_add_qa'], command=self._batch_add_customquestions, width=12).pack(pady=2, fill=tk.X)
+        ttk.Button(customq_button_frame, text=self.texts['advanced_tab']['batch_delete_qa'], command=self._batch_remove_customquestions, width=12).pack(pady=2, fill=tk.X)
 
         # --- Personal Info & EEO Frame (Dynamic Entries) ---
-        dynamic_frame = ttk.LabelFrame(self.scrollable_frame, text="个人资料 & EEO (基于 config.yaml)", padding=(10, 5))
+        dynamic_frame = ttk.LabelFrame(self.scrollable_frame, text=self.texts['advanced_labels']['personal_info_frame'], padding=(10, 5))
         dynamic_frame.grid(row=current_row, column=0, columnspan=2, padx=10, pady=5, sticky=tk.EW); current_row += 1
         dynamic_frame.columnconfigure(1, weight=1); dynamic_frame.columnconfigure(3, weight=1)
         sub_row = 0
         # Personal Info Fields (Dynamically created based on loaded config keys)
-        ttk.Label(dynamic_frame, text="个人资料:", font='-weight bold').grid(row=sub_row, column=0, columnspan=4, sticky=tk.W, padx=5, pady=5); sub_row += 1
+        ttk.Label(dynamic_frame, text=self.texts['advanced_labels']['personal_info_title'], font='-weight bold').grid(row=sub_row, column=0, columnspan=4, sticky=tk.W, padx=5, pady=5); sub_row += 1
         personal_keys = list(self.config.get('personalInfo', {}).keys()) # Iterate over keys present in loaded config
         for i, key in enumerate(personal_keys):
             col = (i % 2) * 2; row_offset = i // 2
@@ -892,7 +904,7 @@ class EasyApplyApp(tk.Tk):
                 entry_code.grid(row=sub_row + row_offset, column=col+1, sticky=tk.W, padx=5, pady=2)
                 
                 # 直接创建选择按钮，放在输入框旁边
-                btn_code = ttk.Button(dynamic_frame, text="选择", width=5)
+                btn_code = ttk.Button(dynamic_frame, text=self.texts['advanced_tab']['select_code'], width=5)
                 btn_code.grid(row=sub_row + row_offset, column=col+1, sticky=tk.E, padx=5, pady=2)
                 
                 # 保存当前key避免闭包问题
@@ -951,7 +963,7 @@ class EasyApplyApp(tk.Tk):
                     
                     # 搜索框
                     search_var = tk.StringVar()
-                    ttk.Label(list_frame, text="搜索:").grid(row=0, column=0, sticky=tk.W, padx=5, pady=5)
+                    ttk.Label(list_frame, text=self.texts['advanced_tab']['search_prompt']).grid(row=0, column=0, sticky=tk.W, padx=5, pady=5)
                     search_entry = ttk.Entry(list_frame, textvariable=search_var, width=30)
                     search_entry.grid(row=0, column=1, sticky=tk.EW, padx=5, pady=5)
                     search_entry.focus_set()
@@ -1001,8 +1013,8 @@ class EasyApplyApp(tk.Tk):
                     btn_frame = ttk.Frame(dialog, padding=(10, 0, 10, 10))
                     btn_frame.pack(fill=tk.X)
                     
-                    ttk.Button(btn_frame, text="确定", command=on_select, width=10).pack(side=tk.LEFT, padx=5)
-                    ttk.Button(btn_frame, text="取消", command=on_dialog_close, width=10).pack(side=tk.LEFT, padx=5)
+                    ttk.Button(btn_frame, text=self.texts['common']['ok'], command=on_select, width=10).pack(side=tk.LEFT, padx=5)
+                    ttk.Button(btn_frame, text=self.texts['common']['cancel'], command=on_dialog_close, width=10).pack(side=tk.LEFT, padx=5)
                     
                     # 调整对话框位置
                     dialog.update_idletasks()
@@ -1046,7 +1058,7 @@ class EasyApplyApp(tk.Tk):
         sub_row += (len(personal_keys) + 1) // 2
 
         # EEO Fields (Dynamically created based on loaded config keys)
-        ttk.Label(dynamic_frame, text="EEO信息:", font='-weight bold').grid(row=sub_row, column=0, columnspan=4, sticky=tk.W, padx=5, pady=5); sub_row += 1
+        ttk.Label(dynamic_frame, text=self.texts['advanced_labels']['eeo_info_title'], font='-weight bold').grid(row=sub_row, column=0, columnspan=4, sticky=tk.W, padx=5, pady=5); sub_row += 1
         eeo_keys = list(self.config.get('eeo', {}).keys()) # Iterate over keys present in loaded config
         for i, key in enumerate(eeo_keys):
             col = (i % 2) * 2; row_offset = i // 2
@@ -1057,7 +1069,7 @@ class EasyApplyApp(tk.Tk):
 
 
         # --- Degree Completed Frame (Checkboxes) ---
-        degree_frame = ttk.LabelFrame(self.scrollable_frame, text="已完成学位", padding=(10, 5))
+        degree_frame = ttk.LabelFrame(self.scrollable_frame, text=self.texts['advanced_labels']['degree_frame'], padding=(10, 5))
         degree_frame.grid(row=current_row, column=0, columnspan=2, padx=10, pady=5, sticky=tk.EW); current_row += 1
         row, col = 0, 0
         for degree in STANDARD_DEGREES:
@@ -1068,22 +1080,22 @@ class EasyApplyApp(tk.Tk):
 
 
         # --- Other Settings Frame (GPA, Salary, etc.) ---
-        other_settings_frame = ttk.LabelFrame(self.scrollable_frame, text="其他高级设置", padding=(10, 5))
+        other_settings_frame = ttk.LabelFrame(self.scrollable_frame, text=self.texts['advanced_labels']['other_settings_frame'], padding=(10, 5))
         other_settings_frame.grid(row=current_row, column=0, columnspan=2, padx=10, pady=5, sticky=tk.EW); other_settings_frame.columnconfigure(1, weight=1); current_row += 1
         sub_row=0
-        ttk.Label(other_settings_frame, text="日志输出目录:").grid(row=sub_row, column=0, sticky=tk.W, padx=5, pady=3); ttk.Entry(other_settings_frame, textvariable=self.vars['outputFileDirectory'], width=40).grid(row=sub_row, column=1, sticky=tk.EW, padx=5, pady=3); sub_row+=1
-        ttk.Label(other_settings_frame, text="大学GPA:").grid(row=sub_row, column=0, sticky=tk.W, padx=5, pady=3); ttk.Entry(other_settings_frame, textvariable=self.vars['universityGpa'], width=15).grid(row=sub_row, column=1, sticky=tk.W, padx=5, pady=3); sub_row+=1
-        ttk.Label(other_settings_frame, text="最低期望薪资:").grid(row=sub_row, column=0, sticky=tk.W, padx=5, pady=3); ttk.Entry(other_settings_frame, textvariable=self.vars['salaryMinimum'], width=15).grid(row=sub_row, column=1, sticky=tk.W, padx=5, pady=3); sub_row+=1
-        ttk.Label(other_settings_frame, text="通知周期 (周):").grid(row=sub_row, column=0, sticky=tk.W, padx=5, pady=3); ttk.Entry(other_settings_frame, textvariable=self.vars['noticePeriod'], width=15).grid(row=sub_row, column=1, sticky=tk.W, padx=5, pady=3); sub_row+=1
+        ttk.Label(other_settings_frame, text=self.texts['advanced_fields']['output_dir']).grid(row=sub_row, column=0, sticky=tk.W, padx=5, pady=3); ttk.Entry(other_settings_frame, textvariable=self.vars['outputFileDirectory'], width=40).grid(row=sub_row, column=1, sticky=tk.EW, padx=5, pady=3); sub_row+=1
+        ttk.Label(other_settings_frame, text=self.texts['advanced_fields']['university_gpa']).grid(row=sub_row, column=0, sticky=tk.W, padx=5, pady=3); ttk.Entry(other_settings_frame, textvariable=self.vars['universityGpa'], width=15).grid(row=sub_row, column=1, sticky=tk.W, padx=5, pady=3); sub_row+=1
+        ttk.Label(other_settings_frame, text=self.texts['advanced_fields']['min_salary']).grid(row=sub_row, column=0, sticky=tk.W, padx=5, pady=3); ttk.Entry(other_settings_frame, textvariable=self.vars['salaryMinimum'], width=15).grid(row=sub_row, column=1, sticky=tk.W, padx=5, pady=3); sub_row+=1
+        ttk.Label(other_settings_frame, text=self.texts['advanced_fields']['notice_period']).grid(row=sub_row, column=0, sticky=tk.W, padx=5, pady=3); ttk.Entry(other_settings_frame, textvariable=self.vars['noticePeriod'], width=15).grid(row=sub_row, column=1, sticky=tk.W, padx=5, pady=3); sub_row+=1
         bool_flag_frame = ttk.Frame(other_settings_frame); bool_flag_frame.grid(row=sub_row, column=0, columnspan=2, sticky=tk.W, padx=5, pady=5); sub_row+=1
-        ttk.Checkbutton(bool_flag_frame, text="评估工作匹配度", variable=self.vars['evaluateJobFit']).pack(side=tk.LEFT, padx=5)
-        ttk.Checkbutton(bool_flag_frame, text="调试模式", variable=self.vars['debug']).pack(side=tk.LEFT, padx=5)
+        ttk.Checkbutton(bool_flag_frame, text=self.texts['advanced_fields']['evaluate_job_fit'], variable=self.vars['evaluateJobFit']).pack(side=tk.LEFT, padx=5)
+        ttk.Checkbutton(bool_flag_frame, text=self.texts['advanced_fields']['debug_mode'], variable=self.vars['debug']).pack(side=tk.LEFT, padx=5)
 
 
         # Checkboxes Frame (Standard Y/N Questions)
-        checkbox_frame = ttk.LabelFrame(self.scrollable_frame, text="申请问题默认回答 (是/否)", padding=(10, 5))
+        checkbox_frame = ttk.LabelFrame(self.scrollable_frame, text=self.texts['advanced_labels']['qa_default_frame'], padding=(10, 5))
         checkbox_frame.grid(row=current_row, column=0, columnspan=2, padx=10, pady=5, sticky=tk.EW); current_row += 1; row, col = 0, 0
-        checkbox_labels = {'driversLicence': '有驾照?', 'requireVisa': '需签证担保?', 'legallyAuthorized': '有合法工作权?', 'certifiedProfessional': '有专业认证?', 'urgentFill': '可立即开始?', 'commute': '接受通勤?', 'remote': '接受远程?', 'drugTest': '接受药物测试?', 'assessment': '愿意完成评估?', 'securityClearance': '有安全许可?', 'backgroundCheck': '接受背景调查?'}
+        checkbox_labels = {'driversLicence': self.texts['advanced_tab']['drivers_licence'], 'requireVisa': self.texts['advanced_tab']['require_visa'], 'legallyAuthorized': self.texts['advanced_tab']['legally_authorized'], 'certifiedProfessional': self.texts['advanced_tab']['certified_professional'], 'urgentFill': self.texts['advanced_tab']['urgent_fill'], 'commute': self.texts['advanced_tab']['commute'], 'remote': self.texts['advanced_tab']['remote'], 'drugTest': self.texts['advanced_tab']['drug_test'], 'assessment': self.texts['advanced_tab']['assessment'], 'securityClearance': self.texts['advanced_tab']['security_clearance'], 'backgroundCheck': self.texts['advanced_tab']['background_check']}
         # Iterate based on DEFAULT_CONFIG to ensure all standard bool checkboxes are shown
         for key, default_value in DEFAULT_CONFIG.get('checkboxes', {}).items():
              if isinstance(default_value, bool): # Only handle boolean ones here
@@ -1092,7 +1104,7 @@ class EasyApplyApp(tk.Tk):
                      ttk.Checkbutton(checkbox_frame, text=label, variable=var).grid(row=row, column=col, sticky=tk.W, padx=5, pady=1); col += 1
                      if col >= 3: col = 0; row += 1
 
-        ttk.Label(self.scrollable_frame, text="提示: 更复杂的配置请编辑 YAML 文件。", justify=tk.LEFT, foreground="grey").grid(row=current_row, column=0, columnspan=2, padx=10, pady=5, sticky=tk.W)
+        ttk.Label(self.scrollable_frame, text=self.texts['advanced_tab']['edit_yaml_note'], justify=tk.LEFT, foreground="grey").grid(row=current_row, column=0, columnspan=2, padx=10, pady=5, sticky=tk.W)
 
         # 给各个列表框添加鼠标滚轮事件绑定
         def _configure_listbox_scrolling():
@@ -1132,22 +1144,22 @@ class EasyApplyApp(tk.Tk):
 
     # --- Language Dialogs and Listbox Management ---
     def _add_language_dialog(self):
-        dialog = tk.Toplevel(self); dialog.title("添加语言")
+        dialog = tk.Toplevel(self); dialog.title(self.texts['dialogs']['add_lang_title'])
         dialog.transient(self); dialog.grab_set()
-        ttk.Label(dialog, text="语言名称:").pack(pady=(10, 2)); lang_entry = ttk.Entry(dialog, width=30); lang_entry.pack(pady=2, padx=20); lang_entry.focus_set()
-        ttk.Label(dialog, text="熟练度:").pack(pady=(10, 2)); level_var = tk.StringVar(value=LANGUAGE_LEVELS[1]); level_combo = ttk.Combobox(dialog, textvariable=level_var, values=LANGUAGE_LEVELS, state="readonly", width=28); level_combo.pack(pady=2, padx=20)
+        ttk.Label(dialog, text=self.texts['dialogs']['lang_name']).pack(pady=(10, 2)); lang_entry = ttk.Entry(dialog, width=30); lang_entry.pack(pady=2, padx=20); lang_entry.focus_set()
+        ttk.Label(dialog, text=self.texts['dialogs']['proficiency']).pack(pady=(10, 2)); level_var = tk.StringVar(value=LANGUAGE_LEVELS[1]); level_combo = ttk.Combobox(dialog, textvariable=level_var, values=LANGUAGE_LEVELS, state="readonly", width=28); level_combo.pack(pady=2, padx=20)
         def on_ok():
             lang_name = lang_entry.get().strip(); level = level_var.get()
-            if not lang_name: messagebox.showwarning("输入错误", "请输入语言名称。", parent=dialog); return
-            if not level: messagebox.showwarning("输入错误", "请选择熟练度。", parent=dialog); return
+            if not lang_name: messagebox.showwarning(self.texts['common']['warning'], self.texts['messages']['input_error'].format(self.texts['dialogs']['lang_name']), parent=dialog); return
+            if not level: messagebox.showwarning(self.texts['common']['warning'], self.texts['messages']['input_error'].format(self.texts['dialogs']['proficiency']), parent=dialog); return
             if 'languages' not in self.config: self.config['languages'] = {}
             if lang_name in self.config['languages']:
-                 if not messagebox.askyesno("确认覆盖", f"语言 '{lang_name}' 已存在。要覆盖吗？", parent=dialog): return
+                 if not messagebox.askyesno(self.texts['common']['confirm'], self.texts['messages']['item_exists'].format(self.texts['dialogs']['lang_name'], lang_name), parent=dialog): return
             self.config['languages'][lang_name] = level
             self._update_language_listbox(); dialog.destroy()
         button_frame = ttk.Frame(dialog); button_frame.pack(pady=15)
-        ttk.Button(button_frame, text="确定", command=on_ok, width=8).pack(side=tk.LEFT, padx=10, ipady=2)
-        ttk.Button(button_frame, text="取消", command=dialog.destroy, width=8).pack(side=tk.LEFT, padx=10, ipady=2)
+        ttk.Button(button_frame, text=self.texts['common']['ok'], command=on_ok, width=8).pack(side=tk.LEFT, padx=10, ipady=2)
+        ttk.Button(button_frame, text=self.texts['common']['cancel'], command=dialog.destroy, width=8).pack(side=tk.LEFT, padx=10, ipady=2)
         dialog.update_idletasks()
         x = self.winfo_x() + (self.winfo_width() // 2) - (dialog.winfo_width() // 2)
         y = self.winfo_y() + (self.winfo_height() // 2) - (dialog.winfo_height() // 2)
@@ -1155,25 +1167,25 @@ class EasyApplyApp(tk.Tk):
 
     def _modify_language_dialog(self):
         selection = self.lang_listbox.curselection()
-        if not selection: messagebox.showwarning("未选择", "请在列表中选择要修改的语言。"); return
+        if not selection: messagebox.showwarning(self.texts['common']['warning'], self.texts['messages']['no_selection'].format(self.texts['common']['modify'], self.texts['dialogs']['lang_name'])); return
         selected_item = self.lang_listbox.get(selection[0])
         try: old_lang_name, old_level = map(str.strip, selected_item.split(':', 1))
-        except ValueError: messagebox.showerror("错误", "无法解析选中的语言项。"); return
-        dialog = tk.Toplevel(self); dialog.title("修改语言")
+        except ValueError: messagebox.showerror(self.texts['common']['error'], self.texts['messages']['parse_error'].format(self.texts['dialogs']['lang_name'])); return
+        dialog = tk.Toplevel(self); dialog.title(self.texts['dialogs']['modify_lang_title'])
         dialog.transient(self); dialog.grab_set()
-        ttk.Label(dialog, text="语言名称:").pack(pady=(10, 2)); lang_entry = ttk.Entry(dialog, width=30); lang_entry.pack(pady=2, padx=20); lang_entry.insert(0, old_lang_name); lang_entry.focus_set()
-        ttk.Label(dialog, text="熟练度:").pack(pady=(10, 2)); level_var = tk.StringVar(value=old_level); level_combo = ttk.Combobox(dialog, textvariable=level_var, values=LANGUAGE_LEVELS, state="readonly", width=28); level_combo.pack(pady=2, padx=20)
+        ttk.Label(dialog, text=self.texts['dialogs']['lang_name']).pack(pady=(10, 2)); lang_entry = ttk.Entry(dialog, width=30); lang_entry.pack(pady=2, padx=20); lang_entry.insert(0, old_lang_name); lang_entry.focus_set()
+        ttk.Label(dialog, text=self.texts['dialogs']['proficiency']).pack(pady=(10, 2)); level_var = tk.StringVar(value=old_level); level_combo = ttk.Combobox(dialog, textvariable=level_var, values=LANGUAGE_LEVELS, state="readonly", width=28); level_combo.pack(pady=2, padx=20)
         def on_ok():
             new_lang_name = lang_entry.get().strip(); new_level = level_var.get()
-            if not new_lang_name: messagebox.showwarning("输入错误", "请输入语言名称。", parent=dialog); return
-            if not new_level: messagebox.showwarning("输入错误", "请选择熟练度。", parent=dialog); return
+            if not new_lang_name: messagebox.showwarning(self.texts['common']['warning'], self.texts['messages']['input_error'].format(self.texts['dialogs']['lang_name']), parent=dialog); return
+            if not new_level: messagebox.showwarning(self.texts['common']['warning'], self.texts['messages']['input_error'].format(self.texts['dialogs']['proficiency']), parent=dialog); return
             if 'languages' in self.config:
                  if old_lang_name != new_lang_name and old_lang_name in self.config['languages']: del self.config['languages'][old_lang_name]
                  self.config['languages'][new_lang_name] = new_level
             self._update_language_listbox(); dialog.destroy()
         button_frame = ttk.Frame(dialog); button_frame.pack(pady=15)
-        ttk.Button(button_frame, text="确定", command=on_ok, width=8).pack(side=tk.LEFT, padx=10, ipady=2)
-        ttk.Button(button_frame, text="取消", command=dialog.destroy, width=8).pack(side=tk.LEFT, padx=10, ipady=2)
+        ttk.Button(button_frame, text=self.texts['common']['ok'], command=on_ok, width=8).pack(side=tk.LEFT, padx=10, ipady=2)
+        ttk.Button(button_frame, text=self.texts['common']['cancel'], command=dialog.destroy, width=8).pack(side=tk.LEFT, padx=10, ipady=2)
         dialog.update_idletasks()
         x = self.winfo_x() + (self.winfo_width() // 2) - (dialog.winfo_width() // 2)
         y = self.winfo_y() + (self.winfo_height() // 2) - (dialog.winfo_height() // 2)
@@ -1181,16 +1193,16 @@ class EasyApplyApp(tk.Tk):
 
     def _remove_language(self):
         selection = self.lang_listbox.curselection()
-        if not selection: messagebox.showwarning("未选择", "请在列表中选择要移除的语言。"); return
+        if not selection: messagebox.showwarning(self.texts['common']['warning'], self.texts['messages']['no_selection'].format(self.texts['common']['remove'], self.texts['dialogs']['lang_name'])); return
         selected_item = self.lang_listbox.get(selection[0])
         try:
             lang_name = selected_item.split(':', 1)[0].strip()
             if 'languages' in self.config and lang_name in self.config['languages']:
-                if messagebox.askyesno("确认移除", f"确定要移除语言 '{lang_name}' 吗？"):
+                if messagebox.askyesno(self.texts['common']['confirm'], f"{self.texts['messages']['confirm_delete'].format(1, self.texts['dialogs']['lang_name'])} ('{lang_name}')"):
                      del self.config['languages'][lang_name]
                      self._update_language_listbox()
-            else: messagebox.showerror("错误", f"在配置中未找到语言 '{lang_name}'。")
-        except Exception as e: messagebox.showerror("错误", f"移除语言时出错: {e}")
+            else: messagebox.showerror(self.texts['common']['error'], self.texts['messages']['item_not_found'].format(self.texts['dialogs']['lang_name'], lang_name))
+        except Exception as e: messagebox.showerror(self.texts['common']['error'], f"{self.texts['common']['error']}: {e}")
     def _update_language_listbox(self):
         self.lang_listbox.delete(0, tk.END)
         # Sort by language name for consistency? Optional.
@@ -1213,21 +1225,21 @@ class EasyApplyApp(tk.Tk):
                  self.exp_listbox.insert(tk.END, f"{skill}: {years}")
 
     def _add_experience_dialog(self):
-        dialog = tk.Toplevel(self); dialog.title("添加经验")
+        dialog = tk.Toplevel(self); dialog.title(self.texts['dialogs']['add_exp_title'])
         dialog.transient(self); dialog.grab_set()
-        ttk.Label(dialog, text="技能/领域名称:").pack(pady=(10, 2)); skill_entry = ttk.Entry(dialog, width=30); skill_entry.pack(pady=2, padx=20); skill_entry.focus_set()
-        ttk.Label(dialog, text="年数:").pack(pady=(10, 2)); years_entry = ttk.Entry(dialog, width=10); years_entry.pack(pady=2, padx=20)
+        ttk.Label(dialog, text=f"{self.texts['dialogs']['skill_name']}:").pack(pady=(10, 2)); skill_entry = ttk.Entry(dialog, width=30); skill_entry.pack(pady=2, padx=20); skill_entry.focus_set()
+        ttk.Label(dialog, text=f"{self.texts['dialogs']['years']}").pack(pady=(10, 2)); years_entry = ttk.Entry(dialog, width=10); years_entry.pack(pady=2, padx=20)
         def on_ok():
             skill_name = skill_entry.get().strip(); years_str = years_entry.get().strip()
-            if not skill_name: messagebox.showwarning("输入错误", "请输入技能名称。", parent=dialog); return
-            if skill_name == 'default': messagebox.showwarning("输入错误", "不能添加 'default'。", parent=dialog); return
+            if not skill_name: messagebox.showwarning(self.texts['common']['warning'], self.texts['messages']['input_error'].format(self.texts['dialogs']['skill_name']), parent=dialog); return
+            if skill_name == 'default': messagebox.showwarning(self.texts['common']['warning'], self.texts['messages']['cannot_modify'], parent=dialog); return
             try: years = int(years_str)
-            except ValueError: messagebox.showwarning("输入错误", "年数必须是整数。", parent=dialog); return
+            except ValueError: messagebox.showwarning(self.texts['common']['warning'], self.texts['messages']['invalid_years'], parent=dialog); return
             if 'experience' not in self.config: self.config['experience'] = {'default': 0}
             self.config['experience'][skill_name] = years; self._update_experience_listbox(); dialog.destroy()
         button_frame = ttk.Frame(dialog); button_frame.pack(pady=15)
-        ttk.Button(button_frame, text="确定", command=on_ok, width=8).pack(side=tk.LEFT, padx=10, ipady=2)
-        ttk.Button(button_frame, text="取消", command=dialog.destroy, width=8).pack(side=tk.LEFT, padx=10, ipady=2)
+        ttk.Button(button_frame, text=self.texts['common']['ok'], command=on_ok, width=8).pack(side=tk.LEFT, padx=10, ipady=2)
+        ttk.Button(button_frame, text=self.texts['common']['cancel'], command=dialog.destroy, width=8).pack(side=tk.LEFT, padx=10, ipady=2)
         dialog.update_idletasks()
         x = self.winfo_x() + (self.winfo_width() // 2) - (dialog.winfo_width() // 2)
         y = self.winfo_y() + (self.winfo_height() // 2) - (dialog.winfo_height() // 2)
@@ -1235,33 +1247,33 @@ class EasyApplyApp(tk.Tk):
 
     def _modify_experience_dialog(self):
         selection = self.exp_listbox.curselection()
-        if not selection: messagebox.showwarning("未选择", "请在列表中选择要修改的经验项。"); return
+        if not selection: messagebox.showwarning(self.texts['common']['warning'], self.texts['messages']['no_selection'].format(self.texts['common']['modify'], self.texts['dialogs']['skill_name'])); return
         selected_item = self.exp_listbox.get(selection[0])
         try: old_skill_name, old_years_str = map(str.strip, selected_item.split(':', 1))
-        except ValueError: messagebox.showerror("错误", "无法解析选中的经验项。"); return
+        except ValueError: messagebox.showerror(self.texts['common']['error'], self.texts['messages']['parse_error'].format(self.texts['dialogs']['skill_name'])); return
         is_default = (old_skill_name == 'default')
-        dialog = tk.Toplevel(self); dialog.title("修改经验")
+        dialog = tk.Toplevel(self); dialog.title(self.texts['dialogs']['modify_exp_title'])
         dialog.transient(self); dialog.grab_set()
-        ttk.Label(dialog, text="技能/领域名称:").pack(pady=(10, 2)); skill_entry = ttk.Entry(dialog, width=30); skill_entry.pack(pady=2, padx=20); skill_entry.insert(0, old_skill_name)
+        ttk.Label(dialog, text=f"{self.texts['dialogs']['skill_name']}:").pack(pady=(10, 2)); skill_entry = ttk.Entry(dialog, width=30); skill_entry.pack(pady=2, padx=20); skill_entry.insert(0, old_skill_name)
         if is_default: skill_entry.config(state='disabled')
-        ttk.Label(dialog, text="年数:").pack(pady=(10, 2)); years_entry = ttk.Entry(dialog, width=10); years_entry.pack(pady=2, padx=20); years_entry.insert(0, old_years_str)
+        ttk.Label(dialog, text=f"{self.texts['dialogs']['years']}").pack(pady=(10, 2)); years_entry = ttk.Entry(dialog, width=10); years_entry.pack(pady=2, padx=20); years_entry.insert(0, old_years_str)
         if not is_default: skill_entry.focus_set()
         else: years_entry.focus_set()
         def on_ok():
             new_skill_name = skill_entry.get().strip(); new_years_str = years_entry.get().strip()
-            if not new_skill_name: messagebox.showwarning("输入错误", "请输入技能名称。", parent=dialog); return
+            if not new_skill_name: messagebox.showwarning(self.texts['common']['warning'], self.texts['messages']['input_error'].format(self.texts['dialogs']['skill_name']), parent=dialog); return
             try: new_years = int(new_years_str)
-            except ValueError: messagebox.showwarning("输入错误", "年数必须是整数。", parent=dialog); return
+            except ValueError: messagebox.showwarning(self.texts['common']['warning'], self.texts['messages']['invalid_years'], parent=dialog); return
             if 'experience' in self.config:
                  if old_skill_name != new_skill_name and not is_default and old_skill_name in self.config['experience']:
                       if new_skill_name != 'default' and new_skill_name in self.config['experience']:
-                          if not messagebox.askyesno("确认覆盖", f"技能 '{new_skill_name}' 已存在。要覆盖吗？", parent=dialog): return
+                          if not messagebox.askyesno(self.texts['common']['confirm'], self.texts['messages']['confirm_overwrite'].format(self.texts['dialogs']['skill_name'], new_skill_name), parent=dialog): return
                       del self.config['experience'][old_skill_name]
                  self.config['experience'][new_skill_name] = new_years
             self._update_experience_listbox(); dialog.destroy()
         button_frame = ttk.Frame(dialog); button_frame.pack(pady=15)
-        ttk.Button(button_frame, text="确定", command=on_ok, width=8).pack(side=tk.LEFT, padx=10, ipady=2)
-        ttk.Button(button_frame, text="取消", command=dialog.destroy, width=8).pack(side=tk.LEFT, padx=10, ipady=2)
+        ttk.Button(button_frame, text=self.texts['common']['ok'], command=on_ok, width=8).pack(side=tk.LEFT, padx=10, ipady=2)
+        ttk.Button(button_frame, text=self.texts['common']['cancel'], command=dialog.destroy, width=8).pack(side=tk.LEFT, padx=10, ipady=2)
         dialog.update_idletasks()
         x = self.winfo_x() + (self.winfo_width() // 2) - (dialog.winfo_width() // 2)
         y = self.winfo_y() + (self.winfo_height() // 2) - (dialog.winfo_height() // 2)
@@ -1269,33 +1281,33 @@ class EasyApplyApp(tk.Tk):
 
     def _remove_experience(self):
         selection = self.exp_listbox.curselection()
-        if not selection: messagebox.showwarning("未选择", "请在列表中选择要移除的经验项。"); return
+        if not selection: messagebox.showwarning(self.texts['common']['warning'], self.texts['messages']['no_selection'].format(self.texts['common']['remove'], self.texts['dialogs']['skill_name'])); return
         selected_item = self.exp_listbox.get(selection[0])
         try: skill_name = selected_item.split(':', 1)[0].strip()
-        except ValueError: messagebox.showerror("错误", "无法解析选中的经验项。"); return
+        except ValueError: messagebox.showerror(self.texts['common']['error'], self.texts['messages']['parse_error'].format(self.texts['dialogs']['skill_name'])); return
 
-        if skill_name == 'default': messagebox.showerror("无法移除", "不能移除 'default' 条目。"); return
+        if skill_name == 'default': messagebox.showerror(self.texts['common']['error'], self.texts['messages']['cannot_delete_default']); return
 
         if 'experience' in self.config and skill_name in self.config['experience']:
-             if messagebox.askyesno("确认移除", f"确定要移除经验项 '{skill_name}' 吗？"):
+             if messagebox.askyesno(self.texts['common']['confirm'], self.texts['messages']['confirm_delete'].format(1, self.texts['dialogs']['skill_name'])):
                  del self.config['experience'][skill_name]
                  self._update_experience_listbox()
-        else: messagebox.showerror("错误", f"在配置中未找到经验项 '{skill_name}'。")
+        else: messagebox.showerror(self.texts['common']['error'], self.texts['messages']['item_not_found'].format(self.texts['dialogs']['skill_name'], skill_name))
 
 
     # --- Control Tab Creation --- (No changes needed)
     def _create_control_tab(self):
         frame = ttk.Frame(self.control_tab, padding=(10, 5)); frame.pack(expand=True, fill="both", padx=10, pady=5)
-        ttk.Label(frame, text="运行日志:").pack(anchor=tk.W, padx=5)
+        ttk.Label(frame, text=self.texts['control_tab']['operation_log']).pack(anchor=tk.W, padx=5)
         # 添加清除日志按钮
-        clear_log_btn = ttk.Button(frame, text="清除日志", command=self._clear_log)
+        clear_log_btn = ttk.Button(frame, text=self.texts['control_tab']['clear_log'], command=self._clear_log)
         clear_log_btn.pack(anchor=tk.E, padx=5, pady=(0, 3))
         self.output_area = scrolledtext.ScrolledText(frame, wrap=tk.WORD, height=15, state='disabled'); self.output_area.pack(expand=True, fill='both', padx=5, pady=5)
         button_frame = ttk.Frame(frame); button_frame.pack(fill=tk.X, pady=5)
-        self.save_button = ttk.Button(button_frame, text="保存配置", command=self._save_gui_config); self.save_button.pack(side=tk.LEFT, padx=5)
-        self.start_button = ttk.Button(button_frame, text="启动机器人", command=self._start_bot); self.start_button.pack(side=tk.LEFT, padx=5)
-        self.stop_button = ttk.Button(button_frame, text="停止", command=self._stop_bot, state='disabled'); self.stop_button.pack(side=tk.LEFT, padx=5)
-        edit_config_button = ttk.Button(button_frame, text="编辑YAML", command=self._open_config_file); edit_config_button.pack(side=tk.LEFT, padx=5)
+        self.save_button = ttk.Button(button_frame, text=self.texts['control_tab']['save_config'], command=self._save_gui_config); self.save_button.pack(side=tk.LEFT, padx=5)
+        self.start_button = ttk.Button(button_frame, text=self.texts['control_tab']['start_bot'], command=self._start_bot); self.start_button.pack(side=tk.LEFT, padx=5)
+        self.stop_button = ttk.Button(button_frame, text=self.texts['control_tab']['stop_bot'], command=self._stop_bot, state='disabled'); self.stop_button.pack(side=tk.LEFT, padx=5)
+        edit_config_button = ttk.Button(button_frame, text=self.texts['control_tab']['edit_yaml'], command=self._open_config_file); edit_config_button.pack(side=tk.LEFT, padx=5)
 
     def _clear_log(self):
         self.output_area.config(state='normal')
@@ -1317,9 +1329,9 @@ class EasyApplyApp(tk.Tk):
                         try:
                             if subprocess.call(['which', editor], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL) == 0: subprocess.Popen([editor, CONFIG_FILE]); opened = True; break
                         except FileNotFoundError: continue
-                    if not opened: messagebox.showwarning("无法打开编辑器", f"未能自动打开 {CONFIG_FILE}。请手动打开。")
-            else: messagebox.showinfo("文件未找到", f"{CONFIG_FILE} 不存在。")
-        except Exception as e: messagebox.showerror("打开文件错误", f"无法打开配置文件: {e}")
+                    if not opened: messagebox.showwarning(self.texts['common']['warning'], f"{self.texts['messages']['file_open_error']} {CONFIG_FILE}")
+                    else: messagebox.showinfo(self.texts['common']['warning'], self.texts['messages']['missing_file'].format(CONFIG_FILE))
+        except Exception as e: messagebox.showerror(self.texts['common']['error'], f"{self.texts['messages']['file_open_error']}: {e}")
 
 
     def _update_config_from_gui(self):
@@ -1388,20 +1400,23 @@ class EasyApplyApp(tk.Tk):
             # 更新EEO信息
             for key in self.vars['eeo']:
                 self.config['eeo'][key] = self.vars['eeo'][key].get()
+                
+            # 保存当前语言设置
+            self.config['language'] = self.lang_code
 
             return True
         except Exception as e:
             traceback.print_exc()
-            messagebox.showerror("配置更新错误", f"更新配置时出错:\n{str(e)}")
+            messagebox.showerror(self.texts['common']['error'], f"{self.texts['messages']['update_error']}:\n{str(e)}")
             return False
 
 
     # --- Other Methods (_save_gui_config, etc.) --- (No changes needed in these core logic methods)
     def _save_gui_config(self):
         if self._update_config_from_gui():
-            if save_config(self.config): self.status_label.config(text="配置已保存！")
-            else: self.status_label.config(text="保存配置时出错！")
-        else: self.status_label.config(text="更新配置值时出错，未保存。")
+            if save_config(self.config): self.status_label.config(text=self.texts['messages']['config_saved'])
+            else: self.status_label.config(text=self.texts['messages']['config_save_error'])
+        else: self.status_label.config(text=self.texts['messages']['config_update_error'])
     def _log_message(self, message):
         def append_text(): self.output_area.config(state='normal'); self.output_area.insert(tk.END, message); self.output_area.see(tk.END); self.output_area.config(state='disabled')
         if threading.current_thread() is threading.main_thread(): append_text()
@@ -1410,16 +1425,16 @@ class EasyApplyApp(tk.Tk):
         """启动main.py并在GUI中显示输出"""
         self._save_gui_config()
         if not self.config.get('email') or not self.config.get('password'):
-            messagebox.showwarning("缺少信息", "请输入LinkedIn邮箱和密码。")
+            messagebox.showwarning(self.texts['common']['warning'], self.texts['messages']['missing_credentials'])
             return
         pdf_resume = self.config.get('uploads', {}).get('resume', '')
         text_resume = self.config.get('textResume', '')
         if not pdf_resume and not text_resume:
-            messagebox.showwarning("缺少信息", "请至少指定 PDF简历 或 文本简历 文件路径。")
+            messagebox.showwarning(self.texts['common']['warning'], self.texts['messages']['missing_resume'])
             return
 
-        self.status_label.config(text="正在启动机器人...")
-        self._log_message("--- 启动 LinkedIn Easy Apply Bot ---\n")
+        self.status_label.config(text=self.texts['messages']['starting_bot'])
+        self._log_message(self.texts['messages']['bot_started'])
         self.start_button.config(state='disabled')
         self.stop_button.config(state='normal')
         self.save_button.config(state='disabled')
@@ -1429,33 +1444,18 @@ class EasyApplyApp(tk.Tk):
         
         try:
             # 使用更简单的方式启动，不捕获输出，不使用CREATE_NO_WINDOW标志
-            if sys.platform.startswith('win'):
-                # Windows: 直接启动，不使用CREATE_NO_WINDOW标志
-                self.bot_process = subprocess.Popen(
-                    [python_executable, "-u", "main.py"],
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.STDOUT,
-                    text=True,
-                    encoding='utf-8',
-                    errors='replace',
-                    bufsize=1,
-                    universal_newlines=True
-                    # 移除 creationflags 参数
-                )
-            else:
-                # 非Windows平台
-                self.bot_process = subprocess.Popen(
-                    [python_executable, "-u", "main.py"],
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.STDOUT,
-                    text=True,
-                    encoding='utf-8',
-                    errors='replace',
-                    bufsize=1,
-                    universal_newlines=True
-                )
+            self.bot_process = subprocess.Popen(
+                [python_executable, "-u", "main.py"],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                encoding='utf-8',
+                errors='replace',
+                bufsize=1,
+                universal_newlines=True
+            )
             
-            self._log_message("机器人已启动，请等待...\n")
+            self._log_message(self.texts['messages']['bot_waiting'])
             
             # 使用线程读取输出
             self.output_thread = threading.Thread(
@@ -1465,11 +1465,11 @@ class EasyApplyApp(tk.Tk):
             self.output_thread.start()
             
         except FileNotFoundError:
-            self._log_message("错误: 未找到'main.py'。请确保脚本在同一目录下。\n")
+            self._log_message(self.texts['messages']['bot_error'])
             self._on_bot_finish(error=True)
         except Exception as e:
-            self._log_message(f"启动机器人时出错: {e}\n")
-            print(f"启动错误: {e}")  # 调试输出
+            self._log_message(f"{self.texts['messages']['bot_start_error']}: {e}\n")
+            print(f"{self.texts['messages']['bot_start_error']}: {e}")  # 调试输出
             self._on_bot_finish(error=True)
 
     def _read_bot_output(self):
@@ -1495,14 +1495,14 @@ class EasyApplyApp(tk.Tk):
         except ValueError:
             # 当管道在读取操作中途被强制关闭时 (例如 terminate/kill),
             # readline 可能会抛出 ValueError: I/O operation on closed file.
-            print("读取输出时检测到管道关闭 (ValueError)")
-            self.after(0, self._log_message, "\n机器人进程输出管道已关闭。\n")
+            print(self.texts['messages']['pipe_closed'])
+            self.after(0, self._log_message, f"\n{self.texts['messages']['bot_pipe_closed']}\n")
             self.after(100, self._check_bot_process)  # 仍然检查最终状态
 
         except Exception as e:
             # 捕获其他可能的读取错误
             print(f"读取输出错误: {e}")  # 调试输出
-            self.after(0, self._log_message, f"\n读取机器人输出时发生未知错误: {e}\n")
+            self.after(0, self._log_message, f"\n{self.texts['messages']['bot_error_stopped']}: {e}\n")
             self.after(100, self._check_bot_process)  # 仍然检查最终状态
     
     def _check_bot_process(self):
@@ -1514,11 +1514,11 @@ class EasyApplyApp(tk.Tk):
     def _on_bot_finish(self, error=False):
         """处理机器人进程结束的情况"""
         if error:
-            self.status_label.config(text="机器人运行出错或被停止。")
-            self._log_message("\n--- 机器人运行出错或被停止 ---\n")
+            self.status_label.config(text=self.texts['messages']['bot_error_stopped'])
+            self._log_message(self.texts['messages']['bot_error_stopped'])
         else:
-            self.status_label.config(text="机器人运行完成。")
-            self._log_message("\n--- 机器人运行完成 ---\n")
+            self.status_label.config(text=self.texts['messages']['bot_finished'])
+            self._log_message(self.texts['messages']['bot_finished'])
             
         self.start_button.config(state='normal')
         self.stop_button.config(state='disabled')
@@ -1529,18 +1529,64 @@ class EasyApplyApp(tk.Tk):
     def _stop_bot(self):
         """停止运行中的机器人进程"""
         if hasattr(self, 'bot_process') and self.bot_process and self.bot_process.poll() is None:
-            self.status_label.config(text="正在停止机器人...")
+            self.status_label.config(text=self.texts['messages']['bot_stopping'])
             try:
                 self.bot_process.terminate()  # 尝试正常终止
                 try:
                     self.bot_process.wait(timeout=2)  # 等待最多2秒
                 except subprocess.TimeoutExpired:
                     self.bot_process.kill()  # 如果正常终止失败，强制关闭
-                self._log_message("\n--- 用户请求停止机器人 ---\n")
+                self._log_message(self.texts['messages']['bot_stopped'])
             except Exception as e:
-                self._log_message(f"\n停止机器人时出错: {e}\n")
+                self._log_message(f"{self.texts['messages']['bot_stop_error']}: {e}")
             finally:
                 self._on_bot_finish(error=True)
+    
+    def _create_language_selector(self):
+        """创建语言选择器"""
+        # 创建一个框架用于放置语言选择器
+        lang_frame = ttk.Frame(self)
+        lang_frame.pack(fill=tk.X, padx=10, pady=5)
+        
+        # 添加语言选择标签
+        ttk.Label(lang_frame, text=self.texts['common']['language'] + ":").pack(side=tk.LEFT, padx=5)
+        
+        # 添加语言选择下拉菜单
+        self.lang_var = tk.StringVar(value=self.lang_code)
+        lang_menu = ttk.Combobox(lang_frame, textvariable=self.lang_var, state="readonly", width=15)
+        lang_menu['values'] = [f"{code} - {name}" for code, name in AVAILABLE_LANGUAGES.items()]
+        # 设置当前语言
+        for i, (code, _) in enumerate(AVAILABLE_LANGUAGES.items()):
+            if code == self.lang_code:
+                lang_menu.current(i)
+                break
+        lang_menu.pack(side=tk.LEFT, padx=5)
+        
+        # 绑定语言切换事件
+        lang_menu.bind("<<ComboboxSelected>>", self._on_language_changed)
+        
+    def _on_language_changed(self, event):
+        """语言变更事件处理函数"""
+        # 获取语言代码（格式: "zh_CN - 简体中文"）
+        selected = self.lang_var.get().split(" - ")[0]
+        
+        if selected != self.lang_code:
+            # 询问是否切换语言（需要重启应用）
+            if messagebox.askyesno(
+                self.texts['common']['confirm'], 
+                self.texts['messages']['switch_language']
+            ):
+                # 保存当前配置
+                self._update_config_from_gui()
+                self.config['language'] = selected
+                self._save_config(self.config)
+                
+                # 重启应用
+                python = sys.executable
+                os.execl(python, python, *sys.argv)
+            else:
+                # 恢复之前的选择
+                self.lang_var.set(f"{self.lang_code} - {AVAILABLE_LANGUAGES[self.lang_code]}")
     
     def _on_closing(self):
         """直接关闭GUI，不再需要检查进程状态"""
@@ -1550,12 +1596,12 @@ class EasyApplyApp(tk.Tk):
     def _batch_add_languages(self):
         """批量添加语言能力"""
         dialog = tk.Toplevel(self)
-        dialog.title("批量添加语言")
+        dialog.title(self.texts['dialogs']['batch_add_lang_title'])
         dialog.transient(self)
         dialog.grab_set()
         
-        ttk.Label(dialog, text="输入格式：每行一个语言，格式为 '语言名称: 熟练度'").pack(pady=(10, 5), padx=10)
-        ttk.Label(dialog, text="例如：'英语: Native or bilingual'").pack(pady=(0, 10), padx=10)
+        ttk.Label(dialog, text=self.texts['dialogs']['batch_add_lang_format']).pack(pady=(10, 5), padx=10)
+        ttk.Label(dialog, text=self.texts['dialogs']['batch_add_lang_example']).pack(pady=(0, 10), padx=10)
         
         # 文本区域用于输入多个语言
         text_area = scrolledtext.ScrolledText(dialog, width=40, height=10)
@@ -1564,7 +1610,7 @@ class EasyApplyApp(tk.Tk):
         # 添加一个下拉框，显示可用的熟练度级别
         level_frame = ttk.Frame(dialog)
         level_frame.pack(pady=5, padx=10, fill=tk.X)
-        ttk.Label(level_frame, text="可用熟练度:").pack(side=tk.LEFT)
+        ttk.Label(level_frame, text=self.texts['dialogs']['available_proficiency']).pack(side=tk.LEFT)
         level_var = tk.StringVar()
         level_combo = ttk.Combobox(level_frame, textvariable=level_var, values=LANGUAGE_LEVELS, state="readonly", width=20)
         level_combo.pack(side=tk.LEFT, padx=(5, 0))
@@ -1576,7 +1622,7 @@ class EasyApplyApp(tk.Tk):
             if selected_level:
                 text_area.insert(tk.INSERT, f": {selected_level}")
         
-        ttk.Button(level_frame, text="插入熟练度", command=insert_level).pack(side=tk.LEFT, padx=(5, 0))
+        ttk.Button(level_frame, text=self.texts['dialogs']['insert_proficiency'], command=insert_level).pack(side=tk.LEFT, padx=(5, 0))
         
         def on_ok():
             lines = text_area.get("1.0", tk.END).strip().split('\n')
@@ -1599,7 +1645,7 @@ class EasyApplyApp(tk.Tk):
                     
                     # 验证熟练度是否有效
                     if level not in LANGUAGE_LEVELS:
-                        if not messagebox.askyesno("无效熟练度", 
+                        if not messagebox.askyesno(self.texts['common']['warning'], 
                                                  f"语言 '{lang_name}' 的熟练度 '{level}' 不在预设列表中。是否继续并将其设为 '{LANGUAGE_LEVELS[1]}'?",
                                                  parent=dialog):
                             continue
@@ -1609,27 +1655,27 @@ class EasyApplyApp(tk.Tk):
                         self.config['languages'] = {}
                     
                     # 检查是否已存在该语言
-                    if lang_name in self.config['languages'] and not messagebox.askyesno("确认覆盖", 
-                                                                                      f"语言 '{lang_name}' 已存在。要覆盖吗？", 
+                    if lang_name in self.config['languages'] and not messagebox.askyesno(self.texts['common']['confirm'], 
+                                                                                      self.texts['messages']['item_exists'].format(self.texts['dialogs']['lang_name'], lang_name), 
                                                                                       parent=dialog):
                         continue
                     
                     self.config['languages'][lang_name] = level
                     added_count += 1
                 except Exception as e:
-                    messagebox.showerror("添加错误", f"添加语言 '{line}' 时出错: {e}", parent=dialog)
+                    messagebox.showerror(self.texts['common']['error'], f"{self.texts['common']['error']} {self.texts['dialogs']['lang_name']} '{line}': {e}", parent=dialog)
             
             if added_count > 0:
                 self._update_language_listbox()
-                messagebox.showinfo("批量添加完成", f"成功添加了 {added_count} 个语言。", parent=dialog)
+                messagebox.showinfo(self.texts['common']['success'], self.texts['messages']['batch_add_success'].format(added_count, self.texts['dialogs']['lang_name']), parent=dialog)
                 dialog.destroy()
             else:
-                messagebox.showwarning("未添加", "没有添加任何语言。请检查输入格式。", parent=dialog)
+                messagebox.showwarning(self.texts['common']['warning'], self.texts['messages']['no_valid_items'].format(self.texts['dialogs']['lang_name']), parent=dialog)
         
         button_frame = ttk.Frame(dialog)
         button_frame.pack(pady=15)
-        ttk.Button(button_frame, text="确定", command=on_ok, width=8).pack(side=tk.LEFT, padx=10, ipady=2)
-        ttk.Button(button_frame, text="取消", command=dialog.destroy, width=8).pack(side=tk.LEFT, padx=10, ipady=2)
+        ttk.Button(button_frame, text=self.texts['common']['ok'], command=on_ok, width=8).pack(side=tk.LEFT, padx=10, ipady=2)
+        ttk.Button(button_frame, text=self.texts['common']['cancel'], command=dialog.destroy, width=8).pack(side=tk.LEFT, padx=10, ipady=2)
         
         # 居中显示对话框
         dialog.update_idletasks()
@@ -1641,10 +1687,10 @@ class EasyApplyApp(tk.Tk):
         """批量删除选中的语言"""
         selection = self.lang_listbox.curselection()
         if not selection:
-            messagebox.showwarning("未选择", "请在列表中选择要删除的语言。")
+            messagebox.showwarning(self.texts['common']['warning'], self.texts['messages']['no_selection'].format(self.texts['common']['delete'], self.texts['dialogs']['lang_name']))
             return
 
-        if not messagebox.askyesno("确认删除", f"确定要删除选中的 {len(selection)} 个语言吗？"):
+        if not messagebox.askyesno(self.texts['common']['confirm'], self.texts['messages']['confirm_bulk_delete'].format(len(selection), self.texts['dialogs']['lang_name'])):
             return
 
         # 因为每次删除一项后索引会变化，所以从后往前删除
@@ -1658,21 +1704,21 @@ class EasyApplyApp(tk.Tk):
                     del self.config['languages'][lang_name]
                     removed_count += 1
             except Exception as e:
-                messagebox.showerror("删除错误", f"删除语言 '{item}' 时出错: {e}")
+                messagebox.showerror(self.texts['common']['error'], f"{self.texts['common']['error']} {self.texts['dialogs']['lang_name']} '{item}': {e}")
         
         if removed_count > 0:
             self._update_language_listbox()
-            messagebox.showinfo("批量删除完成", f"成功删除了 {removed_count} 个语言。")
+            messagebox.showinfo(self.texts['common']['success'], self.texts['messages']['delete_success'].format(removed_count, self.texts['dialogs']['lang_name']))
     
     def _batch_add_experiences(self):
         """批量添加经验"""
         dialog = tk.Toplevel(self)
-        dialog.title("批量添加经验")
+        dialog.title(self.texts['dialogs']['batch_add_exp_title'])
         dialog.transient(self)
         dialog.grab_set()
         
-        ttk.Label(dialog, text="输入格式：每行一个经验，格式为 '技能/领域名称: 年数'").pack(pady=(10, 5), padx=10)
-        ttk.Label(dialog, text="例如：'Python: 3'").pack(pady=(0, 10), padx=10)
+        ttk.Label(dialog, text=self.texts['dialogs']['batch_add_exp_format']).pack(pady=(10, 5), padx=10)
+        ttk.Label(dialog, text=self.texts['dialogs']['batch_add_exp_example']).pack(pady=(0, 10), padx=10)
         
         # 文本区域用于输入多个经验
         text_area = scrolledtext.ScrolledText(dialog, width=40, height=10)
@@ -1691,8 +1737,8 @@ class EasyApplyApp(tk.Tk):
                         skill_name, years_str = map(str.strip, line.split(':', 1))
                     else:
                         # 如果没有指定年数，跳过
-                        messagebox.showwarning("格式错误", 
-                                            f"行 '{line}' 缺少年数。请使用 '技能: 年数' 格式。", 
+                        messagebox.showwarning(self.texts['common']['warning'], 
+                                            self.texts['messages']['invalid_format'].format(f"{line} - {self.texts['dialogs']['batch_add_exp_format']}"), 
                                             parent=dialog)
                         continue
                     
@@ -1703,15 +1749,15 @@ class EasyApplyApp(tk.Tk):
                     try:
                         years = int(years_str)
                     except ValueError:
-                        if not messagebox.askyesno("无效年数", 
-                                                f"经验 '{skill_name}' 的年数 '{years_str}' 不是整数。是否将其设为 0?",
+                        if not messagebox.askyesno(self.texts['common']['warning'], 
+                                                f"{self.texts['messages']['invalid_years']} {self.texts['dialogs']['skill_name']} '{skill_name}': '{years_str}'。是否设为0?",
                                                 parent=dialog):
                             continue
                         years = 0
                     
                     if skill_name == 'default':
-                        if not messagebox.askyesno("默认经验", 
-                                                "您正在修改默认经验年数。确定要继续吗？", 
+                        if not messagebox.askyesno(self.texts['common']['warning'], 
+                                                self.texts['messages']['cannot_modify'], 
                                                 parent=dialog):
                             continue
                     
@@ -1719,27 +1765,27 @@ class EasyApplyApp(tk.Tk):
                         self.config['experience'] = {'default': 0}
                     
                     # 检查是否已存在该技能
-                    if skill_name in self.config['experience'] and not messagebox.askyesno("确认覆盖", 
-                                                                                       f"技能 '{skill_name}' 已存在。要覆盖吗？", 
+                    if skill_name in self.config['experience'] and not messagebox.askyesno(self.texts['common']['confirm'], 
+                                                                                       self.texts['messages']['item_exists'].format(self.texts['dialogs']['skill_name'], skill_name), 
                                                                                        parent=dialog):
                         continue
                     
                     self.config['experience'][skill_name] = years
                     added_count += 1
                 except Exception as e:
-                    messagebox.showerror("添加错误", f"添加经验 '{line}' 时出错: {e}", parent=dialog)
+                    messagebox.showerror(self.texts['common']['error'], f"{self.texts['common']['error']} {self.texts['dialogs']['skill_name']} '{line}': {e}", parent=dialog)
             
             if added_count > 0:
                 self._update_experience_listbox()
-                messagebox.showinfo("批量添加完成", f"成功添加了 {added_count} 个经验。", parent=dialog)
+                messagebox.showinfo(self.texts['common']['success'], self.texts['messages']['batch_add_success'].format(added_count, self.texts['dialogs']['skill_name']), parent=dialog)
                 dialog.destroy()
             else:
-                messagebox.showwarning("未添加", "没有添加任何经验。请检查输入格式。", parent=dialog)
+                messagebox.showwarning(self.texts['common']['warning'], self.texts['messages']['no_valid_items'].format(self.texts['dialogs']['skill_name']), parent=dialog)
         
         button_frame = ttk.Frame(dialog)
         button_frame.pack(pady=15)
-        ttk.Button(button_frame, text="确定", command=on_ok, width=8).pack(side=tk.LEFT, padx=10, ipady=2)
-        ttk.Button(button_frame, text="取消", command=dialog.destroy, width=8).pack(side=tk.LEFT, padx=10, ipady=2)
+        ttk.Button(button_frame, text=self.texts['common']['ok'], command=on_ok, width=8).pack(side=tk.LEFT, padx=10, ipady=2)
+        ttk.Button(button_frame, text=self.texts['common']['cancel'], command=dialog.destroy, width=8).pack(side=tk.LEFT, padx=10, ipady=2)
         
         # 居中显示对话框
         dialog.update_idletasks()
@@ -1751,10 +1797,10 @@ class EasyApplyApp(tk.Tk):
         """批量删除选中的经验"""
         selection = self.exp_listbox.curselection()
         if not selection:
-            messagebox.showwarning("未选择", "请在列表中选择要删除的经验。")
+            messagebox.showwarning(self.texts['common']['warning'], self.texts['messages']['no_selection'].format(self.texts['common']['delete'], self.texts['dialogs']['skill_name']))
             return
         
-        if not messagebox.askyesno("确认删除", f"确定要删除选中的 {len(selection)} 个经验吗？"):
+        if not messagebox.askyesno(self.texts['common']['confirm'], self.texts['messages']['confirm_bulk_delete'].format(len(selection), self.texts['dialogs']['skill_name'])):
             return
         
         # 因为每次删除一项后索引会变化，所以先获取所有选中项
@@ -1767,18 +1813,18 @@ class EasyApplyApp(tk.Tk):
                 
                 # 不允许删除 default
                 if skill_name == 'default':
-                    messagebox.showwarning("不能删除", "不能删除默认经验项。")
+                    messagebox.showwarning(self.texts['common']['warning'], self.texts['messages']['cannot_delete_default'])
                     continue
                 
                 if 'experience' in self.config and skill_name in self.config['experience']:
                     del self.config['experience'][skill_name]
                     removed_count += 1
             except Exception as e:
-                messagebox.showerror("删除错误", f"删除经验 '{item}' 时出错: {e}")
+                messagebox.showerror(self.texts['common']['error'], f"{self.texts['common']['error']} {self.texts['dialogs']['skill_name']} '{item}': {e}")
         
         if removed_count > 0:
             self._update_experience_listbox()
-            messagebox.showinfo("批量删除完成", f"成功删除了 {removed_count} 个经验。")
+            messagebox.showinfo(self.texts['common']['success'], self.texts['messages']['delete_success'].format(removed_count, self.texts['dialogs']['skill_name']))
 
     def _update_customquestions_listbox(self):
         """更新自定义问答列表显示"""
@@ -1791,16 +1837,16 @@ class EasyApplyApp(tk.Tk):
     def _add_customquestion_dialog(self):
         """打开添加自定义问答对话框"""
         dialog = tk.Toplevel(self)
-        dialog.title("添加自定义问答")
+        dialog.title(self.texts['dialogs']['add_question_title'])
         dialog.geometry("400x200")
         dialog.transient(self)
         dialog.grab_set()
         
-        ttk.Label(dialog, text="问题:").grid(row=0, column=0, padx=5, pady=5, sticky=tk.W)
+        ttk.Label(dialog, text=self.texts['dialogs']['question']).grid(row=0, column=0, padx=5, pady=5, sticky=tk.W)
         question_entry = ttk.Entry(dialog, width=40)
         question_entry.grid(row=0, column=1, padx=5, pady=5, sticky=tk.EW)
         
-        ttk.Label(dialog, text="答案:").grid(row=1, column=0, padx=5, pady=5, sticky=tk.NW)
+        ttk.Label(dialog, text=self.texts['dialogs']['answer']).grid(row=1, column=0, padx=5, pady=5, sticky=tk.NW)
         answer_text = scrolledtext.ScrolledText(dialog, width=40, height=5)
         answer_text.grid(row=1, column=1, padx=5, pady=5, sticky=tk.EW)
         
@@ -1819,13 +1865,13 @@ class EasyApplyApp(tk.Tk):
                 self._save_gui_config()
                 dialog.destroy()
             else:
-                messagebox.showwarning("输入错误", "问题和答案都不能为空。", parent=dialog)
+                messagebox.showwarning(self.texts['common']['warning'], self.texts['messages']['missing_parameters'], parent=dialog)
         
         button_frame = ttk.Frame(dialog)
         button_frame.grid(row=2, column=0, columnspan=2, pady=10)
         
-        ttk.Button(button_frame, text="保存", command=save_question, width=10).pack(side=tk.LEFT, padx=5)
-        ttk.Button(button_frame, text="取消", command=dialog.destroy, width=10).pack(side=tk.LEFT, padx=5)
+        ttk.Button(button_frame, text=self.texts['common']['save'], command=save_question, width=10).pack(side=tk.LEFT, padx=5)
+        ttk.Button(button_frame, text=self.texts['common']['cancel'], command=dialog.destroy, width=10).pack(side=tk.LEFT, padx=5)
         
         dialog.columnconfigure(1, weight=1)
         dialog.rowconfigure(1, weight=1)
@@ -1844,7 +1890,7 @@ class EasyApplyApp(tk.Tk):
         """打开修改自定义问答对话框"""
         selected = self.customq_listbox.curselection()
         if not selected:
-            messagebox.showinfo("选择错误", "请先选择一个问题答案对。")
+            messagebox.showinfo(self.texts['common']['warning'], self.texts['messages']['no_selection'].format(self.texts['common']['modify'], self.texts['dialogs']['question']))
             return
         
         selected_item = self.customq_listbox.get(selected[0])
@@ -1856,21 +1902,21 @@ class EasyApplyApp(tk.Tk):
                 # 兼容旧格式
                 question, answer = selected_item.split(": ", 1)
         except ValueError:
-            messagebox.showerror("格式错误", "所选项目格式不正确，无法修改。")
+            messagebox.showerror(self.texts['common']['error'], self.texts['messages']['format_error'])
             return
         
         dialog = tk.Toplevel(self)
-        dialog.title("修改自定义问答")
+        dialog.title(self.texts['dialogs']['modify_question_title'])
         dialog.geometry("400x200")
         dialog.transient(self)
         dialog.grab_set()
         
-        ttk.Label(dialog, text="问题:").grid(row=0, column=0, padx=5, pady=5, sticky=tk.W)
+        ttk.Label(dialog, text=self.texts['dialogs']['question']).grid(row=0, column=0, padx=5, pady=5, sticky=tk.W)
         question_entry = ttk.Entry(dialog, width=40)
         question_entry.insert(0, question)
         question_entry.grid(row=0, column=1, padx=5, pady=5, sticky=tk.EW)
         
-        ttk.Label(dialog, text="答案:").grid(row=1, column=0, padx=5, pady=5, sticky=tk.NW)
+        ttk.Label(dialog, text=self.texts['dialogs']['answer']).grid(row=1, column=0, padx=5, pady=5, sticky=tk.NW)
         answer_text = scrolledtext.ScrolledText(dialog, width=40, height=5)
         answer_text.insert("1.0", answer)
         answer_text.grid(row=1, column=1, padx=5, pady=5, sticky=tk.EW)
@@ -1895,13 +1941,13 @@ class EasyApplyApp(tk.Tk):
                 self._save_gui_config()
                 dialog.destroy()
             else:
-                messagebox.showwarning("输入错误", "问题和答案都不能为空。", parent=dialog)
+                messagebox.showwarning(self.texts['common']['warning'], self.texts['messages']['missing_parameters'], parent=dialog)
 
         button_frame = ttk.Frame(dialog)
         button_frame.grid(row=2, column=0, columnspan=2, pady=10)
         
-        ttk.Button(button_frame, text="保存", command=save_modification, width=10).pack(side=tk.LEFT, padx=5)
-        ttk.Button(button_frame, text="取消", command=dialog.destroy, width=10).pack(side=tk.LEFT, padx=5)
+        ttk.Button(button_frame, text=self.texts['common']['save'], command=save_modification, width=10).pack(side=tk.LEFT, padx=5)
+        ttk.Button(button_frame, text=self.texts['common']['cancel'], command=dialog.destroy, width=10).pack(side=tk.LEFT, padx=5)
         
         dialog.columnconfigure(1, weight=1)
         dialog.rowconfigure(1, weight=1)
@@ -1920,12 +1966,12 @@ class EasyApplyApp(tk.Tk):
         """删除选中的自定义问答"""
         selected = self.customq_listbox.curselection()
         if not selected:
-            messagebox.showinfo("选择错误", "请先选择一个问题答案对。")
+            messagebox.showinfo(self.texts['common']['warning'], self.texts['messages']['no_selection'].format(self.texts['common']['delete'], self.texts['dialogs']['question']))
             return
         
         selected_items = [self.customq_listbox.get(idx) for idx in selected]
         
-        if messagebox.askyesno("确认删除", f"确定要删除选中的 {len(selected_items)} 个问题答案对吗？"):
+        if messagebox.askyesno(self.texts['common']['confirm'], self.texts['messages']['confirm_bulk_delete'].format(len(selected_items), self.texts['dialogs']['question'])):
             for item in selected_items:
                 try:
                     # 使用 " => " 作为分隔符拆分问题和答案
@@ -1947,12 +1993,12 @@ class EasyApplyApp(tk.Tk):
     def _batch_add_customquestions(self):
         """批量添加自定义问答"""
         dialog = tk.Toplevel(self)
-        dialog.title("批量添加自定义问答")
+        dialog.title(self.texts['dialogs']['batch_add_qa_title'])
         dialog.geometry("500x400")  # 增加高度
         dialog.transient(self)
         dialog.grab_set()
         
-        ttk.Label(dialog, text="每行一个问题答案对，格式为 '问题: 答案'").pack(pady=5)
+        ttk.Label(dialog, text=self.texts['dialogs']['batch_add_qa_format']).pack(pady=5)
         
         text_area = scrolledtext.ScrolledText(dialog, width=60, height=15)
         text_area.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
@@ -1981,20 +2027,20 @@ class EasyApplyApp(tk.Tk):
                         added_count += 1
             
             if added_count > 0:
-                messagebox.showinfo("批量添加完成", f"成功添加了 {added_count} 个问题答案对。", parent=dialog)
+                messagebox.showinfo(self.texts['common']['success'], self.texts['messages']['batch_add_success'].format(added_count, self.texts['dialogs']['question']), parent=dialog)
                 self._update_customquestions_listbox()
                 # 批量添加后保存配置
                 self._save_gui_config()
                 dialog.destroy()
             else:
-                messagebox.showwarning("添加失败", "没有找到有效的问题答案对，请确保格式正确。", parent=dialog)
+                messagebox.showwarning(self.texts['common']['warning'], self.texts['messages']['no_valid_items'].format(self.texts['dialogs']['question']), parent=dialog)
         
         button_frame = ttk.Frame(dialog)
         button_frame.pack(pady=10)
         
-        ttk.Button(button_frame, text="保存", command=save_batch, width=10).pack(side=tk.LEFT, padx=5)
-        ttk.Button(button_frame, text="取消", command=dialog.destroy, width=10).pack(side=tk.LEFT, padx=5)
-        ttk.Button(button_frame, text="从文件导入", command=lambda: self._import_qa_from_file(text_area), width=15).pack(side=tk.LEFT, padx=5)
+        ttk.Button(button_frame, text=self.texts['common']['save'], command=save_batch, width=10).pack(side=tk.LEFT, padx=5)
+        ttk.Button(button_frame, text=self.texts['common']['cancel'], command=dialog.destroy, width=10).pack(side=tk.LEFT, padx=5)
+        ttk.Button(button_frame, text=self.texts['dialogs']['import_from_file'], command=lambda: self._import_qa_from_file(text_area), width=15).pack(side=tk.LEFT, padx=5)
         
         # 居中显示对话框
         dialog.update_idletasks()
@@ -2009,11 +2055,11 @@ class EasyApplyApp(tk.Tk):
     def _import_qa_from_file(self, text_area):
         """从文件导入问题和答案"""
         filepath = filedialog.askopenfilename(
-            title="选择数据文件",
+            title=self.texts['dialogs']['select_file'],
             filetypes=(
-                ("文本文件", "*.txt"),
-                ("CSV文件", "*.csv"),
-                ("所有文件", "*.*")
+                ("Text Files", "*.txt"),
+                ("CSV Files", "*.csv"),
+                ("All Files", "*.*")
             )
         )
         
@@ -2025,20 +2071,20 @@ class EasyApplyApp(tk.Tk):
                 content = file.read()
                 text_area.delete("1.0", tk.END)
                 text_area.insert("1.0", content)
-                messagebox.showinfo("导入成功", "文件内容已导入，请检查格式并保存。")
+                messagebox.showinfo(self.texts['common']['success'], self.texts['messages']['extract_success'].format(filepath, ""))
         except Exception as e:
-            messagebox.showerror("导入错误", f"导入文件时出错：{e}")
+            messagebox.showerror(self.texts['common']['error'], f"{self.texts['messages']['file_open_error'].format(str(e))}")
 
     def _batch_remove_customquestions(self):
         """批量删除自定义问答"""
         selected = self.customq_listbox.curselection()
         if not selected:
-            messagebox.showinfo("选择错误", "请先选择至少一个问题答案对。")
+            messagebox.showinfo(self.texts['common']['warning'], self.texts['messages']['no_selection'].format(self.texts['common']['delete'], self.texts['dialogs']['question']))
             return
         
         selected_items = [self.customq_listbox.get(idx) for idx in selected]
         
-        if messagebox.askyesno("确认删除", f"确定要删除选中的 {len(selected_items)} 个问题答案对吗？"):
+        if messagebox.askyesno(self.texts['common']['confirm'], self.texts['messages']['confirm_bulk_delete'].format(len(selected_items), self.texts['dialogs']['question'])):
             removed_count = 0
             for item in selected_items:
                 try:
@@ -2058,7 +2104,7 @@ class EasyApplyApp(tk.Tk):
             self._update_customquestions_listbox()
             # 批量删除后保存配置
             self._save_gui_config()
-            messagebox.showinfo("批量删除完成", f"成功删除了 {removed_count} 个问题答案对。")
+            messagebox.showinfo(self.texts['common']['success'], self.texts['messages']['delete_success'].format(removed_count, self.texts['dialogs']['question']))
 
     def _save_config(self, config_to_save):
         # 确保customQuestions中的特殊字符被正确处理
@@ -2094,26 +2140,26 @@ class EasyApplyApp(tk.Tk):
         frame.columnconfigure(0, weight=1)
         frame.columnconfigure(1, weight=1)
         # 工作经历区
-        work_frame = ttk.LabelFrame(frame, text="工作经历", padding=(10, 5))
+        work_frame = ttk.LabelFrame(frame, text=self.texts['experience_labels']['work_frame'], padding=(10, 5))
         work_frame.grid(row=0, column=0, sticky=tk.NSEW, padx=5, pady=5)
         self.work_listbox = tk.Listbox(work_frame, height=10, width=38)
         self.work_listbox.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
         work_btn_frame = ttk.Frame(work_frame)
         work_btn_frame.pack(side=tk.TOP, fill=tk.X, pady=3)
-        ttk.Button(work_btn_frame, text="添加", command=self._add_work_dialog, width=8).pack(side=tk.LEFT, padx=5)
-        ttk.Button(work_btn_frame, text="编辑", command=self._edit_work_dialog, width=8).pack(side=tk.LEFT, padx=5)
-        ttk.Button(work_btn_frame, text="删除", command=self._remove_work, width=8).pack(side=tk.LEFT, padx=5)
+        ttk.Button(work_btn_frame, text=self.texts['buttons']['add_work'], command=self._add_work_dialog, width=15).pack(side=tk.LEFT, padx=5)
+        ttk.Button(work_btn_frame, text=self.texts['buttons']['edit_work'], command=self._edit_work_dialog, width=15).pack(side=tk.LEFT, padx=5)
+        ttk.Button(work_btn_frame, text=self.texts['buttons']['remove_work'], command=self._remove_work, width=15).pack(side=tk.LEFT, padx=5)
         self._update_work_listbox()
         # 学历经历区
-        edu_frame = ttk.LabelFrame(frame, text="学历经历", padding=(10, 5))
+        edu_frame = ttk.LabelFrame(frame, text=self.texts['experience_labels']['education_frame'], padding=(10, 5))
         edu_frame.grid(row=0, column=1, sticky=tk.NSEW, padx=5, pady=5)
         self.edu_listbox = tk.Listbox(edu_frame, height=10, width=38)
         self.edu_listbox.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
         edu_btn_frame = ttk.Frame(edu_frame)
         edu_btn_frame.pack(side=tk.TOP, fill=tk.X, pady=3)
-        ttk.Button(edu_btn_frame, text="添加", command=self._add_edu_dialog, width=8).pack(side=tk.LEFT, padx=5)
-        ttk.Button(edu_btn_frame, text="编辑", command=self._edit_edu_dialog, width=8).pack(side=tk.LEFT, padx=5)
-        ttk.Button(edu_btn_frame, text="删除", command=self._remove_edu, width=8).pack(side=tk.LEFT, padx=5)
+        ttk.Button(edu_btn_frame, text=self.texts['buttons']['add_edu'], command=self._add_edu_dialog, width=15).pack(side=tk.LEFT, padx=5)
+        ttk.Button(edu_btn_frame, text=self.texts['buttons']['edit_edu'], command=self._edit_edu_dialog, width=15).pack(side=tk.LEFT, padx=5)
+        ttk.Button(edu_btn_frame, text=self.texts['buttons']['remove_edu'], command=self._remove_edu, width=15).pack(side=tk.LEFT, padx=5)
         self._update_edu_listbox()
 
     def _update_work_listbox(self):
@@ -2171,7 +2217,7 @@ class EasyApplyApp(tk.Tk):
         works = self.config.get('workExperiences', [])
         data = works[edit_idx] if edit_idx is not None else {}
         dialog = tk.Toplevel(self)
-        dialog.title("编辑工作经历" if edit_idx is not None else "添加工作经历")
+        dialog.title(self.texts['experience_tab']['edit_work'] if edit_idx is not None else self.texts['experience_tab']['add_work'])
         
         # 获取当前年份
         current_year = datetime.datetime.now().year
@@ -2186,7 +2232,8 @@ class EasyApplyApp(tk.Tk):
         
         # 普通文本字段
         text_fields = ['title', 'company', 'city', 'description']
-        text_labels = ['职位', '公司', '城市', '描述']
+        text_labels = [self.texts['experience_tab']['title'], self.texts['experience_tab']['company'], 
+                      self.texts['experience_tab']['city'], self.texts['experience_tab']['description']]
         
         # 创建基础变量字典
         vars = {}
@@ -2200,7 +2247,7 @@ class EasyApplyApp(tk.Tk):
         
         # 添加日期字段 - 起始日期
         row = len(text_fields)
-        ttk.Label(dialog, text="起始日期:").grid(row=row, column=0, sticky=tk.W, padx=5, pady=3)
+        ttk.Label(dialog, text=self.texts["experience_tab"]["start_date"]).grid(row=row, column=0, sticky=tk.W, padx=5, pady=3)
         date_frame = ttk.Frame(dialog)
         date_frame.grid(row=row, column=1, sticky=tk.W, padx=5, pady=3)
         
@@ -2216,7 +2263,7 @@ class EasyApplyApp(tk.Tk):
         
         # 添加日期字段 - 结束日期
         row += 1
-        ttk.Label(dialog, text="结束日期:").grid(row=row, column=0, sticky=tk.W, padx=5, pady=3)
+        ttk.Label(dialog, text=self.texts["experience_tab"]["end_date"]).grid(row=row, column=0, sticky=tk.W, padx=5, pady=3)
         to_date_frame = ttk.Frame(dialog)
         to_date_frame.grid(row=row, column=1, sticky=tk.W, padx=5, pady=3)
         
@@ -2244,7 +2291,7 @@ class EasyApplyApp(tk.Tk):
                 to_month_var.set("Month")
                 to_year_var.set("Year")
         
-        ttk.Checkbutton(dialog, text="目前在职", variable=current_var, command=toggle_to_fields).grid(row=row, column=0, sticky=tk.W, padx=5, pady=10)
+        ttk.Checkbutton(dialog, text=self.texts['experience_tab']['current_position'], variable=current_var, command=toggle_to_fields).grid(row=row, column=0, sticky=tk.W, padx=5, pady=10)
         toggle_to_fields()  # 初始化状态
         
         def on_ok():
@@ -2258,16 +2305,16 @@ class EasyApplyApp(tk.Tk):
             
             # 验证必填字段
             if entry['title'].strip() == "" or entry['company'].strip() == "":
-                messagebox.showwarning("输入错误", "职位和公司是必填字段", parent=dialog)
+                messagebox.showwarning(self.texts['common']['warning'], self.texts['messages']['required_fields'].format(self.texts['experience_tab']['required_work_fields']), parent=dialog)
                 return
                 
             # 验证日期选择
             if from_month == "Month" or from_year == "Year":
-                messagebox.showwarning("输入错误", "请选择起始日期", parent=dialog)
+                messagebox.showwarning(self.texts['common']['warning'], self.texts['experience_tab']['select_start_date'], parent=dialog)
                 return
                 
             if not current_var.get() and (to_month == "Month" or to_year == "Year"):
-                messagebox.showwarning("输入错误", "请选择结束日期或选择目前在职", parent=dialog)
+                messagebox.showwarning(self.texts['common']['warning'], self.texts['messages']['select_end_date'].format(self.texts['experience_tab']['current_position']), parent=dialog)
                 return
             
             # 设置值
@@ -2287,8 +2334,8 @@ class EasyApplyApp(tk.Tk):
             dialog.destroy()
             
         # 按钮
-        ttk.Button(dialog, text="确定", command=on_ok).grid(row=row+1, column=0, padx=5, pady=10)
-        ttk.Button(dialog, text="取消", command=dialog.destroy).grid(row=row+1, column=1, padx=5, pady=10)
+        ttk.Button(dialog, text=self.texts['common']['ok'], command=on_ok).grid(row=row+1, column=0, padx=5, pady=10)
+        ttk.Button(dialog, text=self.texts['common']['cancel'], command=dialog.destroy).grid(row=row+1, column=1, padx=5, pady=10)
 
     def _add_edu_dialog(self):
         self._edu_dialog()
@@ -2308,7 +2355,7 @@ class EasyApplyApp(tk.Tk):
         edus = self.config.get('educations', [])
         data = edus[edit_idx] if edit_idx is not None else {}
         dialog = tk.Toplevel(self)
-        dialog.title("编辑学历经历" if edit_idx is not None else "添加学历经历")
+        dialog.title(self.texts['experience_tab']['edit_edu'] if edit_idx is not None else self.texts['experience_tab']['add_edu'])
         
         # 获取当前年份
         current_year = datetime.datetime.now().year
@@ -2323,7 +2370,8 @@ class EasyApplyApp(tk.Tk):
         
         # 普通文本字段
         text_fields = ['school', 'city', 'degree', 'major']
-        text_labels = ['学校', '城市', '学位', '专业']
+        text_labels = [self.texts['experience_tab']['school'], self.texts['experience_tab']['city'], 
+                      self.texts['experience_tab']['degree'], self.texts['experience_tab']['major']]
         
         # 创建基础变量字典
         vars = {}
@@ -2337,7 +2385,7 @@ class EasyApplyApp(tk.Tk):
         
         # 添加日期字段 - 起始日期
         row = len(text_fields)
-        ttk.Label(dialog, text="起始日期:").grid(row=row, column=0, sticky=tk.W, padx=5, pady=3)
+        ttk.Label(dialog, text=self.texts["experience_tab"]["start_date"]).grid(row=row, column=0, sticky=tk.W, padx=5, pady=3)
         date_frame = ttk.Frame(dialog)
         date_frame.grid(row=row, column=1, sticky=tk.W, padx=5, pady=3)
         
@@ -2353,7 +2401,7 @@ class EasyApplyApp(tk.Tk):
         
         # 添加日期字段 - 结束日期
         row += 1
-        ttk.Label(dialog, text="结束日期:").grid(row=row, column=0, sticky=tk.W, padx=5, pady=3)
+        ttk.Label(dialog, text=self.texts["experience_tab"]["end_date"]).grid(row=row, column=0, sticky=tk.W, padx=5, pady=3)
         to_date_frame = ttk.Frame(dialog)
         to_date_frame.grid(row=row, column=1, sticky=tk.W, padx=5, pady=3)
         
@@ -2381,7 +2429,7 @@ class EasyApplyApp(tk.Tk):
                 to_month_var.set("Month")
                 to_year_var.set("Year")
         
-        ttk.Checkbutton(dialog, text="目前就读", variable=current_var, command=toggle_to_fields).grid(row=row, column=0, sticky=tk.W, padx=5, pady=10)
+        ttk.Checkbutton(dialog, text=self.texts['experience_tab']['current_study'], variable=current_var, command=toggle_to_fields).grid(row=row, column=0, sticky=tk.W, padx=5, pady=10)
         toggle_to_fields()  # 初始化状态
         
         def on_ok():
@@ -2395,16 +2443,16 @@ class EasyApplyApp(tk.Tk):
             
             # 验证必填字段
             if entry['school'].strip() == "" or entry['degree'].strip() == "":
-                messagebox.showwarning("输入错误", "学校和学位是必填字段", parent=dialog)
+                messagebox.showwarning(self.texts['common']['warning'], self.texts['messages']['required_fields'].format(self.texts['experience_tab']['required_edu_fields']), parent=dialog)
                 return
                 
             # 验证日期选择
             if from_month == "Month" or from_year == "Year":
-                messagebox.showwarning("输入错误", "请选择起始日期", parent=dialog)
+                messagebox.showwarning(self.texts['common']['warning'], self.texts['experience_tab']['select_start_date'], parent=dialog)
                 return
                 
             if not current_var.get() and (to_month == "Month" or to_year == "Year"):
-                messagebox.showwarning("输入错误", "请选择结束日期或选择目前就读", parent=dialog)
+                messagebox.showwarning(self.texts['common']['warning'], self.texts['messages']['select_end_date'].format(self.texts['experience_tab']['current_study']), parent=dialog)
                 return
             
             # 设置值
@@ -2424,8 +2472,8 @@ class EasyApplyApp(tk.Tk):
             dialog.destroy()
             
         # 按钮
-        ttk.Button(dialog, text="确定", command=on_ok).grid(row=row+1, column=0, padx=5, pady=10)
-        ttk.Button(dialog, text="取消", command=dialog.destroy).grid(row=row+1, column=1, padx=5, pady=10)
+        ttk.Button(dialog, text=self.texts['common']['ok'], command=on_ok).grid(row=row+1, column=0, padx=5, pady=10)
+        ttk.Button(dialog, text=self.texts['common']['cancel'], command=dialog.destroy).grid(row=row+1, column=1, padx=5, pady=10)
 
     def _create_ai_assistant_tab(self):
         """创建AI助手标签页 - 使用远程服务器API从文本简历中提取内容""" 
@@ -2433,30 +2481,30 @@ class EasyApplyApp(tk.Tk):
         main_frame.pack(expand=True, fill="both", padx=10, pady=5)
         
         # 标题和说明
-        ttk.Label(main_frame, text="AI助手 - 从简历提取内容", font=("Helvetica", 12, "bold")).pack(pady=(0, 5))
-        ttk.Label(main_frame, text="AI将从您的文本简历中提取内容自动填充表单").pack(anchor=tk.W, pady=(0, 10))
+        ttk.Label(main_frame, text=self.texts['ai_tab']['title'], font=("Helvetica", 12, "bold")).pack(pady=(0, 5))
+        ttk.Label(main_frame, text=self.texts['ai_tab']['description']).pack(anchor=tk.W, pady=(0, 10))
         
         # 简历文件提示
-        resume_frame = ttk.LabelFrame(main_frame, text="简历文件", padding=(10, 5))
+        resume_frame = ttk.LabelFrame(main_frame, text=self.texts['ai_tab']['resume_file'], padding=(10, 5))
         resume_frame.pack(fill=tk.X, padx=5, pady=5)
         
-        ttk.Label(resume_frame, text="系统将使用您在\"基本设置\"标签页中指定的文本简历文件:").grid(row=0, column=0, sticky=tk.W, padx=5, pady=5)
-        self.resume_status_label = ttk.Label(resume_frame, text="未设置文本简历文件")
+        ttk.Label(resume_frame, text=self.texts['ai_tab']['resume_file_description']).grid(row=0, column=0, sticky=tk.W, padx=5, pady=5)
+        self.resume_status_label = ttk.Label(resume_frame, text=self.texts['ai_tab']['no_resume_file'])
         self.resume_status_label.grid(row=1, column=0, sticky=tk.W, padx=5, pady=5)
-        ttk.Button(resume_frame, text="检查文件", command=self._check_resume_file).grid(row=1, column=1, padx=5, pady=5)
+        ttk.Button(resume_frame, text=self.texts['ai_tab']['check_file'], command=self._check_resume_file).grid(row=1, column=1, padx=5, pady=5)
         resume_frame.columnconfigure(0, weight=1)
         
         # 服务器配置区域
-        server_frame = ttk.LabelFrame(main_frame, text="服务器配置", padding=(10, 5))
+        server_frame = ttk.LabelFrame(main_frame, text=self.texts['ai_tab']['server_config'], padding=(10, 5))
         server_frame.pack(fill=tk.X, padx=5, pady=5)
         
-        ttk.Label(server_frame, text="服务器URL:").grid(row=0, column=0, sticky=tk.W, padx=5, pady=5)
+        ttk.Label(server_frame, text=self.texts['ai_tab']['server_url']).grid(row=0, column=0, sticky=tk.W, padx=5, pady=5)
         ttk.Entry(server_frame, textvariable=self.vars['aiServerUrl'], width=50).grid(row=0, column=1, sticky=tk.EW, padx=5, pady=5)
-        ttk.Button(server_frame, text="测试连接", command=self._test_ai_server).grid(row=0, column=2, padx=5, pady=5)
+        ttk.Button(server_frame, text=self.texts['ai_tab']['test_connection'], command=self._test_ai_server).grid(row=0, column=2, padx=5, pady=5)
         server_frame.columnconfigure(1, weight=1)
         
         # 创建功能选择区域
-        options_frame = ttk.LabelFrame(main_frame, text="选择要从简历中提取的内容", padding=(10, 5))
+        options_frame = ttk.LabelFrame(main_frame, text=self.texts['ai_tab']['select_content'], padding=(10, 5))
         options_frame.pack(fill=tk.X, padx=5, pady=5)
         
         # 选项变量
@@ -2477,13 +2525,13 @@ class EasyApplyApp(tk.Tk):
             
             # 根据选项键显示友好名称
             option_labels = {
-                'languages': '语言能力',
-                'skills': '技能经验',
-                'personal_info': '个人资料',
-                'eeo': 'EEO信息',
-                'salary': '最低期望薪资',
-                'work_experience': '工作经历',
-                'education': '学历经历',
+                'languages': self.texts['ai_tab']['option_languages'],
+                'skills': self.texts['ai_tab']['option_skills'],
+                'personal_info': self.texts['ai_tab']['option_personal_info'],
+                'eeo': self.texts['ai_tab']['option_eeo'],
+                'salary': self.texts['ai_tab']['option_salary'],
+                'work_experience': self.texts['ai_tab']['option_work_experience'],
+                'education': self.texts['ai_tab']['option_education'],
             }
             
             ttk.Checkbutton(options_frame, text=option_labels.get(option_key, option_key), 
@@ -2502,11 +2550,11 @@ class EasyApplyApp(tk.Tk):
         self.ai_progress.pack(side=tk.LEFT, padx=(0, 10), fill=tk.X, expand=True)
         
         # 运行按钮
-        self.run_ai_btn = ttk.Button(action_frame, text="从简历提取", command=self._run_ai_assistant, width=15)
+        self.run_ai_btn = ttk.Button(action_frame, text=self.texts['ai_tab']['run_button'], command=self._run_ai_assistant, width=15)
         self.run_ai_btn.pack(side=tk.LEFT, padx=5)
         
         # 输出区域
-        output_frame = ttk.LabelFrame(main_frame, text="AI输出日志", padding=(10, 5))
+        output_frame = ttk.LabelFrame(main_frame, text=self.texts['ai_tab']['output_log'], padding=(10, 5))
         output_frame.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
         
         self.ai_output = scrolledtext.ScrolledText(output_frame, wrap=tk.WORD, height=10)
@@ -2517,17 +2565,17 @@ class EasyApplyApp(tk.Tk):
         self.after(100, self._check_resume_file)
         
         # 设置默认提示文本 - 不再显示在界面上，但后端仍然需要
-        self.ai_prompt = "请根据我的简历内容提取信息，不要编造任何内容。"
+        self.ai_prompt = self.texts['ai_tab']['default_prompt']
     
     def _run_ai_assistant(self):
-        """运行AI助手，分析简历"""
+        """Run AI assistant to analyze resume"""
         # 更新按钮状态
         self.run_ai_btn.config(state=tk.DISABLED)
         
         # 重置输出区
         self.ai_output.config(state=tk.NORMAL)
         self.ai_output.delete('1.0', tk.END)
-        self.ai_output.insert(tk.END, "准备分析简历...\n")
+        self.ai_output.insert(tk.END, self.texts['ai_tab']['preparing'] + "\n")
         self.ai_output.config(state=tk.DISABLED)
         
         # 获取选项
@@ -2548,7 +2596,7 @@ class EasyApplyApp(tk.Tk):
             options.append('education')
         
         if not options:
-            self._update_ai_log("错误: 请至少选择一个提取选项")
+            self._update_ai_log(self.texts['ai_tab']['error_no_options'])
             self.run_ai_btn.config(state=tk.NORMAL)
             return
         
@@ -2560,7 +2608,7 @@ class EasyApplyApp(tk.Tk):
         # 获取服务器URL
         server_url = self.vars['aiServerUrl'].get()
         if not server_url:
-            self._update_ai_log("错误: 请输入服务器URL")
+            self._update_ai_log(self.texts['ai_tab']['error_no_server_url'])
             self.run_ai_btn.config(state=tk.NORMAL)
             return
         
@@ -2570,7 +2618,7 @@ class EasyApplyApp(tk.Tk):
         thread.start()
     
     def _process_resume(self, server_url, options):
-        """在线程中处理简历分析"""
+        """Process resume analysis in a thread"""
         try:
             # 读取简历文件内容
             resume_path = self.vars['textResume_path'].get()
@@ -2591,7 +2639,7 @@ class EasyApplyApp(tk.Tk):
                 'metadata': metadata
             }
             
-            self._update_ai_log("正在发送请求到服务器...")
+            self._update_ai_log(self.texts['ai_tab']['sending_request'])
             
             # 发送请求到服务器
             extract_url = f"{server_url}/extract-from-resume"
@@ -2605,29 +2653,29 @@ class EasyApplyApp(tk.Tk):
             # 处理响应
             if response.status_code == 200:
                 ai_result = response.json()
-                self._update_ai_log("收到AI分析结果，正在处理...")
+                self._update_ai_log(self.texts['ai_tab']['received_results'])
                 
                 # 使用服务器返回的结果与客户端元数据进行增强
                 enhanced_result = self._enhance_result(ai_result, metadata)
                 
                 # 显示结果摘要
                 result_text = json.dumps(enhanced_result, indent=2, ensure_ascii=False)
-                self._update_ai_log("分析完成！结果如下:\n\n" + result_text)
+                self._update_ai_log(self.texts['ai_tab']['analysis_complete'] + "\n\n" + result_text)
                 
                 # 将结果应用到界面配置中
-                self._update_ai_log("\n正在更新界面...")
+                self._update_ai_log("\n" + self.texts['ai_tab']['updating_interface'])
                 self._apply_ai_data(enhanced_result)
-                self._update_ai_log("界面更新完成！")
+                self._update_ai_log(self.texts['ai_tab']['update_complete'])
             else:
-                error_msg = f"服务器错误: {response.status_code} - {response.text}"
+                error_msg = f"{self.texts['ai_tab']['server_error']}: {response.status_code} - {response.text}"
                 self._update_ai_log(error_msg)
         except requests.exceptions.Timeout:
-            self._update_ai_log("请求超时，可能是因为简历内容过大或网络问题。\n如需更好的体验，请考虑使用代理或运行本地服务器。")
+            self._update_ai_log(self.texts['ai_tab']['request_timeout'])
         except requests.exceptions.RequestException as e:
-            self._update_ai_log(f"请求错误: {str(e)}")
+            self._update_ai_log(f"{self.texts['ai_tab']['request_error']}: {str(e)}")
         except Exception as e:
             traceback_str = traceback.format_exc()
-            self._update_ai_log(f"处理错误: {str(e)}\n{traceback_str}")
+            self._update_ai_log(f"{self.texts['ai_tab']['processing_error']}: {str(e)}\n{traceback_str}")
         finally:
             # 恢复按钮状态
             self.after(0, lambda: self.run_ai_btn.config(state=tk.NORMAL))
@@ -2641,7 +2689,7 @@ class EasyApplyApp(tk.Tk):
         """将AI结果应用到界面配置中"""
         try:
             update_count = 0  # 记录成功更新的项目数
-            self._update_ai_log("开始应用AI识别结果到配置...")
+            self._update_ai_log(self.texts['ai_tab']['start_applying_results'])
             
             # 更新语言能力
             if 'languages' in ai_result and isinstance(ai_result['languages'], list) and ai_result['languages']:
@@ -2672,7 +2720,7 @@ class EasyApplyApp(tk.Tk):
                 # 更新界面
                 self._update_language_listbox()
                 if lang_count > 0:
-                    self._update_ai_log(f"已更新 {lang_count} 个语言")
+                    self._update_ai_log(self.texts['ai_tab']['updated_languages'].format(lang_count))
                     update_count += 1
             
             # 更新技能经验
@@ -2705,7 +2753,7 @@ class EasyApplyApp(tk.Tk):
                 # 更新界面
                 self._update_experience_listbox()
                 if skill_count > 0:
-                    self._update_ai_log(f"已更新 {skill_count} 个技能")
+                    self._update_ai_log(self.texts['ai_tab']['updated_skills'].format(skill_count))
                     update_count += 1
             
             # 更新个人信息 - 严格按照现有格式
@@ -3053,20 +3101,20 @@ class EasyApplyApp(tk.Tk):
                 self._update_ai_log("没有发现可用的数据可以更新")
             
         except Exception as e:
-            self._update_ai_log(f"应用AI数据到界面时出错: {str(e)}")
+            self._update_ai_log(f"{self.texts['ai_tab']['apply_data_error']}: {str(e)}")
             traceback_str = traceback.format_exc()
-            print(f"GUI数据更新错误: {traceback_str}")  # 调试输出
+            print(f"{self.texts['messages']['gui_update_error']}: {traceback_str}")  # 调试输出
     
     def _test_ai_server(self):
         """测试AI服务器连接"""
         server_url = self.vars['aiServerUrl'].get().strip()
         if not server_url:
-            messagebox.showerror("错误", "请输入服务器URL")
+            messagebox.showerror(self.texts['common']['error'], self.texts['ai_tab']['error_no_server_url'])
             return
         
         # 在AI输出区域显示测试信息
         self.ai_output.config(state="normal")
-        self.ai_output.insert(tk.END, f"正在测试连接到: {server_url}/test...\n")
+        self.ai_output.insert(tk.END, f"{self.texts['ai_tab']['testing_connection']} {server_url}/test...\n")
         self.ai_output.config(state="disabled")
         
         def test_connection():
@@ -3077,13 +3125,14 @@ class EasyApplyApp(tk.Tk):
                 if response.status_code == 200:
                     data = response.json()
                     if data.get('status') == 'ok':
-                        self.after(0, lambda: self._update_test_result(f"连接成功! 服务器响应: {data.get('message', '服务器运行正常')}"))
+                        self.after(0, lambda: self._update_test_result(f"{self.texts['ai_tab']['connection_successful']} {data.get('message', self.texts['ai_tab']['server_ok'])}"))
                     else:
-                        self.after(0, lambda: self._update_test_result(f"服务器响应异常: {data}"))
+                        self.after(0, lambda: self._update_test_result(f"{self.texts['ai_tab']['server_response_abnormal']} {data}"))
                 else:
-                    self.after(0, lambda: self._update_test_result(f"服务器返回错误代码: {response.status_code}"))
+                    self.after(0, lambda: self._update_test_result(f"{self.texts['ai_tab']['server_error_code']} {response.status_code}"))
             except Exception as e:
-                self.after(0, lambda: self._update_test_result(f"连接失败: {str(e)}"))
+                error_message = str(e)  # 将错误消息保存在局部变量中
+                self.after(0, lambda: self._update_test_result(f"{self.texts['ai_tab']['connection_failed']} {error_message}"))
         
         # 在单独的线程中运行，避免阻塞GUI
         threading.Thread(target=test_connection, daemon=True).start()
@@ -3186,28 +3235,28 @@ class EasyApplyApp(tk.Tk):
         
         # 添加语言熟练度选项
         metadata['languages'] = {
-            'label': '语言熟练度',
+            'label': self.texts['ai_tab']['metadata_languages'],
             'options': LANGUAGE_LEVELS
         }
         
         # 添加个人信息的预设选项
         metadata['personal_info'] = {
-            'label': '个人信息',
+            'label': self.texts['ai_tab']['metadata_personal_info'],
             'fields': {
                 'country_code': {
-                    'label': '国家/地区代码',
+                    'label': self.texts['ai_tab']['metadata_country_code'],
                     'options': [code.split('(')[1].replace(')', '') if '(' in code else code 
-                               for code in COUNTRY_CODES if code != "Select an option"]
+                               for code in COUNTRY_CODES if code != self.texts['common']['select_option']]
                 }
             }
         }
         
         # 添加学历选项
         metadata['education'] = {
-            'label': '教育背景',
+            'label': self.texts['ai_tab']['metadata_education'],
             'fields': {
                 'degree': {
-                    'label': '学位',
+                    'label': self.texts['ai_tab']['metadata_degree'],
                     'options': STANDARD_DEGREES
                 },
                 'month': {
@@ -3228,7 +3277,7 @@ class EasyApplyApp(tk.Tk):
         
         # 添加工作经验的预设选项
         metadata['work_experience'] = {
-            'label': '工作经验',
+            'label': self.texts['ai_tab']['metadata_work_experience'],
             'fields': {
                 'month': {
                     'label': '月份',
@@ -3254,31 +3303,31 @@ class EasyApplyApp(tk.Tk):
             experience_years.append(str(i))
         
         metadata['skills'] = {
-            'label': '技能经验',
+            'label': self.texts['ai_tab']['metadata_skills'],
             'options': experience_years,
             'skill_list': list(self.config.get('experience', {}).keys())
         }
         
         # 添加EEO(Equal Employment Opportunity)相关选项
         metadata['eeo'] = {
-            'label': 'EEO信息',
+            'label': self.texts['ai_tab']['metadata_eeo'],
             'fields': {
                 'gender': {
-                    'label': '性别',
+                    'label': self.texts['ai_tab']['metadata_gender'],
                     'options': ['Male', 'Female', 'Non-binary', 'Prefer not to disclose']
                 },
                 'race': {
-                    'label': '种族',
+                    'label': self.texts['ai_tab']['metadata_race'],
                     'options': ['American Indian', 'Alaska Native', 'Asian', 'Black/African American', 
                                'Hispanic/Latino', 'Native Hawaiian', 'Pacific Islander', 'White', 
                                'Two or More Races', 'Prefer not to disclose']
                 },
                 'veteran_status': {
-                    'label': '退伍军人状态',
+                    'label': self.texts['ai_tab']['metadata_veteran_status'],
                     'options': ['Protected Veteran', 'Not a Protected Veteran', 'Prefer not to disclose']
                 },
                 'disability_status': {
-                    'label': '残障状态',
+                    'label': self.texts['ai_tab']['metadata_disability_status'],
                     'options': ['Yes', 'No', 'Prefer not to disclose']
                 }
             }
@@ -3286,10 +3335,10 @@ class EasyApplyApp(tk.Tk):
         
         # 添加薪资周期选项
         metadata['salary'] = {
-            'label': '期望薪资',
+            'label': self.texts['ai_tab']['metadata_salary'],
             'fields': {
                 'period': {
-                    'label': '薪资周期',
+                    'label': self.texts['ai_tab']['metadata_salary_period'],
                     'options': ['hourly', 'monthly', 'yearly']
                 }
             }
@@ -3304,24 +3353,24 @@ class EasyApplyApp(tk.Tk):
         """检查文本简历文件是否存在并可读"""
         resume_path = self.vars['textResume_path'].get().strip()
         if not resume_path:
-            self.resume_status_label.config(text="未设置文本简历文件", foreground="red")
+            self.resume_status_label.config(text=self.texts['ai_tab']['no_resume_file'], foreground="red")
             return False
         
         if not os.path.exists(resume_path):
-            self.resume_status_label.config(text=f"找不到文件: {resume_path}", foreground="red")
+            self.resume_status_label.config(text=f"{self.texts['ai_tab']['file_not_found']}: {resume_path}", foreground="red")
             return False
         
         try:
             with open(resume_path, 'r', encoding='utf-8') as f:
                 content = f.read().strip()
                 if not content:
-                    self.resume_status_label.config(text="文件内容为空", foreground="red")
+                    self.resume_status_label.config(text=self.texts['ai_tab']['file_empty'], foreground="red")
                     return False
                 size = len(content)
-                self.resume_status_label.config(text=f"文件正常: {os.path.basename(resume_path)} ({size} 字符)", foreground="green")
+                self.resume_status_label.config(text=f"{self.texts['ai_tab']['file_ok']}: {os.path.basename(resume_path)} ({size} {self.texts['ai_tab']['characters']})", foreground="green")
                 return True
         except Exception as e:
-            self.resume_status_label.config(text=f"读取文件错误: {str(e)}", foreground="red")
+            self.resume_status_label.config(text=f"{self.texts['ai_tab']['file_read_error']}: {str(e)}", foreground="red")
             return False
 
     def _update_ai_log(self, message):
@@ -3338,5 +3387,5 @@ class EasyApplyApp(tk.Tk):
 
 if __name__ == '__main__':
     in_venv = hasattr(sys, 'real_prefix') or (hasattr(sys, 'base_prefix') and sys.base_prefix != sys.prefix)
-    if not in_venv and not os.environ.get("SKIP_VENV_CHECK"): print("警告：建议在Python虚拟环境中运行此应用...");
+    if not in_venv and not os.environ.get("SKIP_VENV_CHECK"): print("Warning: It's recommended to run this application in a Python virtual environment...");
     app = EasyApplyApp(); app.mainloop()
