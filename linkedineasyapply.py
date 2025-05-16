@@ -37,7 +37,7 @@ class CloudAIResponseGenerator:
         self.customQuestions = customQuestions
         
         # API配置
-        self.api_url = "http://34.209.242.37:3001/api"
+        self.api_url = "http://44.247.228.229:3001/api"
         self.api_key = None
         self.user_id = None
         

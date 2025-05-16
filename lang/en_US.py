@@ -416,6 +416,8 @@ TEXTS = {
         'processing_file': 'Processing PDF file: {0}',
         'please_wait': 'Please wait, extracting text...',
         'sending_to_ocr': 'Sending PDF to OCR server...',
+        'ocr_timeout': 'The OCR service request timed out.',
+        'ocr_canceled': 'The OCR request was canceled by the user.',
     },
     
     # Personal info fields

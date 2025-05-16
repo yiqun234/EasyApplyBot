@@ -71,7 +71,7 @@ TEXTS = {
         'openai_api_key': 'OpenAI API密钥:',
         'openai_api_key_note': '(选填) 如果您有自己的OpenAI API密钥，可以在此处输入',
         'resume_path': '简历文件路径:',
-        'extract_text': 'AI提取文本',
+        'extract_text': 'AI提取简历文本',
         'pdf_only': '仅支持PDF格式 (最大2MB)',
         'text_resume_path': '文本简历文件路径:',
         'cover_letter_path': '求职信文件路径:',
@@ -416,6 +416,8 @@ TEXTS = {
         'processing_file': '正在处理PDF文件: {0}',
         'please_wait': '请稍候，正在提取文本...',
         'sending_to_ocr': '正在发送PDF到OCR服务器...',
+        'ocr_timeout': 'OCR服务请求超时。',
+        'ocr_canceled': 'OCR请求已被用户取消。',
     },
     
     # 个人资料字段

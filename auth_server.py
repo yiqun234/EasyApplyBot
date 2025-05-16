@@ -113,7 +113,7 @@ def open_auth_url(auth_server_url, redirect_url):
         print(f"[认证服务器] 无法打开浏览器: {str(e)}")
         print(f"[认证服务器] 请手动访问此URL进行认证: {full_auth_url}")
 
-def start_auth_process(server_url="http://34.209.242.37:3001"):
+def start_auth_process(server_url="http://44.247.228.229:3001"):
     """启动完整认证流程"""
     # 查找可用端口
     port = find_available_port()
@@ -255,7 +255,7 @@ def authenticate():
         return existing_auth
     
     # 检查远程服务器URL是否设置
-    remote_server_url = os.environ.get('EASYAPPLY_AUTH_SERVER') or "http://34.209.242.37:3001"
+    remote_server_url = os.environ.get('EASYAPPLY_AUTH_SERVER') or "http://44.247.228.229:3001"
     
     # 启动认证流程
     auth_result = start_auth_process(server_url=remote_server_url)

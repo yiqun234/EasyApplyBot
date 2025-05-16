@@ -14,7 +14,7 @@ import webbrowser
 from lang import load_language, AVAILABLE_LANGUAGES, DEFAULT_LANGUAGE  # 添加语言包支持
 import auth_server  # 导入认证服务模块
 
-OCR_API = "http://34.209.242.37:3000/api/ocr"
+OCR_API = "http://44.247.228.229:3000/api/ocr"
 
 # 定义国家代码列表
 COUNTRY_CODES = [
@@ -469,7 +469,7 @@ class EasyApplyApp(tk.Tk):
             'personalInfo': {}, 'eeo': {}, 'degreeCompleted': {}, 'checkboxes': {},
             'useCloudAI': tk.BooleanVar(value=self.config.get('useCloudAI', False)),
             # AI服务器设置
-            'aiServerUrl': tk.StringVar(value=self.config.get('aiServerUrl', 'http://34.209.242.37:3001/api')),
+            'aiServerUrl': tk.StringVar(value=self.config.get('aiServerUrl', 'http://44.247.228.229:3001/api')),
         }
 
         # --- Dynamic Variables Init --- (More robust against missing keys in loaded config)
@@ -570,7 +570,7 @@ class EasyApplyApp(tk.Tk):
         resume_frame = ttk.Frame(frame)
         ttk.Entry(resume_frame, textvariable=self.vars['resume_path'], width=42).pack(side=tk.LEFT, fill=tk.X, expand=True)  # 调整宽度为42，为新按钮留出空间
         ttk.Button(resume_frame, text=self.texts['common']['browse'], command=lambda: self._browse_file(self.vars['resume_path'], self.texts['basic_tab']['resume_path'], "*.pdf")).pack(side=tk.LEFT, padx=(5,0))
-        # 添加新的按钮，用于提取PDF文本
+        # 添加新的按钮，用于提取PDF文本 - MODIFIED TEXT
         ttk.Button(resume_frame, text=self.texts['basic_tab']['extract_text'], command=self._trigger_aws_pdf_extraction_from_button).pack(side=tk.LEFT, padx=(5,0))
         resume_frame.grid(row=current_row, column=1, sticky=tk.EW, padx=5, pady=3)
         current_row+=1
@@ -635,31 +635,27 @@ class EasyApplyApp(tk.Tk):
             return
 
         self._log_message(self.texts['messages']['start_extract'].format(os.path.basename(pdf_filepath)))
+        
+        # Initialize cancel flag
+        self.request_canceled = False # Ensure this is reset for each request
 
         try:
-            # 读取PDF文件
             pdf_filename = os.path.basename(pdf_filepath)
             
-            # 用于标记请求是否应该取消
-            self.request_canceled = threading.Event()
-            
-            # 创建加载进度弹窗
             loading_dialog = tk.Toplevel(self)
             loading_dialog.title(self.texts['messages']['pdf_processing'])
-            loading_dialog.geometry("300x150")
+            loading_dialog.geometry("300x150") 
             loading_dialog.transient(self)
             loading_dialog.grab_set()
             loading_dialog.resizable(False, False)
             
-            # 居中弹窗
             loading_dialog.update_idletasks()
             width = loading_dialog.winfo_width()
             height = loading_dialog.winfo_height()
             x = (loading_dialog.winfo_screenwidth() // 2) - (width // 2)
             y = (loading_dialog.winfo_screenheight() // 2) - (height // 2)
-            loading_dialog.geometry('{}x{}+{}+{}'.format(width, height, x, y))
+            loading_dialog.geometry(f'{width}x{height}+{x}+{y}')
             
-            # 添加提示文本和进度条
             ttk.Label(loading_dialog, text=self.texts['messages']['processing_file'].format(pdf_filename), 
                      font=("Helvetica", 10, "bold")).pack(pady=(20, 10))
             ttk.Label(loading_dialog, text=self.texts['messages']['please_wait']).pack(pady=5)
@@ -667,118 +663,111 @@ class EasyApplyApp(tk.Tk):
             progress = ttk.Progressbar(loading_dialog, mode="indeterminate", length=250)
             progress.pack(pady=10, padx=20)
             progress.start(10)
-            
-            # 处理窗口关闭事件
-            def on_dialog_close():
-                self.request_canceled.set()  # 标记请求应该取消
-                self._log_message("PDF处理已取消\n")
-                loading_dialog.destroy()  # 销毁窗口
-                
-            # 将关闭事件绑定到对话框的关闭按钮
-            loading_dialog.protocol("WM_DELETE_WINDOW", on_dialog_close)
-            
-            # 在单独的线程中处理请求，避免阻塞GUI
+
+            def on_dialog_close(dialog_ref):
+                self.request_canceled = True
+                self._log_message(self.texts['messages']['ocr_canceled'])
+                if dialog_ref.winfo_exists(): # Check if dialog still exists
+                    dialog_ref.destroy()
+
             def process_request():
-                # 存储用于可能需要取消的会话
-                self.current_session = None
-                
                 try:
-                    # 检查是否已请求取消
-                    if self.request_canceled.is_set():
-                        return
-                        
-                    # 使用requests库发送多部分表单数据（multipart/form-data）
                     with open(pdf_filepath, 'rb') as pdf_file:
                         files = {'pdf': (pdf_filename, pdf_file, 'application/pdf')}
                         
-                        # 创建会话以支持取消
-                        self.current_session = requests.Session()
+                        # Use OCR_API defined at the top of the file
+                        response = requests.post(OCR_API, files=files, timeout=180) # Increased timeout to 180s
                         
-                        # 发送POST请求到OCR服务
-                        try:
-                            response = self.current_session.post(
-                                OCR_API, 
-                                files=files, 
-                                timeout=120
-                            )
-                            
-                            # 如果在发送请求后但在处理结果前被取消，则放弃处理结果
-                            if self.request_canceled.is_set():
-                                return
+                        if self.request_canceled:
+                            self._log_message("OCR request was canceled by user, skipping response processing.")
+                            return
+
+                        if response.status_code == 200:
+                            data = response.json()
+                            if data.get('success'):
+                                extracted_text = data.get('text', '')
+                                if isinstance(extracted_text, list):
+                                    extracted_text = '\\\\n'.join(str(x) for x in extracted_text)
+                                elif not isinstance(extracted_text, str):
+                                    extracted_text = str(extracted_text)
+
+                                output_txt_filename = os.path.splitext(pdf_filename)[0] + ".txt"
+                                output_txt_path = os.path.join(os.path.dirname(pdf_filepath), output_txt_filename)
+
+                                with open(output_txt_path, "w", encoding="utf-8") as f:
+                                    f.write(extracted_text)
                                 
-                            # 处理响应
-                            if response.status_code == 200:
-                                data = response.json()
-
-                                if data.get('success'):
-                                    extracted_text = data.get('text', '')
-                                    if isinstance(extracted_text, list):
-                                        extracted_text = '\n'.join(str(x) for x in extracted_text)
-                                    elif not isinstance(extracted_text, str):
-                                        extracted_text = str(extracted_text)
-
-                                    output_txt_filename = os.path.splitext(pdf_filename)[0] + ".txt"
-                                    output_txt_path = os.path.join(os.path.dirname(pdf_filepath), output_txt_filename)
-
-                                    with open(output_txt_path, "w", encoding="utf-8") as f:
-                                        f.write(extracted_text)
-                                    
-                                    # 确保没有取消请求后再更新UI
-                                    if not self.request_canceled.is_set():
-                                        # 在主线程中更新UI
-                                        self.after(0, lambda: self._log_message(self.texts['messages']['extract_success'].format(pdf_filename, output_txt_filename) + "\n"))
-                                        self.after(0, lambda: messagebox.showinfo(self.texts['common']['success'], 
-                                                                                f"{self.texts['messages']['extract_success'].format(pdf_filename, output_txt_path)}"))
-                                        
-                                        # 更新文本简历路径
-                                        self.after(0, lambda: self.vars['textResume_path'].set(output_txt_path))
-                                        self.after(0, lambda: self._save_config({**self.config, 'textResume': output_txt_path}))
-                                else:
-                                    error_msg = data.get('message', '未知错误')
-                                    if not self.request_canceled.is_set():
-                                        self.after(0, lambda: self._log_message(f"{self.texts['messages']['extract_fail'].format(pdf_filename)}: {error_msg}\n"))
-                                        self.after(0, lambda: messagebox.showwarning(self.texts['common']['warning'], 
-                                                                                  f"{self.texts['messages']['extract_fail'].format(pdf_filename)}: {error_msg}"))
+                                self.after(0, lambda: self._log_message(self.texts['messages']['extract_success'].format(pdf_filename, output_txt_filename)))
+                                
+                                self.after(0, lambda: self.vars['textResume_path'].set(output_txt_path))
+                                
+                                current_config = self.config.copy()
+                                current_config['textResume'] = output_txt_path
+                                self.after(0, lambda: self._save_config(current_config))
+                                
+                                # NEW: Switch to AI Assistant tab and run AI
+                                self.after(0, self._switch_to_ai_assistant_and_run_ai)
                             else:
-                                if not self.request_canceled.is_set():
-                                    self.after(0, lambda: self._log_message(f"{self.texts['messages']['extract_fail'].format(pdf_filename)}: {response.status_code}\n"))
-                                    self.after(0, lambda: messagebox.showwarning(self.texts['common']['warning'], 
-                                                                              f"{self.texts['messages']['extract_fail'].format(pdf_filename)}: 服务器返回状态码 {response.status_code}"))
-                        except requests.exceptions.RequestException as re:
-                            # 请求异常但不是用户取消的情况
-                            if not self.request_canceled.is_set():
-                                self.after(0, lambda: self._log_message(f"请求异常: {str(re)}\n"))
-                                self.after(0, lambda: messagebox.showerror(self.texts['common']['error'], 
-                                                                         f"请求异常: {str(re)}"))
+                                error_msg = data.get('message', '未知错误')
+                                self.after(0, lambda: self._log_message(f"{self.texts['messages']['extract_fail'].format(pdf_filename)}: {error_msg}"))
+                                self.after(0, lambda: messagebox.showwarning(self.texts['common']['warning'], 
+                                                                           f"{self.texts['messages']['extract_fail'].format(pdf_filename)}: {error_msg}"))
+                        else:
+                            self.after(0, lambda: self._log_message(f"{self.texts['messages']['extract_fail'].format(pdf_filename)}: {response.status_code} {response.text}"))
+                            self.after(0, lambda: messagebox.showwarning(self.texts['common']['warning'], 
+                                                                       f"{self.texts['messages']['extract_fail'].format(pdf_filename)}: 服务器返回状态码 {response.status_code}"))
+                except requests.exceptions.Timeout:
+                    if not self.request_canceled:
+                        self.after(0, lambda: self._log_message(self.texts['messages']['ocr_timeout']))
+                        self.after(0, lambda: messagebox.showerror(self.texts['common']['error'], self.texts['messages']['ocr_timeout']))
                 except Exception as e:
-                    if not self.request_canceled.is_set():
+                    if not self.request_canceled:
                         error_message = str(e)
-                        self.after(0, lambda: self._log_message(self.texts['messages']['extract_error'].format(error_message) + "\n"))
+                        self.after(0, lambda: self._log_message(self.texts['messages']['extract_error'].format(error_message)))
                         self.after(0, lambda: messagebox.showerror(self.texts['common']['error'], 
                                                                  self.texts['messages']['extract_error'].format(error_message)))
                 finally:
-                    # 清理会话
-                    if self.current_session:
-                        try:
-                            self.current_session.close()
-                        except:
-                            pass
-                        self.current_session = None
-                        
-                    # 无论成功与否，只要没有被用户关闭，都关闭加载弹窗
-                    if not self.request_canceled.is_set() and loading_dialog.winfo_exists():
-                        self.after(0, loading_dialog.destroy)
+                    if loading_dialog.winfo_exists():
+                         self.after(0, loading_dialog.destroy)
             
-            # 启动处理线程
-            self._log_message(self.texts['messages']['sending_to_ocr'] + "\n")
-            threading.Thread(target=process_request, daemon=True).start()
+            self._log_message(self.texts['messages']['sending_to_ocr'])
+            thread = threading.Thread(target=process_request, daemon=True)
+            thread.start()
+            loading_dialog.protocol("WM_DELETE_WINDOW", lambda: on_dialog_close(loading_dialog))
             
-        except FileNotFoundError:
-            self._log_message(self.texts['messages']['file_not_found'].format(pdf_filepath))
-            messagebox.showerror(self.texts['common']['error'], self.texts['messages']['file_not_found'].format(pdf_filepath))
         except Exception as e:
             self._log_message(self.texts['messages']['extract_error'].format(str(e)))
             messagebox.showerror(self.texts['common']['error'], self.texts['messages']['extract_error'].format(str(e)))
+
+    def _switch_to_ai_assistant_and_run_ai(self):
+        """Switches to the AI Assistant tab and triggers the Run AI action."""
+        try:
+            ai_tab_text = self.texts['tabs']['ai_assistant']
+            tab_id_to_select = None
+            # Iterate through tab IDs to find the AI Assistant tab by its text
+            for tab_id in self.notebook.tabs():
+                if self.notebook.tab(tab_id, "text") == ai_tab_text:
+                    tab_id_to_select = tab_id
+                    break
+            
+            if tab_id_to_select is not None: # Check if tab_id_to_select was found
+                self.notebook.select(tab_id_to_select)
+                self._log_message(f"已切换到 {ai_tab_text} 标签页。")
+                
+                self.update_idletasks() # Ensure UI updates before running AI
+                
+                # This function should ideally read the resume text from the updated
+                # self.vars['textResume_path'] or the content displayed in the AI assistant tab.
+                self._run_ai_assistant()
+            else:
+                self._log_message(f"错误：未能找到 {ai_tab_text} 标签页。")
+                messagebox.showerror(self.texts['common']['error'], f"未能找到 {ai_tab_text} 标签页。")
+        except Exception as e:
+            # Log the full traceback for debugging
+            import traceback
+            tb_str = traceback.format_exc()
+            self._log_message(f"切换到AI助手并运行AI时出错: {e}\\n{tb_str}")
+            messagebox.showerror(self.texts['common']['error'], f"切换到AI助手并运行AI时出错: {e}")
 
     def _browse_text_resume_and_update_ai_tab(self):
         """浏览文本简历文件并更新AI助手标签页中的状态"""
