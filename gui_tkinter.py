@@ -732,7 +732,7 @@ class EasyApplyApp(tk.Tk):
                                         
                                         # 更新文本简历路径
                                         self.after(0, lambda: self.vars['textResume_path'].set(output_txt_path))
-                                        self.after(0, lambda: self._save_config(self.config | {'textResume': output_txt_path}))
+                                        self.after(0, lambda: self._save_config({**self.config, 'textResume': output_txt_path}))
                                 else:
                                     error_msg = data.get('message', '未知错误')
                                     if not self.request_canceled.is_set():
