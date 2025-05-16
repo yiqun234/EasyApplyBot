@@ -36,13 +36,39 @@ class CloudAIResponseGenerator:
 
         self.customQuestions = customQuestions
         
-        # 直接硬编码AWS API配置
-        self.api_url = "https://9l0xkwbp0j.execute-api.us-east-2.amazonaws.com/prod"
-        self.api_key = "v9L4HANdpnaxegTjKvGDJ9pqIHhVdMhM2MOZuMCa"
+        # API配置
+        self.api_url = "http://34.209.242.37:3001/api"
+        self.api_key = None
+        self.user_id = None
+        
+        # 优先从本地auth.json读取userId和apiKey
+        self._load_auth_data()
+        # 如果外部传入api_key参数，优先覆盖api_key
         
         import logging
         self.logger = logging.getLogger('CloudAIResponseGenerator')
-        
+
+    def _load_auth_data(self):
+        """从本地auth.json读取userId和apiKey"""
+        import os, json
+        auth_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'auth.json')
+        if os.path.exists(auth_path):
+            try:
+                with open(auth_path, 'r', encoding='utf-8') as f:
+                    auth_data = json.load(f)
+                    self.user_id = auth_data.get('userId')
+                    if not self.api_key:
+                        self.api_key = auth_data.get('apiKey')
+            except Exception as e:
+                print(f"读取auth.json失败: {e}")
+                self.user_id = None
+                if not self.api_key:
+                    self.api_key = None
+        else:
+            self.user_id = None
+            if not self.api_key:
+                self.api_key = None
+
     def extract_text_via_aws(self, pdf_filename, base64_pdf_data):
         """
         使用OpenAI API通过AWS提取PDF文档中的文本内容
@@ -68,8 +94,14 @@ class CloudAIResponseGenerator:
             # 调用云端API的extract-pdf-text端点
             response_data = self._call_cloud_api("extract-pdf-text", request_data)
             
+            # 检查响应数据
             if not response_data:
                 print(f"从AWS API获取响应失败")
+                return None
+            
+            # 适配新的API响应格式
+            if 'success' in response_data and not response_data.get('success'):
+                print(f"PDF提取失败: {response_data.get('error', '未知错误')}")
                 return None
                 
             # 检查响应中是否包含提取的文本
@@ -138,9 +170,15 @@ class CloudAIResponseGenerator:
         try:
             import requests
             headers = {
-                "Content-Type": "application/json",
-                "x-api-key": self.api_key
+                "Content-Type": "application/json"
             }
+            # 必须加x-api-key和x-user-id
+            if self.api_key:
+                headers["x-api-key"] = self.api_key
+            if self.user_id:
+                headers["x-user-id"] = self.user_id
+            else:
+                print("警告：未检测到x-user-id，API请求可能会被拒绝。请先登录。")
             
             # 将用户的OpenAI API密钥添加到请求数据中(如果有)
             if self.openai_api_key:
@@ -158,21 +196,26 @@ class CloudAIResponseGenerator:
 
             if response.status_code == 200:
                 api_response = response.json()
-                if api_response.get('statusCode') == 200:
-                    # 提取并解析body字段
+                
+                # 新的API响应格式处理
+                if 'success' in api_response:
+                    # 新的响应格式
+                    if api_response.get('success') is False:
+                        print(f"API请求失败: {api_response.get('error', '未知错误')}")
+                        return None
+                    return api_response
+                elif api_response.get('statusCode') == 200:
+                    # 旧的响应格式 - 保留兼容性
                     if 'body' in api_response and isinstance(api_response['body'], str):
                         try:
-                            # body是JSON字符串，需要解析
                             return json.loads(api_response['body'])
                         except:
                             print("无法解析响应中的body字段")
                             return None
                     else:
-                        # 如果没有body字段，返回整个响应
                         return api_response
                 else:
-                    print(f"API请求失败: HTTP {response.status_code}")
-                    print(f"错误详情: {response.text}")
+                    print(f"API请求失败: {api_response.get('error', '未知错误')}")
                     return None
             else:
                 print(f"API请求失败: HTTP {response.status_code}")
@@ -224,7 +267,18 @@ class CloudAIResponseGenerator:
             # 调用云端API
             response_data = self._call_cloud_api("generate-response", request_data)
             
-            if not response_data or "result" not in response_data:
+            # 检查响应数据
+            if not response_data:
+                return None
+            
+            # 适配新的API响应格式
+            if 'success' in response_data and not response_data.get('success'):
+                print(f"API请求失败: {response_data.get('error', '未知错误')}")
+                return None
+                
+            # 获取结果 - 兼容新旧格式
+            if "result" not in response_data:
+                print("API响应中没有'result'字段")
                 return None
                 
             answer = response_data["result"]
@@ -277,7 +331,18 @@ class CloudAIResponseGenerator:
             response_data = self._call_cloud_api("evaluate-job-fit", request_data)
             print(response_data)
             
-            if not response_data or "result" not in response_data:
+            # 检查响应数据
+            if not response_data:
+                return True
+            
+            # 适配新的API响应格式
+            if 'success' in response_data and not response_data.get('success'):
+                print(f"API请求失败: {response_data.get('error', '未知错误')}")
+                return True
+                
+            # 获取结果 - 兼容新旧格式
+            if "result" not in response_data:
+                print("API响应中没有'result'字段")
                 return True
                 
             # 提取决策结果和可能的解释
@@ -347,7 +412,7 @@ class LinkedinEasyApply:
         self.eeo = parameters.get('eeo', [])
         self.experience_default = int(self.experience['default'])
         self.debug = parameters.get('debug', False)
-        self.evaluate_job_fit = parameters.get('evaluateJobFit', True)
+        self.evaluate_job_fit = parameters.get('evaluateJobFit', False)
         self.customQuestions = parameters.get('customQuestions', {})
 
         self.workExperiences = parameters.get('workExperiences', [])

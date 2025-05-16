@@ -34,6 +34,24 @@ TEXTS = {
         'invalid_entry': '无效条目',
     },
     
+    # 登录界面文本
+    'login': {
+        'app_title': 'EasyApply登录',
+        'welcome': '欢迎使用EasyApply',
+        'please_login': '请登录以继续使用',
+        'login_register': '登录/注册',
+        'exit': '退出',
+        'ready': '准备登录...',
+        'authenticating': '正在进行认证，请在浏览器中完成登录...',
+        'success': '登录成功！正在加载主界面...',
+        'success_title': '登录成功',
+        'success_message': '登录成功！正在加载主界面...',
+        'failed_title': '登录失败',
+        'failed_message': '登录未完成，请重试。',
+        'error_title': '登录错误',
+        'error_prefix': '登录过程发生错误: ',
+    },
+    
     # 标签页标题
     'tabs': {
         'basic': '基本设置',

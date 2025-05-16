@@ -34,6 +34,24 @@ TEXTS = {
         'invalid_entry': 'Invalid Entry',
     },
     
+    # Login screen texts
+    'login': {
+        'app_title': 'EasyApply Login',
+        'welcome': 'Welcome to EasyApply',
+        'please_login': 'Please login to continue',
+        'login_register': 'Login/Register',
+        'exit': 'Exit',
+        'ready': 'Ready to login...',
+        'authenticating': 'Authenticating, please complete login in browser...',
+        'success': 'Login successful! Loading main interface...',
+        'success_title': 'Login Successful',
+        'success_message': 'Login successful! Loading main interface...',
+        'failed_title': 'Login Failed',
+        'failed_message': 'Login not completed, please try again.',
+        'error_title': 'Login Error',
+        'error_prefix': 'An error occurred during login: ',
+    },
+    
     # Tab titles
     'tabs': {
         'basic': 'Basic Settings',

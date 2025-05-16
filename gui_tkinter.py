@@ -10,7 +10,9 @@ import traceback
 import json
 import datetime  # 导入datetime模块用于获取当前年份
 import requests
+import webbrowser
 from lang import load_language, AVAILABLE_LANGUAGES, DEFAULT_LANGUAGE  # 添加语言包支持
+import auth_server  # 导入认证服务模块
 
 # 定义国家代码列表
 COUNTRY_CODES = [
@@ -208,8 +210,175 @@ class EasyApplyApp(tk.Tk):
         
         self.title(self.texts['common']['app_title'])
         self.geometry("900x800")
+        
+        # 认证状态
+        self.auth_data = auth_server.get_auth_data()
+        self.is_authenticated = bool(self.auth_data)
+        
+        # 初始化配置
+        try:
+            self.config = load_config()
+            
+            # 认证检查 - 如果未认证，显示登录界面
+            if not self.is_authenticated:
+                self._show_login_screen()
+            else:
+                # 已登录，正常初始化界面
+                self._init_main_interface()
+                print(f"用户已登录，用户ID: {self.auth_data.get('user_id')}")
+        except Exception as e:
+            print(f"界面初始化错误: {str(e)}")
+            traceback.print_exc()
 
-        self.config = load_config()
+    def _show_login_screen(self):
+        """显示登录欢迎界面，不显示主界面"""
+        # 清空当前所有内容
+        for widget in self.winfo_children():
+            widget.destroy()
+            
+        # 设置窗口大小和标题
+        self.geometry("500x400")
+        self.title(self.texts['login']['app_title'] if 'login' in self.texts else "EasyApply登录")
+        
+        # 创建登录框架
+        login_frame = ttk.Frame(self, padding=20)
+        login_frame.pack(expand=True, fill=tk.BOTH)
+        
+        # 标题
+        ttk.Label(login_frame, text=self.texts['login']['welcome'] if 'login' in self.texts else "欢迎使用EasyApply", 
+                  font=("Arial", 18, "bold")).pack(pady=(0, 20))
+        ttk.Label(login_frame, text=self.texts['login']['please_login'] if 'login' in self.texts else "请登录以继续使用", 
+                  font=("Arial", 12)).pack(pady=(0, 30))
+        
+        # 登录按钮
+        login_button = ttk.Button(login_frame, 
+                                  text=self.texts['login']['login_register'] if 'login' in self.texts else "登录/注册", 
+                                  command=self._handle_login)
+        login_button.pack(pady=10, ipadx=20, ipady=10)
+        
+        # 退出按钮
+        exit_button = ttk.Button(login_frame, 
+                                 text=self.texts['login']['exit'] if 'login' in self.texts else "退出", 
+                                 command=self.destroy)
+        exit_button.pack(pady=10)
+        
+        # 进度条和状态标签（初始隐藏）
+        self.login_progress = ttk.Progressbar(login_frame, orient="horizontal", length=300, mode="indeterminate")
+        self.login_progress.pack(pady=10, fill=tk.X)
+        self.login_progress.pack_forget()  # 初始隐藏
+        
+        self.login_status_label = ttk.Label(login_frame, 
+                                           text=self.texts['login']['ready'] if 'login' in self.texts else "准备登录...", 
+                                           font=("Arial", 10))
+        self.login_status_label.pack(pady=5)
+        self.login_status_label.pack_forget()  # 初始隐藏
+        
+        # 版权信息
+        ttk.Label(login_frame, text="© 2023-2024 EasyApply", font=("Arial", 8)).pack(side=tk.BOTTOM, pady=20)
+    
+    def _handle_login(self):
+        """处理登录按钮点击"""
+        # 显示进度条和状态标签
+        self.login_progress.pack(pady=10, fill=tk.X)
+        self.login_status_label.pack(pady=5)
+        self.login_progress.start(10)  # 开始动画
+        
+        status_text = self.texts['login']['authenticating'] if 'login' in self.texts else "正在进行认证，请在浏览器中完成登录..."
+        self.login_status_label.config(text=status_text)
+        
+        # 禁用登录按钮，防止重复点击
+        for widget in self.winfo_children()[0].winfo_children():
+            if isinstance(widget, ttk.Button):
+                widget.config(state="disabled")
+        
+        # 使用线程处理认证过程
+        def auth_thread_func():
+            try:
+                auth_result = auth_server.authenticate()
+                
+                # 在主线程中更新UI
+                self.after(100, lambda: self._process_auth_result(auth_result))
+            except Exception as e:
+                print(f"登录处理错误: {str(e)}")
+                traceback.print_exc()
+                # 在主线程中显示错误
+                self.after(100, lambda: self._show_auth_error(str(e)))
+        
+        # 启动认证线程
+        auth_thread = threading.Thread(target=auth_thread_func)
+        auth_thread.daemon = True
+        auth_thread.start()
+        
+    def _process_auth_result(self, auth_result):
+        """处理认证结果"""
+        # 停止进度条动画
+        self.login_progress.stop()
+        
+        if auth_result and auth_result.get('user_id') and auth_result.get('api_key'):
+            # 认证成功
+            self.auth_data = auth_result
+            self.is_authenticated = True
+            
+            # 更新状态标签
+            success_text = self.texts['login']['success'] if 'login' in self.texts else "登录成功！正在加载主界面..."
+            self.login_status_label.config(text=success_text)
+            
+            # 显示成功消息
+            messagebox.showinfo(
+                self.texts['login']['success_title'] if 'login' in self.texts else "登录成功",
+                self.texts['login']['success_message'] if 'login' in self.texts else "登录成功！正在加载主界面..."
+            )
+            
+            # 加载主界面
+            self._init_main_interface()
+            return True
+        else:
+            # 认证失败
+            warning_title = self.texts['login']['failed_title'] if 'login' in self.texts else "登录失败"
+            warning_message = self.texts['login']['failed_message'] if 'login' in self.texts else "登录未完成，请重试。"
+            
+            messagebox.showwarning(warning_title, warning_message)
+            
+            # 恢复按钮状态
+            for widget in self.winfo_children()[0].winfo_children():
+                if isinstance(widget, ttk.Button):
+                    widget.config(state="normal")
+            
+            # 隐藏进度条和状态标签
+            self.login_progress.pack_forget()
+            self.login_status_label.pack_forget()
+            return False
+    
+    def _show_auth_error(self, error_message):
+        """显示认证错误"""
+        # 停止进度条动画
+        self.login_progress.stop()
+        
+        # 显示错误消息
+        error_title = self.texts['login']['error_title'] if 'login' in self.texts else "登录错误"
+        error_prefix = self.texts['login']['error_prefix'] if 'login' in self.texts else "登录过程发生错误: "
+        
+        messagebox.showerror(error_title, f"{error_prefix}{error_message}")
+        
+        # 恢复按钮状态
+        for widget in self.winfo_children()[0].winfo_children():
+            if isinstance(widget, ttk.Button):
+                widget.config(state="normal")
+        
+        # 隐藏进度条和状态标签
+        self.login_progress.pack_forget()
+        self.login_status_label.pack_forget()
+        return False
+            
+    def _init_main_interface(self):
+        """初始化主界面"""
+        # 清空当前所有内容
+        for widget in self.winfo_children():
+            widget.destroy()
+            
+        # 重新设置窗口大小
+        self.geometry("900x800")
+        self.title(self.texts['common']['app_title'])
         
         # --- 旧配置迁移到 positionsWithCount ---
         if (self.config.get('positions') and 
@@ -293,7 +462,7 @@ class EasyApplyApp(tk.Tk):
             'personalInfo': {}, 'eeo': {}, 'degreeCompleted': {}, 'checkboxes': {},
             'useCloudAI': tk.BooleanVar(value=self.config.get('useCloudAI', False)),
             # AI服务器设置
-            'aiServerUrl': tk.StringVar(value=self.config.get('aiServerUrl', 'http://localhost:3000')),
+            'aiServerUrl': tk.StringVar(value=self.config.get('aiServerUrl', 'http://34.209.242.37:3001/api')),
         }
 
         # --- Dynamic Variables Init --- (More robust against missing keys in loaded config)
@@ -1366,10 +1535,14 @@ class EasyApplyApp(tk.Tk):
                     opened = False
                     for editor in editors:
                         try:
-                            if subprocess.call(['which', editor], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL) == 0: subprocess.Popen([editor, CONFIG_FILE]); opened = True; break
-                        except FileNotFoundError: continue
-                    if not opened: messagebox.showwarning(self.texts['common']['warning'], f"{self.texts['messages']['file_open_error']} {CONFIG_FILE}")
-                    else: messagebox.showinfo(self.texts['common']['warning'], self.texts['messages']['missing_file'].format(CONFIG_FILE))
+                            if subprocess.call(['which', editor], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL) == 0:
+                                subprocess.Popen([editor, CONFIG_FILE])
+                                opened = True
+                                break
+                        except FileNotFoundError:
+                            continue
+                    if not opened:
+                        messagebox.showwarning(self.texts['common']['warning'], f"{self.texts['messages']['file_open_error']} {CONFIG_FILE}")
         except Exception as e: messagebox.showerror(self.texts['common']['error'], f"{self.texts['messages']['file_open_error']}: {e}")
 
 
@@ -2541,15 +2714,6 @@ class EasyApplyApp(tk.Tk):
         ttk.Button(resume_frame, text=self.texts['ai_tab']['check_file'], command=self._check_resume_file).grid(row=1, column=1, padx=5, pady=5)
         resume_frame.columnconfigure(0, weight=1)
         
-        # 服务器配置区域
-        server_frame = ttk.LabelFrame(main_frame, text=self.texts['ai_tab']['server_config'], padding=(10, 5))
-        server_frame.pack(fill=tk.X, padx=5, pady=5)
-        
-        ttk.Label(server_frame, text=self.texts['ai_tab']['server_url']).grid(row=0, column=0, sticky=tk.W, padx=5, pady=5)
-        ttk.Entry(server_frame, textvariable=self.vars['aiServerUrl'], width=50).grid(row=0, column=1, sticky=tk.EW, padx=5, pady=5)
-        ttk.Button(server_frame, text=self.texts['ai_tab']['test_connection'], command=self._test_ai_server).grid(row=0, column=2, padx=5, pady=5)
-        server_frame.columnconfigure(1, weight=1)
-        
         # 创建功能选择区域
         options_frame = ttk.LabelFrame(main_frame, text=self.texts['ai_tab']['select_content'], padding=(10, 5))
         options_frame.pack(fill=tk.X, padx=5, pady=5)
@@ -2690,10 +2854,29 @@ class EasyApplyApp(tk.Tk):
             
             # 发送请求到服务器
             extract_url = f"{server_url}/extract-from-resume"
+            # 读取本地auth.json，获取x-api-key和x-user-id
+            import os, json
+            headers = {'Content-Type': 'application/json'}
+            auth_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'auth.json')
+            if os.path.exists(auth_path):
+                try:
+                    with open(auth_path, 'r', encoding='utf-8') as f:
+                        auth_data = json.load(f)
+                        api_key = auth_data.get('apiKey')
+                        user_id = auth_data.get('userId')
+                        if api_key:
+                            headers['x-api-key'] = api_key
+                        if user_id:
+                            headers['x-user-id'] = user_id
+                except Exception as e:
+                    print(f"读取auth.json失败: {e}")
+            else:
+                print("警告：未检测到auth.json，API请求可能会被拒绝。请先登录。")
+
             response = requests.post(
                 extract_url,
                 json=payload,
-                headers={'Content-Type': 'application/json'},
+                headers=headers,
                 timeout=120  # 增加超时时间为2分钟
             )
             
@@ -3151,38 +3334,6 @@ class EasyApplyApp(tk.Tk):
             self._update_ai_log(f"{self.texts['ai_tab']['apply_data_error']}: {str(e)}")
             traceback_str = traceback.format_exc()
             print(f"{self.texts['messages']['gui_update_error']}: {traceback_str}")  # 调试输出
-    
-    def _test_ai_server(self):
-        """测试AI服务器连接"""
-        server_url = self.vars['aiServerUrl'].get().strip()
-        if not server_url:
-            messagebox.showerror(self.texts['common']['error'], self.texts['ai_tab']['error_no_server_url'])
-            return
-        
-        # 在AI输出区域显示测试信息
-        self.ai_output.config(state="normal")
-        self.ai_output.insert(tk.END, f"{self.texts['ai_tab']['testing_connection']} {server_url}/test...\n")
-        self.ai_output.config(state="disabled")
-        
-        def test_connection():
-            try:
-                # 使用requests库发送请求
-                response = requests.get(f"{server_url}/test", timeout=5)
-                
-                if response.status_code == 200:
-                    data = response.json()
-                    if data.get('status') == 'ok':
-                        self.after(0, lambda: self._update_test_result(f"{self.texts['ai_tab']['connection_successful']} {data.get('message', self.texts['ai_tab']['server_ok'])}"))
-                    else:
-                        self.after(0, lambda: self._update_test_result(f"{self.texts['ai_tab']['server_response_abnormal']} {data}"))
-                else:
-                    self.after(0, lambda: self._update_test_result(f"{self.texts['ai_tab']['server_error_code']} {response.status_code}"))
-            except Exception as e:
-                error_message = str(e)  # 将错误消息保存在局部变量中
-                self.after(0, lambda: self._update_test_result(f"{self.texts['ai_tab']['connection_failed']} {error_message}"))
-        
-        # 在单独的线程中运行，避免阻塞GUI
-        threading.Thread(target=test_connection, daemon=True).start()
     
     def _update_test_result(self, message):
         """更新测试结果到AI输出区域"""
