@@ -169,15 +169,20 @@ def save_config(config):
         config_to_save = {} # Use a clean dict to ensure order from config
         for k, v in config.items():
             # Ensure nested structures are copied properly for saving
-            if isinstance(v, dict): config_to_save[k] = v.copy()
-            elif isinstance(v, list): config_to_save[k] = v.copy()
-            else: config_to_save[k] = v
-            
+            if isinstance(v, dict): 
+                config_to_save[k] = v.copy()
+            elif isinstance(v, list):
+                config_to_save[k] = v.copy()
+            else:
+                config_to_save[k] = v
+
         with open(CONFIG_FILE, 'w', encoding='utf-8') as stream:
             yaml.dump(config_to_save, stream, default_flow_style=False, allow_unicode=True, sort_keys=False)
         return True
     except Exception as e: 
-        print(f"Error saving config: {e}")
+        import traceback
+        print(f"保存配置出错: {e}")
+        traceback.print_exc()
         return False
 
 def safe_join_list(config_value):
@@ -1626,10 +1631,20 @@ class EasyApplyApp(tk.Tk):
     # --- Other Methods (_save_gui_config, etc.) --- (No changes needed in these core logic methods)
     def _save_gui_config(self):
         try:
-            if save_config(self.config):
-                messagebox.showinfo(self.texts['common']['success'], self.texts['messages']['save_success'])
+            # 先确保所有设置已从GUI更新到配置对象中
+            if self._update_config_from_gui():
+                if save_config(self.config):
+                    return True
+                else:
+                    messagebox.showerror(self.texts['common']['error'], self.texts['messages']['save_error'])
+                    return False
+            else:
+                return False
         except Exception as e:
+            import traceback
+            traceback.print_exc()
             messagebox.showerror(self.texts['common']['error'], f"{self.texts['messages']['save_error']}: {e}")
+            return False
     def _log_message(self, message):
         def append_text():
             self.output_area.config(state='normal')
