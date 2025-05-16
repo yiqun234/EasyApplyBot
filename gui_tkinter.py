@@ -14,6 +14,8 @@ import webbrowser
 from lang import load_language, AVAILABLE_LANGUAGES, DEFAULT_LANGUAGE  # 添加语言包支持
 import auth_server  # 导入认证服务模块
 
+OCR_API = "http://34.209.242.37:3000/api/ocr"
+
 # 定义国家代码列表
 COUNTRY_CODES = [
     "Select an option", "Canada (+1)", "United States (+1)", "Afghanistan (+93)", 
@@ -638,6 +640,9 @@ class EasyApplyApp(tk.Tk):
             # 读取PDF文件
             pdf_filename = os.path.basename(pdf_filepath)
             
+            # 用于标记请求是否应该取消
+            self.request_canceled = threading.Event()
+            
             # 创建加载进度弹窗
             loading_dialog = tk.Toplevel(self)
             loading_dialog.title(self.texts['messages']['pdf_processing'])
@@ -663,61 +668,109 @@ class EasyApplyApp(tk.Tk):
             progress.pack(pady=10, padx=20)
             progress.start(10)
             
+            # 处理窗口关闭事件
+            def on_dialog_close():
+                self.request_canceled.set()  # 标记请求应该取消
+                self._log_message("PDF处理已取消\n")
+                loading_dialog.destroy()  # 销毁窗口
+                
+            # 将关闭事件绑定到对话框的关闭按钮
+            loading_dialog.protocol("WM_DELETE_WINDOW", on_dialog_close)
+            
             # 在单独的线程中处理请求，避免阻塞GUI
             def process_request():
+                # 存储用于可能需要取消的会话
+                self.current_session = None
+                
                 try:
+                    # 检查是否已请求取消
+                    if self.request_canceled.is_set():
+                        return
+                        
                     # 使用requests库发送多部分表单数据（multipart/form-data）
                     with open(pdf_filepath, 'rb') as pdf_file:
                         files = {'pdf': (pdf_filename, pdf_file, 'application/pdf')}
                         
-                        # 发送POST请求到OCR服务
-                        response = requests.post('http://34.209.242.37:3000/api/ocr', files=files, timeout=120)
+                        # 创建会话以支持取消
+                        self.current_session = requests.Session()
                         
-                        # 处理响应
-                        if response.status_code == 200:
-                            data = response.json()
-
-                            if data.get('success'):
-                                extracted_text = data.get('text', '')
-                                if isinstance(extracted_text, list):
-                                    extracted_text = '\n'.join(str(x) for x in extracted_text)
-                                elif not isinstance(extracted_text, str):
-                                    extracted_text = str(extracted_text)
-
-                                output_txt_filename = os.path.splitext(pdf_filename)[0] + ".txt"
-                                output_txt_path = os.path.join(os.path.dirname(pdf_filepath), output_txt_filename)
-
-                                with open(output_txt_path, "w", encoding="utf-8") as f:
-                                    f.write(extracted_text)
+                        # 发送POST请求到OCR服务
+                        try:
+                            response = self.current_session.post(
+                                OCR_API, 
+                                files=files, 
+                                timeout=120
+                            )
+                            
+                            # 如果在发送请求后但在处理结果前被取消，则放弃处理结果
+                            if self.request_canceled.is_set():
+                                return
                                 
-                                # 在主线程中更新UI
-                                self.after(0, lambda: self._log_message(self.texts['messages']['extract_success'].format(pdf_filename, output_txt_filename)))
-                                self.after(0, lambda: messagebox.showinfo(self.texts['common']['success'], 
-                                                                         f"{self.texts['messages']['extract_success'].format(pdf_filename, output_txt_path)}"))
-                                
-                                # 更新文本简历路径
-                                self.after(0, lambda: self.vars['textResume_path'].set(output_txt_path))
-                                self.after(0, lambda: self._save_config(self.config | {'textResume': output_txt_path}))
+                            # 处理响应
+                            if response.status_code == 200:
+                                data = response.json()
+
+                                if data.get('success'):
+                                    extracted_text = data.get('text', '')
+                                    if isinstance(extracted_text, list):
+                                        extracted_text = '\n'.join(str(x) for x in extracted_text)
+                                    elif not isinstance(extracted_text, str):
+                                        extracted_text = str(extracted_text)
+
+                                    output_txt_filename = os.path.splitext(pdf_filename)[0] + ".txt"
+                                    output_txt_path = os.path.join(os.path.dirname(pdf_filepath), output_txt_filename)
+
+                                    with open(output_txt_path, "w", encoding="utf-8") as f:
+                                        f.write(extracted_text)
+                                    
+                                    # 确保没有取消请求后再更新UI
+                                    if not self.request_canceled.is_set():
+                                        # 在主线程中更新UI
+                                        self.after(0, lambda: self._log_message(self.texts['messages']['extract_success'].format(pdf_filename, output_txt_filename) + "\n"))
+                                        self.after(0, lambda: messagebox.showinfo(self.texts['common']['success'], 
+                                                                                f"{self.texts['messages']['extract_success'].format(pdf_filename, output_txt_path)}"))
+                                        
+                                        # 更新文本简历路径
+                                        self.after(0, lambda: self.vars['textResume_path'].set(output_txt_path))
+                                        self.after(0, lambda: self._save_config(self.config | {'textResume': output_txt_path}))
+                                else:
+                                    error_msg = data.get('message', '未知错误')
+                                    if not self.request_canceled.is_set():
+                                        self.after(0, lambda: self._log_message(f"{self.texts['messages']['extract_fail'].format(pdf_filename)}: {error_msg}\n"))
+                                        self.after(0, lambda: messagebox.showwarning(self.texts['common']['warning'], 
+                                                                                  f"{self.texts['messages']['extract_fail'].format(pdf_filename)}: {error_msg}"))
                             else:
-                                error_msg = data.get('message', '未知错误')
-                                self.after(0, lambda: self._log_message(f"{self.texts['messages']['extract_fail'].format(pdf_filename)}: {error_msg}"))
-                                self.after(0, lambda: messagebox.showwarning(self.texts['common']['warning'], 
-                                                                           f"{self.texts['messages']['extract_fail'].format(pdf_filename)}: {error_msg}"))
-                        else:
-                            self.after(0, lambda: self._log_message(f"{self.texts['messages']['extract_fail'].format(pdf_filename)}: {response.status_code}"))
-                            self.after(0, lambda: messagebox.showwarning(self.texts['common']['warning'], 
-                                                                       f"{self.texts['messages']['extract_fail'].format(pdf_filename)}: 服务器返回状态码 {response.status_code}"))
+                                if not self.request_canceled.is_set():
+                                    self.after(0, lambda: self._log_message(f"{self.texts['messages']['extract_fail'].format(pdf_filename)}: {response.status_code}\n"))
+                                    self.after(0, lambda: messagebox.showwarning(self.texts['common']['warning'], 
+                                                                              f"{self.texts['messages']['extract_fail'].format(pdf_filename)}: 服务器返回状态码 {response.status_code}"))
+                        except requests.exceptions.RequestException as re:
+                            # 请求异常但不是用户取消的情况
+                            if not self.request_canceled.is_set():
+                                self.after(0, lambda: self._log_message(f"请求异常: {str(re)}\n"))
+                                self.after(0, lambda: messagebox.showerror(self.texts['common']['error'], 
+                                                                         f"请求异常: {str(re)}"))
                 except Exception as e:
-                    error_message = str(e)
-                    self.after(0, lambda: self._log_message(self.texts['messages']['extract_error'].format(error_message)))
-                    self.after(0, lambda: messagebox.showerror(self.texts['common']['error'], 
-                                                             self.texts['messages']['extract_error'].format(error_message)))
+                    if not self.request_canceled.is_set():
+                        error_message = str(e)
+                        self.after(0, lambda: self._log_message(self.texts['messages']['extract_error'].format(error_message) + "\n"))
+                        self.after(0, lambda: messagebox.showerror(self.texts['common']['error'], 
+                                                                 self.texts['messages']['extract_error'].format(error_message)))
                 finally:
-                    # 无论成功与否，都关闭加载弹窗
-                    self.after(0, loading_dialog.destroy)
+                    # 清理会话
+                    if self.current_session:
+                        try:
+                            self.current_session.close()
+                        except:
+                            pass
+                        self.current_session = None
+                        
+                    # 无论成功与否，只要没有被用户关闭，都关闭加载弹窗
+                    if not self.request_canceled.is_set() and loading_dialog.winfo_exists():
+                        self.after(0, loading_dialog.destroy)
             
             # 启动处理线程
-            self._log_message(self.texts['messages']['sending_to_ocr'])
+            self._log_message(self.texts['messages']['sending_to_ocr'] + "\n")
             threading.Thread(target=process_request, daemon=True).start()
             
         except FileNotFoundError:
@@ -1634,6 +1687,7 @@ class EasyApplyApp(tk.Tk):
             # 先确保所有设置已从GUI更新到配置对象中
             if self._update_config_from_gui():
                 if save_config(self.config):
+                    self._log_message(self.texts['messages']['save_success'] + "\n")
                     return True
                 else:
                     messagebox.showerror(self.texts['common']['error'], self.texts['messages']['save_error'])
@@ -1646,6 +1700,9 @@ class EasyApplyApp(tk.Tk):
             messagebox.showerror(self.texts['common']['error'], f"{self.texts['messages']['save_error']}: {e}")
             return False
     def _log_message(self, message):
+        # 结尾不是\n结尾，则添加换行符
+        if not message.endswith('\n'):
+            message += '\n'
         def append_text():
             self.output_area.config(state='normal')
             self.output_area.insert(tk.END, message)
