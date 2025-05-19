@@ -7,3 +7,4 @@ chrome_bot/
 .vscode/
 failed.csv
 output.csv
+vendor
