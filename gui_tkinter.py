@@ -393,7 +393,7 @@ class EasyApplyApp(tk.Tk):
         # 使用线程处理认证过程
         def auth_thread_func():
             try:
-                auth_server.authenticate(lang=self.lang_code.replace('_', '-'))
+                auth_result = auth_server.authenticate(lang=self.lang_code.replace('_', '-'))
                 
                 # 在主线程中更新UI
                 self.after(100, lambda: self._process_auth_result(auth_result))
