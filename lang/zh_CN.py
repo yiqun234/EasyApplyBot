@@ -66,8 +66,8 @@ TEXTS = {
     # 基本设置标签页
     'basic_tab': {
         'account_resume': '账户和简历',
-        'email': '邮箱:',
-        'password': '密码:',
+        'email': '领英邮箱:',
+        'password': '领英密码:',
         'openai_api_key': 'OpenAI API密钥:',
         'openai_api_key_note': '(选填) 如果您有自己的OpenAI API密钥，可以在此处输入',
         'resume_path': '简历文件路径:',
@@ -418,6 +418,7 @@ TEXTS = {
         'sending_to_ocr': '正在发送PDF到OCR服务器...',
         'ocr_timeout': 'OCR服务请求超时。',
         'ocr_canceled': 'OCR请求已被用户取消。',
+        'missing_text_resume_hint': '文本简历缺失或无效。请选择一份 PDF 简历，然后点击“AI 提取文本”按钮（位于“基本设置”选项卡上）先生成。'
     },
     
     # 个人资料字段

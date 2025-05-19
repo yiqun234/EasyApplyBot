@@ -419,7 +419,7 @@ class LinkedinEasyApply:
         self.education = parameters.get('educations', [])
 
 
-        print("使用云端AI服务")
+        print("Using cloud AI services")
         self.ai_response_generator = CloudAIResponseGenerator(
             api_key=self.openai_api_key,  # 保持参数一致性
             personal_info=self.personal_info,

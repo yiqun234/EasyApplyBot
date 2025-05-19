@@ -66,8 +66,8 @@ TEXTS = {
     # Basic Settings tab
     'basic_tab': {
         'account_resume': 'Account and Resume',
-        'email': 'Email:',
-        'password': 'Password:',
+        'email': 'LinkedIn Email:',
+        'password': 'LinkedIn Password:',
         'openai_api_key': 'OpenAI API Key:',
         'openai_api_key_note': '(Optional) Enter your own OpenAI API key here',
         'resume_path': 'Resume File Path:',
@@ -418,6 +418,7 @@ TEXTS = {
         'sending_to_ocr': 'Sending PDF to OCR server...',
         'ocr_timeout': 'The OCR service request timed out.',
         'ocr_canceled': 'The OCR request was canceled by the user.',
+        'missing_text_resume_hint': 'Text resume is missing or invalid. Please select a PDF resume and click the \"AI Extract Text\" button (on the Basic Settings tab) to generate it first.'
     },
     
     # Personal info fields

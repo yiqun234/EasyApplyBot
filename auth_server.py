@@ -96,11 +96,12 @@ def run_server(port):
     
     print("[认证服务器] 认证服务器已关闭")
 
-def open_auth_url(auth_server_url, redirect_url):
-    """打开浏览器进行认证"""
+def open_auth_url(auth_server_url, redirect_url, lang='en-US'):
+    """打开浏览器进行认证，支持多语言"""
     # 构建完整的认证URL
     query_params = urllib.parse.urlencode({
-        'callback': redirect_url
+        'callback': redirect_url,
+        'lang': lang
     })
     full_auth_url = f"{auth_server_url}?{query_params}"
     
@@ -113,8 +114,8 @@ def open_auth_url(auth_server_url, redirect_url):
         print(f"[认证服务器] 无法打开浏览器: {str(e)}")
         print(f"[认证服务器] 请手动访问此URL进行认证: {full_auth_url}")
 
-def start_auth_process(server_url="http://44.247.228.229:3001"):
-    """启动完整认证流程"""
+def start_auth_process(server_url="http://44.247.228.229:3001", lang='en-US'):
+    """启动完整认证流程，支持多语言"""
     # 查找可用端口
     port = find_available_port()
     
@@ -130,8 +131,8 @@ def start_auth_process(server_url="http://44.247.228.229:3001"):
     auth_server_url = server_url  # 使用传入的参数，可能是远程服务器
     redirect_url = f"http://localhost:{port}/auth/callback"
     
-    # 打开浏览器进行认证
-    open_auth_url(auth_server_url, redirect_url)
+    # 打开浏览器进行认证，传递lang参数
+    open_auth_url(auth_server_url, redirect_url, lang=lang)
     
     # 等待认证完成或超时
     timeout = 300  # 秒
@@ -246,8 +247,8 @@ def get_auth_data():
         print(f"[认证服务器] 读取认证数据时出错: {str(e)}")
         return None
 
-def authenticate():
-    """主认证函数，返回认证数据"""
+def authenticate(lang='en-US'):
+    """主认证函数，返回认证数据，支持多语言"""
     # 首先检查是否已有保存的认证数据
     existing_auth = get_auth_data()
     if existing_auth:
@@ -257,8 +258,8 @@ def authenticate():
     # 检查远程服务器URL是否设置
     remote_server_url = os.environ.get('EASYAPPLY_AUTH_SERVER') or "http://44.247.228.229:3001"
     
-    # 启动认证流程
-    auth_result = start_auth_process(server_url=remote_server_url)
+    # 启动认证流程，传递lang参数
+    auth_result = start_auth_process(server_url=remote_server_url, lang=lang)
     
     # 如果认证成功，保存数据
     if auth_result:

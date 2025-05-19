@@ -133,11 +133,11 @@ def load_config():
     for k, v in DEFAULT_CONFIG.items():
          if isinstance(v, (dict, list)): final_config[k] = v.copy()
          else: final_config[k] = v
-    if not os.path.exists(CONFIG_FILE): print(f"配置文件 {CONFIG_FILE} 不存在..."); save_config(final_config); return final_config # Return default if file missing
+    if not os.path.exists(CONFIG_FILE): print(f"Configuration Files {CONFIG_FILE} Does not exist..."); save_config(final_config); return final_config # Return default if file missing
     try:
         with open(CONFIG_FILE, 'r', encoding='utf-8') as stream:
             loaded_config = yaml.safe_load(stream)
-            if not loaded_config: print(f"配置文件 {CONFIG_FILE} 为空..."); return final_config # Return default if file empty
+            if not loaded_config: print(f"Configuration Files {CONFIG_FILE} Empty..."); return final_config # Return default if file empty
         # IMPORTANT: Update the defaults with loaded config, preserving structure
         deep_update(final_config, loaded_config)
         # Ensure essential nested dicts/lists exist if missing in file but expected by GUI/defaults
@@ -183,7 +183,7 @@ def save_config(config):
         return True
     except Exception as e: 
         import traceback
-        print(f"保存配置出错: {e}")
+        print(f"Error saving configuration: {e}")
         traceback.print_exc()
         return False
 
@@ -210,32 +210,62 @@ def parse_list_from_textarea(text_content):
 class EasyApplyApp(tk.Tk):
     def __init__(self):
         super().__init__()
-        # 从配置中加载语言设置
         self.config = load_config()
         self.lang_code = self.config.get('language', DEFAULT_LANGUAGE)
         self.texts = load_language(self.lang_code)
-        
+
         self.title(self.texts['common']['app_title'])
-        self.geometry("900x800")
+        self.geometry("900x800") # Default size for main app
+
+        # Store references to login screen widgets for language switching
+        self.login_frame = None
+        self.login_welcome_label = None
+        self.login_please_login_label = None
+        self.login_main_button = None
+        self.login_exit_button = None
+        self.login_progress_bar = None # Renamed from self.login_progress to avoid conflict
+        self.login_status_text_label = None # Renamed from self.login_status_label
+        self.login_copyright_label = None
+        self.login_language_selector = None
+        self.login_lang_var = None
+
+
+        # Initialize other necessary attributes
+        self.bot_process = None
+        self.stop_event = threading.Event()
+        self.job_application_thread = None
+        self.pdf_extraction_thread = None
+        self.pdf_extraction_stop_event = threading.Event()
+        self.pdf_processing_dialog = None
+        self.auth_data = None # Store authentication data (userId, apiKey)
+        self.is_authenticated = False # Authentication status
+        self.ocr_cancel_event = threading.Event() # Event to cancel OCR request
+
+        # Check authentication status
+        self._check_auth_status_and_init_ui()
         
-        # 认证状态
-        self.auth_data = auth_server.get_auth_data()
-        self.is_authenticated = bool(self.auth_data)
+        self.protocol("WM_DELETE_WINDOW", self._on_closing)
+
+    def _check_auth_status_and_init_ui(self):
+        auth_file_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'auth.json')
+        if os.path.exists(auth_file_path):
+            try:
+                with open(auth_file_path, 'r', encoding='utf-8') as f:
+                    auth_data_loaded = json.load(f)
+                    if auth_data_loaded.get('userId') and auth_data_loaded.get('apiKey'):
+                        self.auth_data = auth_data_loaded
+                        self.is_authenticated = True
+            except Exception as e:
+                print(f"Error reading auth.json: {e}")
+                self.auth_data = None
+                self.is_authenticated = False
         
-        # 初始化配置
-        try:
-            self.config = load_config()
-            
-            # 认证检查 - 如果未认证，显示登录界面
-            if not self.is_authenticated:
-                self._show_login_screen()
-            else:
-                # 已登录，正常初始化界面
-                self._init_main_interface()
-                print(f"用户已登录，用户ID: {self.auth_data.get('user_id')}")
-        except Exception as e:
-            print(f"界面初始化错误: {str(e)}")
-            traceback.print_exc()
+        if not self.is_authenticated:
+            self._show_login_screen()
+        else:
+            # 已登录，正常初始化界面
+            self._init_main_interface()
+            print(f"User logged in, User ID: {self.auth_data.get('userId')}")
 
     def _show_login_screen(self):
         """显示登录欢迎界面，不显示主界面"""
@@ -244,69 +274,131 @@ class EasyApplyApp(tk.Tk):
             widget.destroy()
             
         # 设置窗口大小和标题
-        self.geometry("500x400")
-        self.title(self.texts['login']['app_title'] if 'login' in self.texts else "EasyApply登录")
+        self.geometry("500x450") # Increased height for language selector
+        self.title(self.texts['login']['app_title'] if 'login' in self.texts else "EasyApply Login")
         
         # 创建登录框架
-        login_frame = ttk.Frame(self, padding=20)
-        login_frame.pack(expand=True, fill=tk.BOTH)
+        self.login_frame = ttk.Frame(self, padding=20)
+        self.login_frame.pack(expand=True, fill=tk.BOTH)
         
+        # 语言选择器
+        lang_selector_frame = ttk.Frame(self.login_frame)
+        lang_selector_frame.pack(pady=(0, 15), anchor='ne') # Anchor to top-right
+
+        ttk.Label(lang_selector_frame, text=(self.texts['common']['language'] + ":" if 'common' in self.texts else "Language:")).pack(side=tk.LEFT, padx=(0,5))
+        
+        self.login_lang_var = tk.StringVar(value=self.lang_code)
+        self.login_language_selector = ttk.Combobox(lang_selector_frame, textvariable=self.login_lang_var, state="readonly", width=18)
+        self.login_language_selector['values'] = [f"{code} - {name}" for code, name in AVAILABLE_LANGUAGES.items()]
+        for i, (code, _) in enumerate(AVAILABLE_LANGUAGES.items()):
+            if code == self.lang_code:
+                self.login_language_selector.current(i)
+                break
+        self.login_language_selector.pack(side=tk.LEFT)
+        self.login_language_selector.bind("<<ComboboxSelected>>", self._on_login_language_changed)
+
         # 标题
-        ttk.Label(login_frame, text=self.texts['login']['welcome'] if 'login' in self.texts else "欢迎使用EasyApply", 
-                  font=("Arial", 18, "bold")).pack(pady=(0, 20))
-        ttk.Label(login_frame, text=self.texts['login']['please_login'] if 'login' in self.texts else "请登录以继续使用", 
-                  font=("Arial", 12)).pack(pady=(0, 30))
+        self.login_welcome_label = ttk.Label(self.login_frame, text=self.texts['login']['welcome'] if 'login' in self.texts else "Welcome to EasyApply", 
+                  font=("Arial", 18, "bold"))
+        self.login_welcome_label.pack(pady=(0, 20))
+        
+        self.login_please_login_label = ttk.Label(self.login_frame, text=self.texts['login']['please_login'] if 'login' in self.texts else "Please login to continue", 
+                  font=("Arial", 12))
+        self.login_please_login_label.pack(pady=(0, 30))
         
         # 登录按钮
-        login_button = ttk.Button(login_frame, 
-                                  text=self.texts['login']['login_register'] if 'login' in self.texts else "登录/注册", 
+        self.login_main_button = ttk.Button(self.login_frame, 
+                                  text=self.texts['login']['login_register'] if 'login' in self.texts else "Login/Register", 
                                   command=self._handle_login)
-        login_button.pack(pady=10, ipadx=20, ipady=10)
+        self.login_main_button.pack(pady=10, ipadx=20, ipady=10)
         
         # 退出按钮
-        exit_button = ttk.Button(login_frame, 
-                                 text=self.texts['login']['exit'] if 'login' in self.texts else "退出", 
+        self.login_exit_button = ttk.Button(self.login_frame, 
+                                 text=self.texts['login']['exit'] if 'login' in self.texts else "Exit", 
                                  command=self.destroy)
-        exit_button.pack(pady=10)
+        self.login_exit_button.pack(pady=10)
         
         # 进度条和状态标签（初始隐藏）
-        self.login_progress = ttk.Progressbar(login_frame, orient="horizontal", length=300, mode="indeterminate")
-        self.login_progress.pack(pady=10, fill=tk.X)
-        self.login_progress.pack_forget()  # 初始隐藏
+        self.login_progress_bar = ttk.Progressbar(self.login_frame, orient="horizontal", length=300, mode="indeterminate")
+        self.login_progress_bar.pack(pady=10, fill=tk.X)
+        self.login_progress_bar.pack_forget()  # 初始隐藏
         
-        self.login_status_label = ttk.Label(login_frame, 
-                                           text=self.texts['login']['ready'] if 'login' in self.texts else "准备登录...", 
+        self.login_status_text_label = ttk.Label(self.login_frame, 
+                                           text=self.texts['login']['ready'] if 'login' in self.texts else "Ready to login...", 
                                            font=("Arial", 10))
-        self.login_status_label.pack(pady=5)
-        self.login_status_label.pack_forget()  # 初始隐藏
+        self.login_status_text_label.pack(pady=5)
+        self.login_status_text_label.pack_forget()  # 初始隐藏
         
         # 版权信息
-        ttk.Label(login_frame, text="© 2023-2024 EasyApply", font=("Arial", 8)).pack(side=tk.BOTTOM, pady=20)
+        self.login_copyright_label = ttk.Label(self.login_frame, text="© 2023-2024 EasyApply", font=("Arial", 8))
+        self.login_copyright_label.pack(side=tk.BOTTOM, pady=20)
     
+    def _on_login_language_changed(self, event):
+        """处理登录界面语言变更事件"""
+        selected_lang_display = self.login_lang_var.get()
+        selected_lang_code = selected_lang_display.split(" - ")[0]
+
+        if selected_lang_code != self.lang_code:
+            self.lang_code = selected_lang_code
+            self.config['language'] = self.lang_code
+            self.texts = load_language(self.lang_code)
+            
+            # Update login screen UI elements
+            self.title(self.texts['login']['app_title'] if 'login' in self.texts else "EasyApply Login")
+            if self.login_welcome_label:
+                self.login_welcome_label.config(text=self.texts['login']['welcome'] if 'login' in self.texts else "Welcome to EasyApply")
+            if self.login_please_login_label:
+                self.login_please_login_label.config(text=self.texts['login']['please_login'] if 'login' in self.texts else "Please login to continue")
+            if self.login_main_button:
+                self.login_main_button.config(text=self.texts['login']['login_register'] if 'login' in self.texts else "Login/Register")
+            if self.login_exit_button:
+                self.login_exit_button.config(text=self.texts['login']['exit'] if 'login' in self.texts else "Exit")
+            if self.login_status_text_label and not self.login_progress_bar.winfo_ismapped(): # Only update if not in progress
+                 self.login_status_text_label.config(text=self.texts['login']['ready'] if 'login' in self.texts else "Ready to login...")
+
+            # Also update the language selector label itself, if it exists within a frame that's part of login_frame
+            # This assumes the label is the first child of the lang_selector_frame
+            if self.login_language_selector:
+                parent_frame = self.login_language_selector.master
+                if parent_frame and parent_frame.winfo_children():
+                    lang_label_widget = parent_frame.winfo_children()[0]
+                    if isinstance(lang_label_widget, ttk.Label):
+                         lang_label_widget.config(text=(self.texts['common']['language'] + ":" if 'common' in self.texts else "Language:"))
+            
+            # Save the configuration change
+            save_config(self.config)
+
+
     def _handle_login(self):
         """处理登录按钮点击"""
         # 显示进度条和状态标签
-        self.login_progress.pack(pady=10, fill=tk.X)
-        self.login_status_label.pack(pady=5)
-        self.login_progress.start(10)  # 开始动画
+        self.login_progress_bar.pack(pady=10, fill=tk.X)
+        self.login_status_text_label.pack(pady=5)
+        self.login_progress_bar.start(10)  # 开始动画
         
-        status_text = self.texts['login']['authenticating'] if 'login' in self.texts else "正在进行认证，请在浏览器中完成登录..."
-        self.login_status_label.config(text=status_text)
+        status_text = self.texts['login']['authenticating'] if 'login' in self.texts else "Authenticating, please complete login in your browser..."
+        self.login_status_text_label.config(text=status_text)
         
         # 禁用登录按钮，防止重复点击
-        for widget in self.winfo_children()[0].winfo_children():
-            if isinstance(widget, ttk.Button):
-                widget.config(state="disabled")
+        if self.login_frame: # Check if login_frame exists
+            for widget in self.login_frame.winfo_children(): # Iterate through children of login_frame
+                if isinstance(widget, ttk.Button):
+                    widget.config(state="disabled")
+                # Also disable the language selector if it's a direct child or in a sub-frame
+                elif isinstance(widget, ttk.Frame): # Assuming lang selector is in a sub-frame
+                    for sub_widget in widget.winfo_children():
+                        if isinstance(sub_widget, ttk.Combobox):
+                            sub_widget.config(state="disabled")
         
         # 使用线程处理认证过程
         def auth_thread_func():
             try:
-                auth_result = auth_server.authenticate()
+                auth_server.authenticate(lang=self.lang_code.replace('_', '-'))
                 
                 # 在主线程中更新UI
                 self.after(100, lambda: self._process_auth_result(auth_result))
             except Exception as e:
-                print(f"登录处理错误: {str(e)}")
+                print(f"Login processing error: {str(e)}")
                 traceback.print_exc()
                 # 在主线程中显示错误
                 self.after(100, lambda: self._show_auth_error(str(e)))
@@ -319,7 +411,8 @@ class EasyApplyApp(tk.Tk):
     def _process_auth_result(self, auth_result):
         """处理认证结果"""
         # 停止进度条动画
-        self.login_progress.stop()
+        if self.login_progress_bar: # Check if progress bar exists
+            self.login_progress_bar.stop()
         
         if auth_result and auth_result.get('user_id') and auth_result.get('api_key'):
             # 认证成功
@@ -327,13 +420,14 @@ class EasyApplyApp(tk.Tk):
             self.is_authenticated = True
             
             # 更新状态标签
-            success_text = self.texts['login']['success'] if 'login' in self.texts else "登录成功！正在加载主界面..."
-            self.login_status_label.config(text=success_text)
+            success_text = self.texts['login']['success'] if 'login' in self.texts else "Login successful! Loading main interface..."
+            if self.login_status_text_label: # Check if status label exists
+                self.login_status_text_label.config(text=success_text)
             
             # 显示成功消息
             messagebox.showinfo(
-                self.texts['login']['success_title'] if 'login' in self.texts else "登录成功",
-                self.texts['login']['success_message'] if 'login' in self.texts else "登录成功！正在加载主界面..."
+                self.texts['login']['success_title'] if 'login' in self.texts else "Login Successful",
+                self.texts['login']['success_message'] if 'login' in self.texts else "Login successful! Loading main interface..."
             )
             
             # 加载主界面
@@ -341,40 +435,50 @@ class EasyApplyApp(tk.Tk):
             return True
         else:
             # 认证失败
-            warning_title = self.texts['login']['failed_title'] if 'login' in self.texts else "登录失败"
-            warning_message = self.texts['login']['failed_message'] if 'login' in self.texts else "登录未完成，请重试。"
+            warning_title = self.texts['login']['failed_title'] if 'login' in self.texts else "Login Failed"
+            warning_message = self.texts['login']['failed_message'] if 'login' in self.texts else "Login was not completed. Please try again."
             
             messagebox.showwarning(warning_title, warning_message)
             
             # 恢复按钮状态
-            for widget in self.winfo_children()[0].winfo_children():
-                if isinstance(widget, ttk.Button):
-                    widget.config(state="normal")
+            if self.login_frame: # Check if login_frame exists
+                for widget in self.login_frame.winfo_children():
+                    if isinstance(widget, ttk.Button):
+                        widget.config(state="normal")
+                    elif isinstance(widget, ttk.Frame): # Assuming lang selector is in a sub-frame
+                         for sub_widget in widget.winfo_children():
+                            if isinstance(sub_widget, ttk.Combobox):
+                                sub_widget.config(state="readonly") # Restore to readonly
             
             # 隐藏进度条和状态标签
-            self.login_progress.pack_forget()
-            self.login_status_label.pack_forget()
+            if self.login_progress_bar: self.login_progress_bar.pack_forget()
+            if self.login_status_text_label: self.login_status_text_label.pack_forget()
             return False
     
     def _show_auth_error(self, error_message):
         """显示认证错误"""
         # 停止进度条动画
-        self.login_progress.stop()
+        if self.login_progress_bar: self.login_progress_bar.stop()
         
         # 显示错误消息
-        error_title = self.texts['login']['error_title'] if 'login' in self.texts else "登录错误"
-        error_prefix = self.texts['login']['error_prefix'] if 'login' in self.texts else "登录过程发生错误: "
+        error_title = self.texts['login']['error_title'] if 'login' in self.texts else "Login Error"
+        error_prefix = self.texts['login']['error_prefix'] if 'login' in self.texts else "Login process encountered an error: "
         
         messagebox.showerror(error_title, f"{error_prefix}{error_message}")
         
         # 恢复按钮状态
-        for widget in self.winfo_children()[0].winfo_children():
-            if isinstance(widget, ttk.Button):
-                widget.config(state="normal")
+        if self.login_frame: # Check if login_frame exists
+            for widget in self.login_frame.winfo_children():
+                if isinstance(widget, ttk.Button):
+                    widget.config(state="normal")
+                elif isinstance(widget, ttk.Frame): # Assuming lang selector is in a sub-frame
+                     for sub_widget in widget.winfo_children():
+                        if isinstance(sub_widget, ttk.Combobox):
+                            sub_widget.config(state="readonly") # Restore to readonly
         
         # 隐藏进度条和状态标签
-        self.login_progress.pack_forget()
-        self.login_status_label.pack_forget()
+        if self.login_progress_bar: self.login_progress_bar.pack_forget()
+        if self.login_status_text_label: self.login_status_text_label.pack_forget()
         return False
             
     def _init_main_interface(self):
@@ -394,7 +498,7 @@ class EasyApplyApp(tk.Tk):
             (not self.config.get('positionsWithCount') or 
              (isinstance(self.config.get('positionsWithCount'), list) and len(self.config.get('positionsWithCount')) == 0))):
             
-            print("检测到旧的职位配置，正在尝试迁移...")
+            print("Old position configuration detected, attempting to migrate...")
             migrated_positions_with_count = []
             for old_position_name in self.config['positions']:
                 if isinstance(old_position_name, str) and old_position_name.strip():
@@ -404,7 +508,7 @@ class EasyApplyApp(tk.Tk):
                     })
             if migrated_positions_with_count:
                 self.config['positionsWithCount'] = migrated_positions_with_count
-                print(f"已迁移 {len(migrated_positions_with_count)} 个职位到新的配置格式。请检查并保存配置。")
+                print(f"Migrated {len(migrated_positions_with_count)} positions to new configuration format. Please review and save the configuration.")
                 # Optionally, clear the old positions to avoid confusion if needed, or let backend handle it
                 # self.config['positions'] = [] 
 
@@ -424,12 +528,12 @@ class EasyApplyApp(tk.Tk):
                     try:
                         question = json.loads(question)
                     except:
-                        print(f"无法解析问题字符串: {question}")
+                        print(f"Unable to parse the problem string: {question}")
                 if isinstance(answer, str) and answer.startswith('"') and answer.endswith('"'):
                     try:
                         answer = json.loads(answer)
                     except:
-                        print(f"无法解析答案字符串: {answer}")
+                        print(f"Unable to parse answer string: {answer}")
                 processed_questions[question] = answer
             self.config['customQuestions'] = processed_questions
             
@@ -561,8 +665,8 @@ class EasyApplyApp(tk.Tk):
         frame = ttk.LabelFrame(self.basic_tab, text=self.texts['basic_tab']['account_resume'], padding=(10, 5)); frame.pack(expand=True, fill="both", padx=10, pady=5); frame.columnconfigure(1, weight=1); current_row=0
         ttk.Label(frame, text=self.texts['basic_tab']['email']).grid(row=current_row, column=0, sticky=tk.W, padx=5, pady=3); ttk.Entry(frame, textvariable=self.vars['email'], width=60).grid(row=current_row, column=1, sticky=tk.EW, padx=5, pady=3); current_row+=1
         ttk.Label(frame, text=self.texts['basic_tab']['password']).grid(row=current_row, column=0, sticky=tk.W, padx=5, pady=3); ttk.Entry(frame, textvariable=self.vars['password'], width=60).grid(row=current_row, column=1, sticky=tk.EW, padx=5, pady=3); current_row+=1
-        ttk.Label(frame, text=self.texts['basic_tab']['openai_api_key']).grid(row=current_row, column=0, sticky=tk.W, padx=5, pady=3); ttk.Entry(frame, textvariable=self.vars['openaiApiKey'], width=60).grid(row=current_row, column=1, sticky=tk.EW, padx=5, pady=3); current_row+=1
-        ttk.Label(frame, text=self.texts['basic_tab']['openai_api_key_note']).grid(row=current_row, column=1, sticky=tk.W, padx=5); current_row+=1
+        # ttk.Label(frame, text=self.texts['basic_tab']['openai_api_key']).grid(row=current_row, column=0, sticky=tk.W, padx=5, pady=3); ttk.Entry(frame, textvariable=self.vars['openaiApiKey'], width=60).grid(row=current_row, column=1, sticky=tk.EW, padx=5, pady=3); current_row+=1
+        # ttk.Label(frame, text=self.texts['basic_tab']['openai_api_key_note']).grid(row=current_row, column=1, sticky=tk.W, padx=5); current_row+=1
         
         
         # 更新简历上传提示和文件类型
@@ -577,7 +681,7 @@ class EasyApplyApp(tk.Tk):
         ttk.Label(frame, text=self.texts['basic_tab']['pdf_only']).grid(row=current_row, column=1, sticky=tk.W, padx=5)
         current_row+=1
         
-        ttk.Label(frame, text=self.texts['basic_tab']['text_resume_path']).grid(row=current_row, column=0, sticky=tk.W, padx=5, pady=3); text_resume_frame = ttk.Frame(frame); ttk.Entry(text_resume_frame, textvariable=self.vars['textResume_path'], width=52).pack(side=tk.LEFT, fill=tk.X, expand=True); ttk.Button(text_resume_frame, text=self.texts['common']['browse'], command=lambda: self._browse_text_resume_and_update_ai_tab()).pack(side=tk.LEFT, padx=(5,0)); text_resume_frame.grid(row=current_row, column=1, sticky=tk.EW, padx=5, pady=3); current_row+=1
+        # ttk.Label(frame, text=self.texts['basic_tab']['text_resume_path']).grid(row=current_row, column=0, sticky=tk.W, padx=5, pady=3); text_resume_frame = ttk.Frame(frame); ttk.Entry(text_resume_frame, textvariable=self.vars['textResume_path'], width=52).pack(side=tk.LEFT, fill=tk.X, expand=True); ttk.Button(text_resume_frame, text=self.texts['common']['browse'], command=lambda: self._browse_text_resume_and_update_ai_tab()).pack(side=tk.LEFT, padx=(5,0)); text_resume_frame.grid(row=current_row, column=1, sticky=tk.EW, padx=5, pady=3); current_row+=1
         
         # 更新求职信上传提示和文件类型
         ttk.Label(frame, text=self.texts['basic_tab']['cover_letter_path']).grid(row=current_row, column=0, sticky=tk.W, padx=5, pady=3)
@@ -708,7 +812,7 @@ class EasyApplyApp(tk.Tk):
                                 # NEW: Switch to AI Assistant tab and run AI
                                 self.after(0, self._switch_to_ai_assistant_and_run_ai)
                             else:
-                                error_msg = data.get('message', '未知错误')
+                                error_msg = data.get('message', 'Unknown error')
                                 self.after(0, lambda: self._log_message(f"{self.texts['messages']['extract_fail'].format(pdf_filename)}: {error_msg}"))
                                 self.after(0, lambda: messagebox.showwarning(self.texts['common']['warning'], 
                                                                            f"{self.texts['messages']['extract_fail'].format(pdf_filename)}: {error_msg}"))
@@ -752,7 +856,7 @@ class EasyApplyApp(tk.Tk):
             
             if tab_id_to_select is not None: # Check if tab_id_to_select was found
                 self.notebook.select(tab_id_to_select)
-                self._log_message(f"已切换到 {ai_tab_text} 标签页。")
+                self._log_message(f"Switched to {ai_tab_text} tab.")
                 
                 self.update_idletasks() # Ensure UI updates before running AI
                 
@@ -760,14 +864,14 @@ class EasyApplyApp(tk.Tk):
                 # self.vars['textResume_path'] or the content displayed in the AI assistant tab.
                 self._run_ai_assistant()
             else:
-                self._log_message(f"错误：未能找到 {ai_tab_text} 标签页。")
-                messagebox.showerror(self.texts['common']['error'], f"未能找到 {ai_tab_text} 标签页。")
+                self._log_message(f"Error: Could not find {ai_tab_text} tab.。")
+                messagebox.showerror(self.texts['common']['error'], f"Not Found {ai_tab_text} tab.")
         except Exception as e:
             # Log the full traceback for debugging
             import traceback
             tb_str = traceback.format_exc()
-            self._log_message(f"切换到AI助手并运行AI时出错: {e}\\n{tb_str}")
-            messagebox.showerror(self.texts['common']['error'], f"切换到AI助手并运行AI时出错: {e}")
+            self._log_message(f"Error when switching to AI Assistant and running AI: {e}\\n{tb_str}")
+            messagebox.showerror(self.texts['common']['error'], f"Error when switching to AI Assistant and running AI: {e}")
 
     def _browse_text_resume_and_update_ai_tab(self):
         """浏览文本简历文件并更新AI助手标签页中的状态"""
@@ -905,7 +1009,7 @@ class EasyApplyApp(tk.Tk):
             if not name: messagebox.showerror(self.texts['common']['error'], self.texts['messages']['input_error'].format(self.texts['job_tab']['position_name']), parent=dialog); return
             try:
                 count = int(count_entry.get().strip())
-                if count <= 0: raise ValueError("投递数量必须为正整数")
+                if count <= 0: raise ValueError("The delivery quantity must be a positive integer")
             except ValueError as e:
                 messagebox.showerror(self.texts['common']['error'], f"{self.texts['messages']['invalid_integer'].format(self.texts['job_tab']['target_count'])}: {e}", parent=dialog); return
 
@@ -1194,7 +1298,7 @@ class EasyApplyApp(tk.Tk):
                     
                     # 创建简单对话框
                     dialog = tk.Toplevel(self)
-                    dialog.title("选择国家代码")
+                    dialog.title("Select Country Code")
                     dialog.transient(self)
                     dialog.grab_set()  # 强制模态
                     dialog.focus_set()  # 强制获取焦点
@@ -1708,10 +1812,22 @@ class EasyApplyApp(tk.Tk):
         if not self.config.get('email') or not self.config.get('password'):
             messagebox.showwarning(self.texts['common']['warning'], self.texts['messages']['missing_credentials'])
             return
+        
         pdf_resume = self.config.get('uploads', {}).get('resume', '')
-        text_resume = self.config.get('textResume', '')
-        if not pdf_resume and not text_resume:
-            messagebox.showwarning(self.texts['common']['warning'], self.texts['messages']['missing_resume'])
+        text_resume_path = self.config.get('textResume', '')
+
+        # 检查PDF简历是否存在，因为文本简历依赖它
+        if not pdf_resume:
+            messagebox.showwarning(self.texts['common']['warning'], self.texts['messages']['missing_pdf_resume_for_text'])
+            return
+
+        # 检查文本简历是否存在且有效
+        if not text_resume_path or not os.path.exists(text_resume_path):
+            messagebox.showwarning(
+                self.texts['common']['warning'], 
+                self.texts['messages'].get('missing_text_resume_hint', 
+                    "Text resume is missing or invalid. Please select a PDF resume and click the \"AI Extract Text\" button (on the Basic Settings tab) to generate it first.")
+            )
             return
 
         self.status_label.config(text=self.texts['messages']['starting_bot'])
@@ -1927,7 +2043,7 @@ class EasyApplyApp(tk.Tk):
                     # 验证熟练度是否有效
                     if level not in LANGUAGE_LEVELS:
                         if not messagebox.askyesno(self.texts['common']['warning'], 
-                                                 f"语言 '{lang_name}' 的熟练度 '{level}' 不在预设列表中。是否继续并将其设为 '{LANGUAGE_LEVELS[1]}'?",
+                                                 f"language '{lang_name}' Proficiency '{level}' is not in the preset list. Do you want to continue and set it to '{LANGUAGE_LEVELS[1]}'?",
                                                  parent=dialog):
                             continue
                         level = LANGUAGE_LEVELS[1]
@@ -3129,7 +3245,7 @@ class EasyApplyApp(tk.Tk):
                             pi_count += 1
                 
                 if pi_count > 0:
-                    self._update_ai_log(f"已更新 {pi_count} 个个人信息字段")
+                    self._update_ai_log(f"Updated {pi_count} personal information fields")
                     update_count += 1
             
             # 更新EEO信息 - 跳过空值
@@ -3196,7 +3312,7 @@ class EasyApplyApp(tk.Tk):
                             eeo_count += 1
                 
                 if eeo_count > 0:
-                    self._update_ai_log(f"已更新 {eeo_count} 个EEO信息字段")
+                    self._update_ai_log(f"Updated {eeo_count} EEO information fields")
                     update_count += 1
             
             # 更新薪资信息
@@ -3208,7 +3324,7 @@ class EasyApplyApp(tk.Tk):
                         amount = int(float(salary_data['amount']))
                         self.config['salaryMinimum'] = amount
                         self.vars['salaryMinimum'].set(amount)
-                        self._update_ai_log(f"已更新薪资: {amount}")
+                        self._update_ai_log(f"Updated salary: {amount}")
                         update_count += 1
                     except:
                         pass
@@ -3248,7 +3364,7 @@ class EasyApplyApp(tk.Tk):
                                 work_entry['city'] = work_entry['country']
                             else:
                                 # 无法推断，添加占位符
-                                work_entry['city'] = "[城市不详]"
+                                work_entry['city'] = "[City unknown]"
                         
                         # 确保日期字段是正确的格式
                         # from_month如果是数字，转换为月份名称
@@ -3280,7 +3396,7 @@ class EasyApplyApp(tk.Tk):
                 if work_count > 0:
                     self.config['workExperiences'] = work_entries
                     self._update_work_listbox()
-                    self._update_ai_log(f"已更新 {work_count} 个工作经历")
+                    self._update_ai_log(f"Updated {work_count} 个工作经历")
                     update_count += 1
             
             # 更新教育背景
@@ -3318,7 +3434,7 @@ class EasyApplyApp(tk.Tk):
                                 edu_entry['city'] = edu_entry['country']
                             else:
                                 # 无法推断，添加占位符
-                                edu_entry['city'] = "[学校所在地不详]"
+                                edu_entry['city'] = "[School location unknown]"
                         
                         # 确保日期字段是正确的格式
                         # from_month如果是数字，转换为月份名称
@@ -3350,7 +3466,7 @@ class EasyApplyApp(tk.Tk):
                 if edu_count > 0:
                     self.config['educations'] = edu_entries
                     self._update_edu_listbox()
-                    self._update_ai_log(f"已更新 {edu_count} 个教育经历")
+                    self._update_ai_log(f"Updated {edu_count} Educational experience")
                     update_count += 1
                 
                 # 更新已完成学位复选框
@@ -3382,12 +3498,12 @@ class EasyApplyApp(tk.Tk):
                         for degree, var in self.vars['degreeCompleted'].items():
                             var.set(degree in degrees)
                         
-                        self._update_ai_log(f"已更新完成学位: {', '.join(degrees)}")
+                        self._update_ai_log(f"Updated degree completion: {', '.join(degrees)}")
             
             # 保存配置
             if update_count > 0:
                 # save_config(self.config)
-                self._update_ai_log(f"成功更新了 {update_count} 项数据，请检查确认后到\"操作与状态\"中点击\"保存配置\"按钮保存更改")
+                self._update_ai_log(f"Successfully updated {update_count} items of data. Please check and confirm and click the \"Save Configuration\" button in \"Operation and Status\" to save the changes.")
             else:
                 self._update_ai_log("没有发现可用的数据可以更新")
             
