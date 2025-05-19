@@ -23,7 +23,7 @@ def setup_bundled_chrome(project_root, force_download=False):
     vendor_dir = os.path.join(project_root, "vendor", "chrome_for_testing")
     os.makedirs(vendor_dir, exist_ok=True)
 
-    local_versions_json_path = os.path.join(vendor_dir, "cft-versions.json")
+    local_versions_json_path = os.path.join(project_root, "vendor", "cft-versions.json")
 
     platform_system = sys.platform
     platform_machine = platform.machine()
