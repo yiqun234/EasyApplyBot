@@ -58,7 +58,7 @@ TEXTS = {
         'job': 'Jobs & Locations',
         'preferences': 'Preferences',
         'advanced': 'Advanced Settings',
-        'experience': 'Experience Management',
+        'experience': 'Personal Data',
         'ai_assistant': 'AI Assistant',
         'control': 'Control & Status',
     },

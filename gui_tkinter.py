@@ -555,6 +555,8 @@ class EasyApplyApp(tk.Tk):
             'distance': tk.IntVar(value=self.config.get('distance', 100)),
             'search_remote': tk.BooleanVar(value=self.config.get('remote', False)),
             'lessthanTenApplicants': tk.BooleanVar(value=self.config.get('lessthanTenApplicants', True)),
+            'lessApplicantsEnabled': tk.BooleanVar(value=self.config.get('lessApplicantsEnabled', False)),
+            'lessApplicantsCount': tk.StringVar(value=str(self.config.get('lessApplicantsCount', 100))),
             'newestPostingsFirst': tk.BooleanVar(value=self.config.get('newestPostingsFirst', False)),
             'residentStatus': tk.BooleanVar(value=self.config.get('residentStatus', False)),
             # Preferences (Dynamic Checkboxes/Radio)
@@ -641,17 +643,34 @@ class EasyApplyApp(tk.Tk):
     def _on_tab_changed(self, event):
         """当标签页切换时调用"""
         selected_tab_index = self.notebook.index(self.notebook.select())
-        # 假设AI助手标签页是第6个标签页 (索引从0开始)
-        # 您可能需要根据实际的标签页顺序调整此索引
-        ai_assistant_tab_index = -1
-        for i, tab_text in enumerate([self.notebook.tab(i, "text") for i in self.notebook.tabs()]) :
-            if tab_text == "AI助手":
-                ai_assistant_tab_index = i
-                break
+        selected_tab_text = self.notebook.tab(selected_tab_index, "text")
         
-        if selected_tab_index == ai_assistant_tab_index:
+        # 处理AI助手标签页
+        if selected_tab_text == "AI助手":
             if hasattr(self, 'resume_status_label') and self.resume_status_label.winfo_exists():
                 self._check_resume_file()
+                
+        # 首先解绑所有全局滚轮事件
+        try:
+            self.unbind_all("<MouseWheel>")
+            self.unbind_all("<Button-4>")
+            self.unbind_all("<Button-5>")
+        except:
+            pass
+            
+        # 根据当前选中的标签页决定滚动行为
+        if selected_tab_text == self.texts['tabs']['experience']:
+            # 切换到个人资料标签页时，重新绑定其全局滚轮事件
+            if hasattr(self, '_experience_mousewheel_func'):
+                self.bind_all("<MouseWheel>", self._experience_mousewheel_func)
+                self.bind_all("<Button-4>", self._experience_mousewheel_func)
+                self.bind_all("<Button-5>", self._experience_mousewheel_func)
+        elif selected_tab_text == self.texts['tabs']['advanced']:
+            # 切换到高级设置标签页时，重新绑定其全局滚轮事件
+            if hasattr(self, '_on_mousewheel_func'):
+                self.bind_all("<MouseWheel>", self._on_mousewheel_func)
+                self.bind_all("<Button-4>", self._on_mousewheel_func)
+                self.bind_all("<Button-5>", self._on_mousewheel_func)
 
     def _get_current_date_pref(self):
         date_prefs = self.config.get('date', {}); # Default to empty dict if missing
@@ -935,6 +954,25 @@ class EasyApplyApp(tk.Tk):
         chk_frame.grid(row=2, column=0, columnspan=2, sticky=tk.W, padx=5, pady=5)
         ttk.Checkbutton(chk_frame, text=self.texts['job_tab']['remote_only'], variable=self.vars['search_remote']).pack(anchor=tk.W)
         ttk.Checkbutton(chk_frame, text=self.texts['job_tab']['less_than_ten'], variable=self.vars['lessthanTenApplicants']).pack(anchor=tk.W)
+        
+        # 添加筛选少于X名申请者的选项(X可选择)
+        less_than_frame = ttk.Frame(chk_frame)
+        less_than_frame.pack(anchor=tk.W)
+        
+        # 创建变量，如果不存在则初始化
+        if 'lessApplicantsEnabled' not in self.vars:
+            self.vars['lessApplicantsEnabled'] = tk.BooleanVar(value=False)
+        if 'lessApplicantsCount' not in self.vars:
+            self.vars['lessApplicantsCount'] = tk.StringVar(value="100")
+            
+        # 添加复选框和下拉菜单
+        ttk.Checkbutton(less_than_frame, text="筛选少于", variable=self.vars['lessApplicantsEnabled']).pack(side=tk.LEFT)
+        less_count_combobox = ttk.Combobox(less_than_frame, textvariable=self.vars['lessApplicantsCount'], 
+                                          values=["100", "90", "80"], state="readonly", width=5)
+        less_count_combobox.pack(side=tk.LEFT, padx=(0, 5))
+        ttk.Label(less_than_frame, text="名申请者的职位").pack(side=tk.LEFT)
+        
+        # 其他原有选项
         ttk.Checkbutton(chk_frame, text=self.texts['job_tab']['newest_first'], variable=self.vars['newestPostingsFirst']).pack(anchor=tk.W)
         ttk.Checkbutton(chk_frame, text=self.texts['job_tab']['resident_status'], variable=self.vars['residentStatus']).pack(anchor=tk.W)
 
@@ -1134,14 +1172,10 @@ class EasyApplyApp(tk.Tk):
         # 初始化下拉框状态标志
         self.dropdown_active = False
 
-        # Bind mouse wheel events to the canvas
-        self.adv_canvas.bind_all("<MouseWheel>", _on_mousewheel) 
-        self.adv_canvas.bind_all("<Button-4>", _on_mousewheel)   
-        self.adv_canvas.bind_all("<Button-5>", _on_mousewheel)   
-        # You might need to bind to self.scrollable_frame as well sometimes, depending on focus
-        self.scrollable_frame.bind_all("<MouseWheel>", _on_mousewheel)
-        self.scrollable_frame.bind_all("<Button-4>", _on_mousewheel)
-        self.scrollable_frame.bind_all("<Button-5>", _on_mousewheel)
+        # 直接使用全局绑定，因为我们会在标签切换时管理这些绑定
+        self.bind_all("<MouseWheel>", _on_mousewheel) 
+        self.bind_all("<Button-4>", _on_mousewheel)   
+        self.bind_all("<Button-5>", _on_mousewheel)
 
 
         self.adv_canvas.pack(side="left", fill="both", expand=True, padx=5, pady=5)
@@ -1237,205 +1271,15 @@ class EasyApplyApp(tk.Tk):
         ttk.Button(customq_button_frame, text=self.texts['advanced_tab']['batch_add_qa'], command=self._batch_add_customquestions, width=12).pack(pady=2, fill=tk.X)
         ttk.Button(customq_button_frame, text=self.texts['advanced_tab']['batch_delete_qa'], command=self._batch_remove_customquestions, width=12).pack(pady=2, fill=tk.X)
 
-        # --- Personal Info & EEO Frame (Dynamic Entries) ---
-        dynamic_frame = ttk.LabelFrame(self.scrollable_frame, text=self.texts['advanced_labels']['personal_info_frame'], padding=(10, 5))
-        dynamic_frame.grid(row=current_row, column=0, columnspan=2, padx=10, pady=5, sticky=tk.EW); current_row += 1
-        dynamic_frame.columnconfigure(1, weight=1); dynamic_frame.columnconfigure(3, weight=1)
-        sub_row = 0
-        # Personal Info Fields (Dynamically created based on loaded config keys)
-        ttk.Label(dynamic_frame, text=self.texts['advanced_labels']['personal_info_title'], font='-weight bold').grid(row=sub_row, column=0, columnspan=4, sticky=tk.W, padx=5, pady=5); sub_row += 1
-        personal_keys = list(self.config.get('personalInfo', {}).keys()) # Iterate over keys present in loaded config
-        for i, key in enumerate(personal_keys):
-            col = (i % 2) * 2; row_offset = i // 2
-            
-            # 为Phone Country Code字段添加特殊处理
-            if key.lower() == 'phone country code':
-                # 添加标签
-                ttk.Label(dynamic_frame, text=f"{key.replace('_',' ').title()}:").grid(row=sub_row + row_offset, column=col, sticky=tk.W, padx=5, pady=2)
-                
-                # 确保变量存在
-                if key not in self.vars['personalInfo']:
-                    self.vars['personalInfo'][key] = tk.StringVar(value=self.config.get('personalInfo', {}).get(key, 'United States (+1)'))
-                
-                # 使用简单的两列布局，而不是嵌套框架
-                # 创建只读输入框，直接放在grid布局中
-                entry_code = ttk.Entry(dynamic_frame, textvariable=self.vars['personalInfo'][key], state="readonly", width=17)
-                entry_code.grid(row=sub_row + row_offset, column=col+1, sticky=tk.W, padx=5, pady=2)
-                
-                # 直接创建选择按钮，放在输入框旁边
-                btn_code = ttk.Button(dynamic_frame, text=self.texts['advanced_tab']['select_code'], width=5)
-                btn_code.grid(row=sub_row + row_offset, column=col+1, sticky=tk.E, padx=5, pady=2)
-                
-                # 保存当前key避免闭包问题
-                saved_key = key
-                
-                # 定义选择函数
-                def open_code_dialog():
-                    # 备份当前的全局滚轮事件绑定
-                    widget_dict = {}
-                    widget_dict['root'] = self
-                    widget_dict['canvas'] = self.adv_canvas
-                    widget_dict['frame'] = self.scrollable_frame
-                    
-                    # 存储所有要恢复的绑定
-                    bindings_to_restore = []
-                    
-                    # 解除所有绑定
-                    for widget_name, widget in widget_dict.items():
-                        # 滚轮事件
-                        for event in ["<MouseWheel>", "<Button-4>", "<Button-5>"]:
-                            # 获取所有绑定
-                            curr_binding = widget.bind(event)
-                            if curr_binding:
-                                bindings_to_restore.append((widget, event, curr_binding))
-                                widget.unbind(event)
-                            
-                            # 获取所有全局绑定
-                            curr_all_binding = widget.bind_all(event)
-                            if curr_all_binding:
-                                bindings_to_restore.append((widget, f"all:{event}", curr_all_binding))
-                                widget.unbind_all(event)
-                    
-                    # 创建简单对话框
-                    dialog = tk.Toplevel(self)
-                    dialog.title("Select Country Code")
-                    dialog.transient(self)
-                    dialog.grab_set()  # 强制模态
-                    dialog.focus_set()  # 强制获取焦点
-                    dialog.resizable(False, False)
-                    
-                    # 在对话框关闭时恢复所有绑定
-                    def on_dialog_close():
-                        # 恢复所有绑定
-                        for widget, event, binding in bindings_to_restore:
-                            if event.startswith("all:"):
-                                widget.bind_all(event[4:], binding)
-                            else:
-                                widget.bind(event, binding)
-                        dialog.destroy()
-                    
-                    dialog.protocol("WM_DELETE_WINDOW", on_dialog_close)
-                    
-                    # 创建列表框
-                    list_frame = ttk.Frame(dialog, padding=10)
-                    list_frame.pack(fill=tk.BOTH, expand=True)
-                    
-                    # 搜索框
-                    search_var = tk.StringVar()
-                    ttk.Label(list_frame, text=self.texts['advanced_tab']['search_prompt']).grid(row=0, column=0, sticky=tk.W, padx=5, pady=5)
-                    search_entry = ttk.Entry(list_frame, textvariable=search_var, width=30)
-                    search_entry.grid(row=0, column=1, sticky=tk.EW, padx=5, pady=5)
-                    search_entry.focus_set()
-                    
-                    # 创建滚动条和列表框
-                    scrollbar = ttk.Scrollbar(list_frame)
-                    scrollbar.grid(row=1, column=2, sticky='ns', padx=(0,5), pady=5)
-                    
-                    country_listbox = tk.Listbox(list_frame, yscrollcommand=scrollbar.set, width=30, height=15)
-                    country_listbox.grid(row=1, column=0, columnspan=2, sticky='nsew', padx=5, pady=5)
-                    scrollbar.config(command=country_listbox.yview)
-                    
-                    # 加载数据
-                    for code in COUNTRY_CODES:
-                        country_listbox.insert(tk.END, code)
-                    
-                    # 当前选中的值
-                    current = self.vars['personalInfo'][saved_key].get()
-                    for i, code in enumerate(COUNTRY_CODES):
-                        if code == current:
-                            country_listbox.selection_set(i)
-                            country_listbox.see(i)
-                            break
-                    
-                    # 搜索函数
-                    def filter_codes(*args):
-                        search_text = search_var.get().lower()
-                        country_listbox.delete(0, tk.END)
-                        for code in COUNTRY_CODES:
-                            if search_text in code.lower():
-                                country_listbox.insert(tk.END, code)
-                    
-                    search_var.trace("w", filter_codes)
-                    
-                    # 选择函数
-                    def on_select():
-                        selected = country_listbox.curselection()
-                        if selected:
-                            value = country_listbox.get(selected[0])
-                            self.vars['personalInfo'][saved_key].set(value)
-                            on_dialog_close()  # 使用自定义关闭函数
-                    
-                    # 双击选择
-                    country_listbox.bind("<Double-1>", lambda e: on_select())
-                    
-                    # 按钮区域
-                    btn_frame = ttk.Frame(dialog, padding=(10, 0, 10, 10))
-                    btn_frame.pack(fill=tk.X)
-                    
-                    ttk.Button(btn_frame, text=self.texts['common']['ok'], command=on_select, width=10).pack(side=tk.LEFT, padx=5)
-                    ttk.Button(btn_frame, text=self.texts['common']['cancel'], command=on_dialog_close, width=10).pack(side=tk.LEFT, padx=5)
-                    
-                    # 调整对话框位置
-                    dialog.update_idletasks()
-                    width = dialog.winfo_width()
-                    height = dialog.winfo_height()
-                    x = (dialog.winfo_screenwidth() // 2) - (width // 2)
-                    y = (dialog.winfo_screenheight() // 2) - (height // 2)
-                    dialog.geometry(f"{width}x{height}+{x}+{y}")
-                    
-                    # 让对话框独立处理自己的滚轮事件，实现完全隔离
-                    def handle_local_scroll(event, widget):
-                        # 局部滚轮事件处理
-                        if sys.platform == "win32":
-                            delta = -int(event.delta / 120)
-                        elif sys.platform == "darwin":  # macOS
-                            delta = -event.delta
-                        else:  # Linux
-                            if event.num == 4:
-                                delta = -1
-                            elif event.num == 5:
-                                delta = 1
-                            else:
-                                delta = 0
-                        widget.yview_scroll(delta, "units")
-                        return "break"  # 阻止事件传播
-                    
-                    # 为对话框中的列表框绑定专用滚轮处理
-                    country_listbox.bind("<MouseWheel>", lambda e: handle_local_scroll(e, country_listbox))
-                    country_listbox.bind("<Button-4>", lambda e: handle_local_scroll(e, country_listbox))
-                    country_listbox.bind("<Button-5>", lambda e: handle_local_scroll(e, country_listbox))
-                    
-                    # 强制等待，直到对话框关闭
-                    dialog.wait_window(dialog)
-                
-                # 设置按钮命令
-                btn_code.config(command=open_code_dialog)
-            else:
-                ttk.Label(dynamic_frame, text=f"{key.replace('_',' ').title()}:").grid(row=sub_row + row_offset, column=col, sticky=tk.W, padx=5, pady=2)
-                entry = ttk.Entry(dynamic_frame, textvariable=self.vars['personalInfo'][key], width=25)
-                entry.grid(row=sub_row + row_offset, column=col + 1, sticky=tk.EW, padx=5, pady=2)
-        sub_row += (len(personal_keys) + 1) // 2
-
-        # EEO Fields (Dynamically created based on loaded config keys)
-        ttk.Label(dynamic_frame, text=self.texts['advanced_labels']['eeo_info_title'], font='-weight bold').grid(row=sub_row, column=0, columnspan=4, sticky=tk.W, padx=5, pady=5); sub_row += 1
-        eeo_keys = list(self.config.get('eeo', {}).keys()) # Iterate over keys present in loaded config
-        for i, key in enumerate(eeo_keys):
-            col = (i % 2) * 2; row_offset = i // 2
-            ttk.Label(dynamic_frame, text=f"{key.replace('_',' ').title()}:").grid(row=sub_row + row_offset, column=col, sticky=tk.W, padx=5, pady=2)
-            entry = ttk.Entry(dynamic_frame, textvariable=self.vars['eeo'][key], width=25) # Var should exist from __init__
-            entry.grid(row=sub_row + row_offset, column=col + 1, sticky=tk.EW, padx=5, pady=2)
-        sub_row += (len(eeo_keys) + 1) // 2
-
-
-        # --- Degree Completed Frame (Checkboxes) ---
-        degree_frame = ttk.LabelFrame(self.scrollable_frame, text=self.texts['advanced_labels']['degree_frame'], padding=(10, 5))
-        degree_frame.grid(row=current_row, column=0, columnspan=2, padx=10, pady=5, sticky=tk.EW); current_row += 1
-        row, col = 0, 0
-        for degree in STANDARD_DEGREES:
-            var = self.vars['degreeCompleted'][degree]
-            ttk.Checkbutton(degree_frame, text=degree, variable=var).grid(row=row, column=col, sticky=tk.W, padx=5, pady=1)
-            col += 1; # Adjust layout - maybe 2 columns?
-            if col >= 2: col = 0; row += 1
+        # --- Degree Completed Frame (Checkboxes) --- (已移动到经历管理标签页)
+        # degree_frame = ttk.LabelFrame(self.scrollable_frame, text=self.texts['advanced_labels']['degree_frame'], padding=(10, 5))
+        # degree_frame.grid(row=current_row, column=0, columnspan=2, padx=10, pady=5, sticky=tk.EW); current_row += 1
+        # row, col = 0, 0
+        # for degree in STANDARD_DEGREES:
+        #     var = self.vars['degreeCompleted'][degree]
+        #     ttk.Checkbutton(degree_frame, text=degree, variable=var).grid(row=row, column=col, sticky=tk.W, padx=5, pady=1)
+        #     col += 1; # Adjust layout - maybe 2 columns?
+        #     if col >= 2: col = 0; row += 1
 
 
         # --- Other Settings Frame (GPA, Salary, etc.) ---
@@ -1443,9 +1287,10 @@ class EasyApplyApp(tk.Tk):
         other_settings_frame.grid(row=current_row, column=0, columnspan=2, padx=10, pady=5, sticky=tk.EW); other_settings_frame.columnconfigure(1, weight=1); current_row += 1
         sub_row=0
         ttk.Label(other_settings_frame, text=self.texts['advanced_fields']['output_dir']).grid(row=sub_row, column=0, sticky=tk.W, padx=5, pady=3); ttk.Entry(other_settings_frame, textvariable=self.vars['outputFileDirectory'], width=40).grid(row=sub_row, column=1, sticky=tk.EW, padx=5, pady=3); sub_row+=1
-        ttk.Label(other_settings_frame, text=self.texts['advanced_fields']['university_gpa']).grid(row=sub_row, column=0, sticky=tk.W, padx=5, pady=3); ttk.Entry(other_settings_frame, textvariable=self.vars['universityGpa'], width=15).grid(row=sub_row, column=1, sticky=tk.W, padx=5, pady=3); sub_row+=1
-        ttk.Label(other_settings_frame, text=self.texts['advanced_fields']['min_salary']).grid(row=sub_row, column=0, sticky=tk.W, padx=5, pady=3); ttk.Entry(other_settings_frame, textvariable=self.vars['salaryMinimum'], width=15).grid(row=sub_row, column=1, sticky=tk.W, padx=5, pady=3); sub_row+=1
-        ttk.Label(other_settings_frame, text=self.texts['advanced_fields']['notice_period']).grid(row=sub_row, column=0, sticky=tk.W, padx=5, pady=3); ttk.Entry(other_settings_frame, textvariable=self.vars['noticePeriod'], width=15).grid(row=sub_row, column=1, sticky=tk.W, padx=5, pady=3); sub_row+=1
+        # 以下设置已移动到经历管理标签页
+        # ttk.Label(other_settings_frame, text=self.texts['advanced_fields']['university_gpa']).grid(row=sub_row, column=0, sticky=tk.W, padx=5, pady=3); ttk.Entry(other_settings_frame, textvariable=self.vars['universityGpa'], width=15).grid(row=sub_row, column=1, sticky=tk.W, padx=5, pady=3); sub_row+=1
+        # ttk.Label(other_settings_frame, text=self.texts['advanced_fields']['min_salary']).grid(row=sub_row, column=0, sticky=tk.W, padx=5, pady=3); ttk.Entry(other_settings_frame, textvariable=self.vars['salaryMinimum'], width=15).grid(row=sub_row, column=1, sticky=tk.W, padx=5, pady=3); sub_row+=1
+        # ttk.Label(other_settings_frame, text=self.texts['advanced_fields']['notice_period']).grid(row=sub_row, column=0, sticky=tk.W, padx=5, pady=3); ttk.Entry(other_settings_frame, textvariable=self.vars['noticePeriod'], width=15).grid(row=sub_row, column=1, sticky=tk.W, padx=5, pady=3); sub_row+=1
         bool_flag_frame = ttk.Frame(other_settings_frame); bool_flag_frame.grid(row=sub_row, column=0, columnspan=2, sticky=tk.W, padx=5, pady=5); sub_row+=1
         ttk.Checkbutton(bool_flag_frame, text=self.texts['advanced_fields']['evaluate_job_fit'], variable=self.vars['evaluateJobFit']).pack(side=tk.LEFT, padx=5)
         ttk.Checkbutton(bool_flag_frame, text=self.texts['advanced_fields']['debug_mode'], variable=self.vars['debug']).pack(side=tk.LEFT, padx=5)
@@ -1716,6 +1561,8 @@ class EasyApplyApp(tk.Tk):
             self.config['distance'] = self.vars['distance'].get()
             self.config['remote'] = self.vars['search_remote'].get()
             self.config['lessthanTenApplicants'] = self.vars['lessthanTenApplicants'].get()
+            self.config['lessApplicantsEnabled'] = self.vars['lessApplicantsEnabled'].get()
+            self.config['lessApplicantsCount'] = int(self.vars['lessApplicantsCount'].get())
             self.config['newestPostingsFirst'] = self.vars['newestPostingsFirst'].get()
             self.config['residentStatus'] = self.vars['residentStatus'].get()
             
@@ -2532,13 +2379,251 @@ class EasyApplyApp(tk.Tk):
             yaml.dump(config_to_save, stream, default_flow_style=False, allow_unicode=True, sort_keys=False)
 
     def _create_experience_tab(self):
-        frame = ttk.Frame(self.experience_tab, padding=(10, 5))
+        # --- 添加滚动条支持 ---
+        self.experience_canvas = tk.Canvas(self.experience_tab)  # 保存Canvas引用为实例变量
+        scrollbar = ttk.Scrollbar(self.experience_tab, orient="vertical", command=self.experience_canvas.yview)
+        self.experience_frame = ttk.Frame(self.experience_canvas)  # 保存Frame引用为实例变量
+        
+        self.experience_frame.bind("<Configure>", lambda e: self.experience_canvas.configure(scrollregion=self.experience_canvas.bbox("all")))
+        self.experience_canvas.create_window((0, 0), window=self.experience_frame, anchor="nw")
+        self.experience_canvas.configure(yscrollcommand=scrollbar.set)
+        
+        # --- 滚轮事件绑定 ---
+        def _on_mousewheel(event):
+            # 平台特定的滚动计算
+            if sys.platform == "win32":
+                delta = -int(event.delta / 120)
+            elif sys.platform == "darwin":  # macOS
+                delta = -event.delta
+            else:  # Linux
+                if event.num == 4:
+                    delta = -1
+                elif event.num == 5:
+                    delta = 1
+                else:
+                    delta = 0
+            self.experience_canvas.yview_scroll(delta, "units")
+            return "break"  # 阻止事件继续传播
+        
+        # 直接使用bind_all，因为我们在标签切换函数中会处理解绑
+        self.experience_canvas.bind_all("<MouseWheel>", _on_mousewheel)
+        self.experience_canvas.bind_all("<Button-4>", _on_mousewheel)
+        self.experience_canvas.bind_all("<Button-5>", _on_mousewheel)
+        
+        # 保存事件处理函数的引用，以便在标签切换时使用
+        self._experience_mousewheel_func = _on_mousewheel
+        
+        self.experience_canvas.pack(side="left", fill="both", expand=True, padx=5, pady=5)
+        scrollbar.pack(side="right", fill="y")
+        
+        # 设置主框架（现在放入experience_frame中）
+        frame = ttk.Frame(self.experience_frame, padding=(10, 5))
         frame.pack(expand=True, fill="both", padx=10, pady=5)
         frame.columnconfigure(0, weight=1)
         frame.columnconfigure(1, weight=1)
+        
+        # --- Personal Info & EEO Frame (Dynamic Entries) ---
+        personal_frame = ttk.LabelFrame(frame, text=self.texts['advanced_labels']['personal_info_frame'], padding=(10, 5))
+        personal_frame.grid(row=0, column=0, columnspan=2, padx=5, pady=5, sticky=tk.EW)
+        personal_frame.columnconfigure(1, weight=1)
+        personal_frame.columnconfigure(3, weight=1)
+        sub_row = 0
+        
+        # Personal Info Fields (Dynamically created based on loaded config keys)
+        ttk.Label(personal_frame, text=self.texts['advanced_labels']['personal_info_title'], font='-weight bold').grid(row=sub_row, column=0, columnspan=4, sticky=tk.W, padx=5, pady=5)
+        sub_row += 1
+        
+        personal_keys = list(self.config.get('personalInfo', {}).keys()) # Iterate over keys present in loaded config
+        for i, key in enumerate(personal_keys):
+            col = (i % 2) * 2
+            row_offset = i // 2
+            
+            # 为Phone Country Code字段添加特殊处理
+            if key.lower() == 'phone country code':
+                # 添加标签
+                ttk.Label(personal_frame, text=f"{key.replace('_',' ').title()}:").grid(row=sub_row + row_offset, column=col, sticky=tk.W, padx=5, pady=2)
+                
+                # 确保变量存在
+                if key not in self.vars['personalInfo']:
+                    self.vars['personalInfo'][key] = tk.StringVar(value=self.config.get('personalInfo', {}).get(key, 'United States (+1)'))
+                
+                # 使用简单的两列布局，而不是嵌套框架
+                # 创建只读输入框，直接放在grid布局中
+                entry_code = ttk.Entry(personal_frame, textvariable=self.vars['personalInfo'][key], state="readonly", width=17)
+                entry_code.grid(row=sub_row + row_offset, column=col+1, sticky=tk.W, padx=5, pady=2)
+                
+                # 直接创建选择按钮，放在输入框旁边
+                btn_code = ttk.Button(personal_frame, text=self.texts['advanced_tab']['select_code'], width=5)
+                btn_code.grid(row=sub_row + row_offset, column=col+1, sticky=tk.E, padx=5, pady=2)
+                
+                # 保存当前key避免闭包问题
+                saved_key = key
+                
+                # 定义选择函数
+                def open_code_dialog():
+                    # 备份当前的全局滚轮事件绑定
+                    widget_dict = {}
+                    widget_dict['root'] = self
+                    
+                    # 存储所有要恢复的绑定
+                    bindings_to_restore = []
+                    
+                    # 解除所有绑定
+                    for widget_name, widget in widget_dict.items():
+                        # 滚轮事件
+                        for event in ["<MouseWheel>", "<Button-4>", "<Button-5>"]:
+                            # 获取所有绑定
+                            curr_binding = widget.bind(event)
+                            if curr_binding:
+                                bindings_to_restore.append((widget, event, curr_binding))
+                                widget.unbind(event)
+                            
+                            # 获取所有全局绑定
+                            curr_all_binding = widget.bind_all(event)
+                            if curr_all_binding:
+                                bindings_to_restore.append((widget, f"all:{event}", curr_all_binding))
+                                widget.unbind_all(event)
+                    
+                    # 创建简单对话框
+                    dialog = tk.Toplevel(self)
+                    dialog.title("Select Country Code")
+                    dialog.transient(self)
+                    dialog.grab_set()  # 强制模态
+                    dialog.focus_set()  # 强制获取焦点
+                    dialog.resizable(False, False)
+                    
+                    # 在对话框关闭时恢复所有绑定
+                    def on_dialog_close():
+                        # 恢复所有绑定
+                        for widget, event, binding in bindings_to_restore:
+                            if event.startswith("all:"):
+                                widget.bind_all(event[4:], binding)
+                            else:
+                                widget.bind(event, binding)
+                        dialog.destroy()
+                    
+                    dialog.protocol("WM_DELETE_WINDOW", on_dialog_close)
+                    
+                    # 创建列表框
+                    list_frame = ttk.Frame(dialog, padding=10)
+                    list_frame.pack(fill=tk.BOTH, expand=True)
+                    
+                    # 搜索框
+                    search_var = tk.StringVar()
+                    ttk.Label(list_frame, text=self.texts['advanced_tab']['search_prompt']).grid(row=0, column=0, sticky=tk.W, padx=5, pady=5)
+                    search_entry = ttk.Entry(list_frame, textvariable=search_var, width=30)
+                    search_entry.grid(row=0, column=1, sticky=tk.EW, padx=5, pady=5)
+                    search_entry.focus_set()
+                    
+                    # 创建滚动条和列表框
+                    scrollbar = ttk.Scrollbar(list_frame)
+                    scrollbar.grid(row=1, column=2, sticky='ns', padx=(0,5), pady=5)
+                    
+                    country_listbox = tk.Listbox(list_frame, yscrollcommand=scrollbar.set, width=30, height=15)
+                    country_listbox.grid(row=1, column=0, columnspan=2, sticky='nsew', padx=5, pady=5)
+                    scrollbar.config(command=country_listbox.yview)
+                    
+                    # 加载数据
+                    for code in COUNTRY_CODES:
+                        country_listbox.insert(tk.END, code)
+                    
+                    # 当前选中的值
+                    current = self.vars['personalInfo'][saved_key].get()
+                    for i, code in enumerate(COUNTRY_CODES):
+                        if code == current:
+                            country_listbox.selection_set(i)
+                            country_listbox.see(i)
+                            break
+                    
+                    # 搜索函数
+                    def filter_codes(*args):
+                        search_text = search_var.get().lower()
+                        country_listbox.delete(0, tk.END)
+                        for code in COUNTRY_CODES:
+                            if search_text in code.lower():
+                                country_listbox.insert(tk.END, code)
+                    
+                    search_var.trace("w", filter_codes)
+                    
+                    # 选择函数
+                    def on_select():
+                        selected = country_listbox.curselection()
+                        if selected:
+                            value = country_listbox.get(selected[0])
+                            self.vars['personalInfo'][saved_key].set(value)
+                            on_dialog_close()  # 使用自定义关闭函数
+                    
+                    # 双击选择
+                    country_listbox.bind("<Double-1>", lambda e: on_select())
+                    
+                    # 按钮区域
+                    btn_frame = ttk.Frame(dialog, padding=(10, 0, 10, 10))
+                    btn_frame.pack(fill=tk.X)
+                    
+                    ttk.Button(btn_frame, text=self.texts['common']['ok'], command=on_select, width=10).pack(side=tk.LEFT, padx=5)
+                    ttk.Button(btn_frame, text=self.texts['common']['cancel'], command=on_dialog_close, width=10).pack(side=tk.LEFT, padx=5)
+                    
+                    # 调整对话框位置
+                    dialog.update_idletasks()
+                    width = dialog.winfo_width()
+                    height = dialog.winfo_height()
+                    x = (dialog.winfo_screenwidth() // 2) - (width // 2)
+                    y = (dialog.winfo_screenheight() // 2) - (height // 2)
+                    dialog.geometry(f"{width}x{height}+{x}+{y}")
+                    
+                    # 让对话框独立处理自己的滚轮事件，实现完全隔离
+                    def handle_local_scroll(event, widget):
+                        # 局部滚轮事件处理
+                        if sys.platform == "win32":
+                            delta = -int(event.delta / 120)
+                        elif sys.platform == "darwin":  # macOS
+                            delta = -event.delta
+                        else:  # Linux
+                            if event.num == 4:
+                                delta = -1
+                            elif event.num == 5:
+                                delta = 1
+                            else:
+                                delta = 0
+                        widget.yview_scroll(delta, "units")
+                        return "break"  # 阻止事件传播
+                    
+                    # 为对话框中的列表框绑定专用滚轮处理
+                    country_listbox.bind("<MouseWheel>", lambda e: handle_local_scroll(e, country_listbox))
+                    country_listbox.bind("<Button-4>", lambda e: handle_local_scroll(e, country_listbox))
+                    country_listbox.bind("<Button-5>", lambda e: handle_local_scroll(e, country_listbox))
+                    
+                    # 强制等待，直到对话框关闭
+                    dialog.wait_window(dialog)
+                
+                # 设置按钮命令
+                btn_code.config(command=open_code_dialog)
+            else:
+                ttk.Label(personal_frame, text=f"{key.replace('_',' ').title()}:").grid(row=sub_row + row_offset, column=col, sticky=tk.W, padx=5, pady=2)
+                if key not in self.vars['personalInfo']:
+                    self.vars['personalInfo'][key] = tk.StringVar(value=self.config.get('personalInfo', {}).get(key, ''))
+                entry = ttk.Entry(personal_frame, textvariable=self.vars['personalInfo'][key], width=25)
+                entry.grid(row=sub_row + row_offset, column=col + 1, sticky=tk.EW, padx=5, pady=2)
+        
+        sub_row += (len(personal_keys) + 1) // 2
+
+        # EEO Fields (Dynamically created based on loaded config keys)
+        ttk.Label(personal_frame, text=self.texts['advanced_labels']['eeo_info_title'], font='-weight bold').grid(row=sub_row, column=0, columnspan=4, sticky=tk.W, padx=5, pady=5)
+        sub_row += 1
+        
+        eeo_keys = list(self.config.get('eeo', {}).keys()) # Iterate over keys present in loaded config
+        for i, key in enumerate(eeo_keys):
+            col = (i % 2) * 2
+            row_offset = i // 2
+            ttk.Label(personal_frame, text=f"{key.replace('_',' ').title()}:").grid(row=sub_row + row_offset, column=col, sticky=tk.W, padx=5, pady=2)
+            if key not in self.vars['eeo']:
+                self.vars['eeo'][key] = tk.StringVar(value=self.config.get('eeo', {}).get(key, ''))
+            entry = ttk.Entry(personal_frame, textvariable=self.vars['eeo'][key], width=25)
+            entry.grid(row=sub_row + row_offset, column=col + 1, sticky=tk.EW, padx=5, pady=2)
+        
         # 工作经历区
         work_frame = ttk.LabelFrame(frame, text=self.texts['experience_labels']['work_frame'], padding=(10, 5))
-        work_frame.grid(row=0, column=0, sticky=tk.NSEW, padx=5, pady=5)
+        work_frame.grid(row=1, column=0, sticky=tk.NSEW, padx=5, pady=5)
         self.work_listbox = tk.Listbox(work_frame, height=10, width=38)
         self.work_listbox.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
         work_btn_frame = ttk.Frame(work_frame)
@@ -2547,9 +2632,10 @@ class EasyApplyApp(tk.Tk):
         ttk.Button(work_btn_frame, text=self.texts['buttons']['edit_work'], command=self._edit_work_dialog, width=15).pack(side=tk.LEFT, padx=5)
         ttk.Button(work_btn_frame, text=self.texts['buttons']['remove_work'], command=self._remove_work, width=15).pack(side=tk.LEFT, padx=5)
         self._update_work_listbox()
+        
         # 学历经历区
         edu_frame = ttk.LabelFrame(frame, text=self.texts['experience_labels']['education_frame'], padding=(10, 5))
-        edu_frame.grid(row=0, column=1, sticky=tk.NSEW, padx=5, pady=5)
+        edu_frame.grid(row=1, column=1, sticky=tk.NSEW, padx=5, pady=5)
         self.edu_listbox = tk.Listbox(edu_frame, height=10, width=38)
         self.edu_listbox.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
         edu_btn_frame = ttk.Frame(edu_frame)
@@ -2558,6 +2644,70 @@ class EasyApplyApp(tk.Tk):
         ttk.Button(edu_btn_frame, text=self.texts['buttons']['edit_edu'], command=self._edit_edu_dialog, width=15).pack(side=tk.LEFT, padx=5)
         ttk.Button(edu_btn_frame, text=self.texts['buttons']['remove_edu'], command=self._remove_edu, width=15).pack(side=tk.LEFT, padx=5)
         self._update_edu_listbox()
+        
+        # --- 已完成学位和其他设置 --- 
+        settings_frame = ttk.Frame(frame)
+        settings_frame.grid(row=2, column=0, columnspan=2, padx=5, pady=5, sticky=tk.EW)
+        settings_frame.columnconfigure(0, weight=1)
+        settings_frame.columnconfigure(1, weight=1)
+        
+        # --- 已完成学位 Frame ---
+        degree_frame = ttk.LabelFrame(settings_frame, text=self.texts['advanced_labels']['degree_frame'], padding=(10, 5))
+        degree_frame.grid(row=0, column=0, sticky=tk.NSEW, padx=5, pady=5)
+        row, col = 0, 0
+        for degree in STANDARD_DEGREES:
+            var = self.vars['degreeCompleted'][degree]
+            ttk.Checkbutton(degree_frame, text=degree, variable=var).grid(row=row, column=col, sticky=tk.W, padx=5, pady=1)
+            col += 1
+            if col >= 2: col = 0; row += 1
+            
+        # --- GPA、最低期望工资、通知周期等设置 ---
+        other_settings_frame = ttk.LabelFrame(settings_frame, text=self.texts['advanced_labels']['other_settings_frame'], padding=(10, 5))
+        other_settings_frame.grid(row=0, column=1, sticky=tk.NSEW, padx=5, pady=5)
+        other_settings_frame.columnconfigure(1, weight=1)
+        
+        sub_row = 0
+        ttk.Label(other_settings_frame, text=self.texts['advanced_fields']['university_gpa']).grid(row=sub_row, column=0, sticky=tk.W, padx=5, pady=3)
+        ttk.Entry(other_settings_frame, textvariable=self.vars['universityGpa'], width=15).grid(row=sub_row, column=1, sticky=tk.W, padx=5, pady=3)
+        sub_row += 1
+        
+        ttk.Label(other_settings_frame, text=self.texts['advanced_fields']['min_salary']).grid(row=sub_row, column=0, sticky=tk.W, padx=5, pady=3)
+        ttk.Entry(other_settings_frame, textvariable=self.vars['salaryMinimum'], width=15).grid(row=sub_row, column=1, sticky=tk.W, padx=5, pady=3)
+        sub_row += 1
+        
+        ttk.Label(other_settings_frame, text=self.texts['advanced_fields']['notice_period']).grid(row=sub_row, column=0, sticky=tk.W, padx=5, pady=3)
+        ttk.Entry(other_settings_frame, textvariable=self.vars['noticePeriod'], width=15).grid(row=sub_row, column=1, sticky=tk.W, padx=5, pady=3)
+        sub_row += 1
+        
+        # 为经历管理标签页的列表框和子框架单独绑定滚轮事件
+        def _configure_listbox_scrolling():
+            def _on_listbox_mousewheel(event, listbox):
+                # 平台特定的滚动计算
+                if sys.platform == "win32":
+                    delta = -int(event.delta / 120)
+                elif sys.platform == "darwin":  # macOS
+                    delta = -event.delta
+                else:  # Linux
+                    if event.num == 4:
+                        delta = -1
+                    elif event.num == 5:
+                        delta = 1
+                    else:
+                        delta = 0
+                listbox.yview_scroll(delta, "units")
+                return "break"  # 阻止事件继续传播
+            
+            # 为工作列表框和学历列表框添加滚轮事件
+            self.work_listbox.bind("<MouseWheel>", lambda e: _on_listbox_mousewheel(e, self.work_listbox))
+            self.work_listbox.bind("<Button-4>", lambda e: _on_listbox_mousewheel(e, self.work_listbox))
+            self.work_listbox.bind("<Button-5>", lambda e: _on_listbox_mousewheel(e, self.work_listbox))
+            
+            self.edu_listbox.bind("<MouseWheel>", lambda e: _on_listbox_mousewheel(e, self.edu_listbox))
+            self.edu_listbox.bind("<Button-4>", lambda e: _on_listbox_mousewheel(e, self.edu_listbox))
+            self.edu_listbox.bind("<Button-5>", lambda e: _on_listbox_mousewheel(e, self.edu_listbox))
+        
+        # 执行列表框滚动配置
+        _configure_listbox_scrolling()
 
     def _update_work_listbox(self):
         self.work_listbox.delete(0, tk.END)
@@ -3396,7 +3546,7 @@ class EasyApplyApp(tk.Tk):
                 if work_count > 0:
                     self.config['workExperiences'] = work_entries
                     self._update_work_listbox()
-                    self._update_ai_log(f"Updated {work_count} 个工作经历")
+                    self._update_ai_log(f"Updated {work_count} Work experience")
                     update_count += 1
             
             # 更新教育背景

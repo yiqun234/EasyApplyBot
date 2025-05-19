@@ -375,6 +375,10 @@ class LinkedinEasyApply:
         self.title_blacklist = parameters.get('titleBlacklist', []) or []
         self.poster_blacklist = parameters.get('posterBlacklist', []) or []
         
+        # 少于X名申请者的筛选选项
+        self.lessApplicantsEnabled = parameters.get('lessApplicantsEnabled', False)
+        self.lessApplicantsCount = parameters.get('lessApplicantsCount', 100)
+        
         # New: Configurations for positions with application counts
         self.positions_with_count = parameters.get('positionsWithCount', []) or []
         self.applied_counts = {} # Tracks the number of applications for each position name
@@ -753,6 +757,49 @@ class LinkedinEasyApply:
                             continue
 
                     time.sleep(random.uniform(3, 5)) if not self.debug else time.sleep(random.uniform(1, 2))
+
+                    # 检查申请人数是否超过设定的阈值
+                    if self.lessApplicantsEnabled:
+                        try:
+                            # 尝试找到显示申请人数的元素
+                            desc_container = self.browser.find_element(By.CLASS_NAME, 'job-details-jobs-unified-top-card__tertiary-description-container')
+                            description_text = desc_container.text
+                            
+                            # 提取申请人数（支持多种格式）
+                            # 英文格式: "2 applicants"
+                            # 中文格式: "2 位申请者", "超过 100 位申请者", "超过 100 位会员点击过"申请""
+                            applicants_count = None
+                            
+                            # 匹配各种格式的正则表达式
+                            patterns = [
+                                r'(\d+)\s+applicants?',  # 英文: "2 applicants"
+                                r'(\d+)\s*位申请者',      # 中文: "2 位申请者"
+                                r'超过\s*(\d+)\s*位申请者',  # 中文: "超过 100 位申请者"
+                                r'over\s*(\d+)\s*applicants',  # 英文: "over 100 applicants"
+                                r'超过\s*(\d+)\s*位会员点击过"?申请"?',  # 中文: "超过 100 位会员点击过"申请""
+                                r'over\s*(\d+)\s*people clicked apply'  # 英文: "Over 100 people clicked apply"
+                            ]
+                            
+                            # 尝试所有模式
+                            for pattern in patterns:
+                                match = re.search(pattern, description_text)
+                                if match:
+                                    # 提取数字
+                                    applicants_count = int(match.group(1))
+                                    break
+                            
+                            # 如果成功提取到申请人数
+                            if applicants_count is not None:
+                                print(f"Detected applicants count: {applicants_count}")
+                                
+                                # 如果申请人数超过设定的阈值，跳过此职位
+                                if applicants_count > self.lessApplicantsCount:
+                                    print(f"Applicants count ({applicants_count}) exceeds threshold ({self.lessApplicantsCount}), skipping job")
+                                    if link and link not in self.seen_jobs: 
+                                        self.seen_jobs.append(link)
+                                    continue
+                        except Exception as e:
+                            print(f"检查申请人数时出错: {e}")
 
                     # TODO: Check if the job is already applied or the application has been reached
                     # "You've reached the Easy Apply application limit for today. Save this job and come back tomorrow to continue applying."
@@ -1604,6 +1651,8 @@ class LinkedinEasyApply:
 
         if parameters['lessthanTenApplicants']:
             lessthanTenApplicants_url = "&f_EA=true"
+            
+        # 注意：我们现在在页面内容中直接检查申请人数，不再使用URL参数
 
         if parameters['newestPostingsFirst']:
             newestPostingsFirst_url += "&sortBy=DD"
@@ -1698,7 +1747,7 @@ class LinkedinEasyApply:
                             upload_button.send_keys(self.cover_letter_dir)
                         elif 'required' in upload_type.text.lower():
                             upload_button.send_keys(self.resume_dir)
-                    elif  'photo' in upload_type.text.lower():
+                    elif  'upload' == upload_type.text.lower(): # photo is Upload
                         if self.photo_dir != '':
                             upload_button.send_keys(self.photo_dir)
                         elif 'required' in upload_type.text.lower():
@@ -1758,6 +1807,8 @@ class LinkedinEasyApply:
                     time.sleep(1.5)
                     input_field.send_keys(Keys.DOWN)
                     input_field.send_keys(Keys.RETURN)
+
+            self.send_resume()
 
     def handle_current_checkbox(self, question, form, item, form_type):
         """

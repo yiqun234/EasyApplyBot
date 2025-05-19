@@ -58,7 +58,7 @@ TEXTS = {
         'job': '职位和位置',
         'preferences': '偏好设置',
         'advanced': '高级设置',
-        'experience': '经历管理',
+        'experience': '个人资料',
         'ai_assistant': 'AI助手',
         'control': '操作与状态',
     },
