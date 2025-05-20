@@ -145,21 +145,69 @@
         
         /* 右侧固定导航样式 */
         .sidebar {
-            width: 260px;
-            height: 90vh;
-            position: sticky;
-            top: 80px;
-            padding: 20px;
-            background-color: #fff;
-            border-left: 1px solid #eee;
+            width: 100%;
+            height: 100%;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            transform: translateX(100%);
+            transition: transform 0.3s ease;
+            z-index: 999;
+            border-left: none;
+            padding: 20px 0 20px 0;
+            margin-left: 0;
+            box-sizing: border-box;
             overflow-y: auto;
-            margin-left: 20px;
+            overflow-x: hidden;
+            background-color: #fff;
+        }
+        
+        .sidebar-inner {
+            padding: 0 20px;
+            width: 100%;
+            box-sizing: border-box;
+        }
+        
+        @media (min-width: 1201px) {
+            .sidebar {
+                width: 300px;
+                height: 90vh;
+                position: sticky;
+                top: 80px;
+                background-color: #fff;
+                border-left: 1px solid #eee;
+                transform: none;
+                margin-left: 20px;
+            }
         }
         
         .doc-nav {
+            width: 100%;
+            padding-right: 20px;
+            box-sizing: border-box;
             list-style: none;
-            padding: 0;
+            padding: 0 20px 0 0;
             margin: 0;
+        }
+        
+        .doc-nav-item {
+            width: 100%;
+            box-sizing: border-box;
+            margin-bottom: 10px;
+        }
+        
+        .doc-nav-link {
+            width: 100%;
+            box-sizing: border-box;
+            display: block;
+            padding: 8px 10px;
+            color: #333;
+            text-decoration: none;
+            border-left: 2px solid transparent;
+            transition: all 0.3s ease;
+            position: relative;
         }
         
         .doc-nav-title {
@@ -173,16 +221,6 @@
         
         .doc-nav-item {
             margin-bottom: 10px;
-        }
-        
-        .doc-nav-link {
-            display: block;
-            padding: 8px 10px;
-            color: #333;
-            text-decoration: none;
-            border-left: 2px solid transparent;
-            transition: all 0.3s ease;
-            position: relative;
         }
         
         .doc-nav-link::after {
@@ -462,21 +500,10 @@
                 max-width: 100%;
                 padding: 20px;
             }
-            
+
             .sidebar {
-                width: 100%;
-                height: auto;
-                position: fixed;
-                top: 0;
-                left: 0;
-                right: 0;
-                bottom: 0;
-                transform: translateX(100%);
-                transition: transform 0.3s ease;
-                z-index: 1000;
-                border-left: none;
-                padding-top: 60px;
-                margin-left: 0;
+
+                padding-top: 100px;
             }
             
             .sidebar.active {
@@ -485,6 +512,12 @@
             
             .menu-toggle {
                 display: block;
+                transition: all 0.3s ease;
+            }
+            
+            .menu-toggle.active {
+                background-color: #E74C3C;
+                transform: rotate(180deg);
             }
             
             .close-menu {
@@ -600,6 +633,39 @@
             padding-bottom: 20px;
             border-bottom: 1px solid #ddd;
             text-align: center;
+        }
+        
+        /* 主页按钮美化 */
+        .home-link-btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 80%;
+            background-color: #3A7BD5;
+            background-image: linear-gradient(135deg, #3A7BD5 0%, #5A96E3 100%);
+            color: white;
+            font-weight: 600;
+            padding: 12px 15px;
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(58, 123, 213, 0.25);
+            transition: all 0.3s ease;
+            text-decoration: none;
+            border: none;
+            font-family: 'Poppins', -apple-system, BlinkMacSystemFont, sans-serif;
+            margin: 0 auto;
+        }
+        
+        .home-link-btn:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 6px 20px rgba(58, 123, 213, 0.35);
+        }
+        
+        .home-link-btn:active {
+            transform: translateY(-1px);
+        }
+        
+        .home-link-btn i {
+            margin-right: 8px;
         }
         
         /* 按钮样式 */
@@ -1016,30 +1082,30 @@
         
         <!-- 右侧固定导航 -->
         <div class="sidebar">
-            <div class="doc-nav-title" data-lang-en="Document Contents" data-lang-zh="文档目录">文档目录</div>
-            <div class="home-link">
-                <a href="index.html#features" class="primary-btn home-link-btn" style="width: 80%; padding: 10px;" data-lang-en="Homepage" data-lang-zh="主页" onclick="storeScrollTarget(event, '#features')">主页</a>
+            <div class="sidebar-inner">
+                <div class="doc-nav-title" data-lang-en="Document Contents" data-lang-zh="文档目录">文档目录</div>
+                <div class="home-link">
+                    <a href="index.html" class="primary-btn home-link-btn" style="width: 80%;" data-lang-en="Homepage" data-lang-zh="主页" onclick="storeScrollTarget(event, '')"><i class="fas fa-home"></i> <span data-lang-en="Homepage" data-lang-zh="主页">主页</span></a>
+                </div>
+                <ul class="doc-nav">
+                    <li class="doc-nav-item"><a href="#overview" class="doc-nav-link" data-lang-en="Overview" data-lang-zh="概览">概览</a></li>
+                    <li class="doc-nav-item"><a href="#demo" class="doc-nav-link" data-lang-en="Demo Video" data-lang-zh="演示视频">演示视频</a></li>
+                    <li class="doc-nav-item"><a href="#download" class="doc-nav-link" data-lang-en="Source Code Download" data-lang-zh="源码下载">源码下载</a></li>
+                    <li class="doc-nav-item"><a href="#features" class="doc-nav-link" data-lang-en="Features" data-lang-zh="功能特点">功能特点</a></li>
+                    <li class="doc-nav-item"><a href="#installation" class="doc-nav-link" data-lang-en="Installation and Preparation" data-lang-zh="安装和准备">安装和准备</a></li>
+                    <li class="doc-nav-item"><a href="#batch-files" class="doc-nav-link" data-lang-en="Batch Files" data-lang-zh="批处理文件">批处理文件</a></li>
+                    <li class="doc-nav-item"><a href="#configuration" class="doc-nav-link" data-lang-en="Configuration" data-lang-zh="配置说明">配置说明</a></li>
+                    <li class="doc-nav-item"><a href="#ai-features" class="doc-nav-link" data-lang-en="AI Features" data-lang-zh="AI功能">AI功能</a></li>
+                    <li class="doc-nav-item"><a href="#faq" class="doc-nav-link" data-lang-en="FAQ" data-lang-zh="常见问题">常见问题</a></li>
+                    <li class="doc-nav-item"><a href="#help" class="doc-nav-link" data-lang-en="More Help" data-lang-zh="更多帮助">更多帮助</a></li>
+                </ul>
             </div>
-            <ul class="doc-nav">
-                <li class="doc-nav-item"><a href="#overview" class="doc-nav-link" data-lang-en="Overview" data-lang-zh="概览">概览</a></li>
-                <li class="doc-nav-item"><a href="#demo" class="doc-nav-link" data-lang-en="Demo Video" data-lang-zh="演示视频">演示视频</a></li>
-                <li class="doc-nav-item"><a href="#download" class="doc-nav-link" data-lang-en="Source Code Download" data-lang-zh="源码下载">源码下载</a></li>
-                <li class="doc-nav-item"><a href="#features" class="doc-nav-link" data-lang-en="Features" data-lang-zh="功能特点">功能特点</a></li>
-                <li class="doc-nav-item"><a href="#installation" class="doc-nav-link" data-lang-en="Installation and Preparation" data-lang-zh="安装和准备">安装和准备</a></li>
-                <li class="doc-nav-item"><a href="#batch-files" class="doc-nav-link" data-lang-en="Batch Files" data-lang-zh="批处理文件">批处理文件</a></li>
-                <li class="doc-nav-item"><a href="#configuration" class="doc-nav-link" data-lang-en="Configuration" data-lang-zh="配置说明">配置说明</a></li>
-                <li class="doc-nav-item"><a href="#ai-features" class="doc-nav-link" data-lang-en="AI Features" data-lang-zh="AI功能">AI功能</a></li>
-                <li class="doc-nav-item"><a href="#faq" class="doc-nav-link" data-lang-en="FAQ" data-lang-zh="常见问题">常见问题</a></li>
-                <li class="doc-nav-item"><a href="#help" class="doc-nav-link" data-lang-en="More Help" data-lang-zh="更多帮助">更多帮助</a></li>
-            </ul>
             <button class="close-menu" style="display: none;">&times;</button>
-            
-            
         </div>
     </div>
     
     <!-- 移动设备菜单按钮 -->
-    <button class="menu-toggle">☰</button>
+    <button class="menu-toggle" title="展开目录">☰</button>
     
     <!-- 返回顶部按钮 -->
     <button class="back-to-top" title="返回顶部">↑</button>
@@ -1186,13 +1252,31 @@
         
         // 移动菜单控制
         document.querySelector('.menu-toggle').addEventListener('click', function() {
-            document.querySelector('.sidebar').classList.add('active');
-            document.querySelector('.close-menu').style.display = 'block';
+            const sidebar = document.querySelector('.sidebar');
+            const menuToggle = document.querySelector('.menu-toggle');
+            
+            // 切换侧边栏的显示状态
+            if (sidebar.classList.contains('active')) {
+                // 如果当前是激活状态，则隐藏
+                sidebar.classList.remove('active');
+                document.querySelector('.close-menu').style.display = 'none';
+                menuToggle.classList.remove('active');
+                menuToggle.innerHTML = '☰';
+            } else {
+                // 如果当前是隐藏状态，则显示
+                sidebar.classList.add('active');
+                document.querySelector('.close-menu').style.display = 'block';
+                menuToggle.classList.add('active');
+                menuToggle.innerHTML = '✕';
+            }
         });
         
         document.querySelector('.close-menu').addEventListener('click', function() {
             document.querySelector('.sidebar').classList.remove('active');
             this.style.display = 'none';
+            const menuToggle = document.querySelector('.menu-toggle');
+            menuToggle.classList.remove('active');
+            menuToggle.innerHTML = '☰';
         });
         
         // 侧边栏内的语言切换按钮
@@ -1228,14 +1312,33 @@
                     
                     // 更新URL
                     history.pushState(null, null, targetId);
+                    
+                    // 但在移动端点击时关闭侧边栏
+                    if (window.innerWidth <= 1200) {
+                        document.querySelector('.sidebar').classList.remove('active');
+                        document.querySelector('.close-menu').style.display = 'none';
+                        // 更新菜单按钮状态
+                        const menuToggle = document.querySelector('.menu-toggle');
+                        menuToggle.classList.remove('active');
+                        menuToggle.innerHTML = '☰';
+                    }
                 });
             });
             
             // 页首链接平滑滚动
             const homeLink = document.querySelector('.home-link a');
-            if (homeLink && homeLink.getAttribute('href') === 'index.html') {
+            if (homeLink) {
                 homeLink.addEventListener('click', function(e) {
                     // 不阻止默认行为，允许页面导航
+                    // 但在移动端点击时关闭侧边栏
+                    if (window.innerWidth <= 1200) {
+                        document.querySelector('.sidebar').classList.remove('active');
+                        document.querySelector('.close-menu').style.display = 'none';
+                        // 更新菜单按钮状态
+                        const menuToggle = document.querySelector('.menu-toggle');
+                        menuToggle.classList.remove('active');
+                        menuToggle.innerHTML = '☰';
+                    }
                 });
             }
         });
