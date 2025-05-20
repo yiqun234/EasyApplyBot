@@ -1,0 +1,614 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title data-lang-en="Nuomi.ai - Your AI Job Search Agent" data-lang-zh="Nuomi.ai - 你的AI求职助理">Nuomi.ai - Your AI Job Search Agent</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        /* 模态窗口样式 */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            z-index: 2000;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .modal-content {
+            background-color: #ffffff;
+            width: 90%;
+            max-width: 400px;
+            border-radius: 12px;
+            box-shadow: 0 8px 16px rgba(0,0,0,0.1);
+            overflow: hidden;
+            animation: modalFadeIn 0.3s ease;
+        }
+
+        .modal-header {
+            background-color: #3A7BD5;
+            color: white;
+            padding: 15px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .modal-header h3 {
+            margin: 0;
+            color: white;
+            font-size: 1.2rem;
+        }
+
+        .modal-close {
+            cursor: pointer;
+            font-size: 1.5rem;
+            color: white;
+            background: none;
+            border: none;
+            padding: 0;
+        }
+
+        .modal-body {
+            padding: 20px;
+        }
+
+        .modal-body p {
+            margin: 0 0 15px 0;
+            font-size: 1.1rem;
+        }
+
+        .modal-footer {
+            padding: 15px 20px;
+            text-align: right;
+            border-top: 1px solid #eee;
+        }
+
+        .modal-btn {
+            padding: 8px 15px;
+            border: none;
+            border-radius: 8px;
+            background-color: #3A7BD5;
+            color: white;
+            cursor: pointer;
+            font-weight: 500;
+            transition: all 0.3s ease;
+        }
+
+        .modal-btn:hover {
+            background-color: #2962ac;
+            transform: translateY(-2px);
+        }
+
+        @keyframes modalFadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(-20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        
+        /* 平滑滚动效果 */
+        html {
+            scroll-behavior: smooth;
+        }
+        
+        /* 调整滚动位置，考虑固定导航栏高度 */
+        :target {
+            scroll-margin-top: 80px;
+        }
+
+        /* 导航链接悬停和点击动画效果 */
+        .nav-links a {
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .nav-links a::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 0;
+            height: 2px;
+            background-color: #3A7BD5;
+            transition: width 0.3s ease;
+        }
+        
+        .nav-links a:hover::after {
+            width: 100%;
+        }
+        
+        .nav-links a:active {
+            transform: translateY(1px);
+        }
+    </style>
+</head>
+<body>
+    <nav>
+        <div class="container">
+            <div class="logo" data-lang-en="Nuomi.ai" data-lang-zh="Nuomi.ai">Nuomi.ai</div>
+            <div class="nav-container">
+                <ul class="nav-links">
+                    <li><a href="#features" data-lang-en="Features" data-lang-zh="功能">Features</a></li>
+                    <li><a href="#how-it-works" data-lang-en="How it works" data-lang-zh="工作原理">How it works</a></li>
+                    <li><a href="instructions.html" data-lang-en="User Manual" data-lang-zh="使用手册">User Manual</a></li>
+                    <li class="mobile-lang-item"><button id="mobile-lang-switcher" data-lang-en="切换中文" data-lang-zh="Switch to English">切换中文</button></li>
+                </ul>
+                <div class="menu-right">
+                    <button id="lang-switcher" data-lang-en="切换中文" data-lang-zh="Switch to English">切换中文</button>
+                    <div class="mobile-menu-btn">
+                        <span></span>
+                        <span></span>
+                        <span></span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <header class="hero">
+        <div class="container">
+            <div class="hero-content-full">
+                <div class="cold-open">
+                    <span class="spark-emoji">💥</span>
+                    <h1 class="main-title" data-lang-en="Can't land a job? Stop blaming the market." data-lang-zh="找不到工作？别再怪市场了。">Can't land a job? Stop blaming the market.</h1>
+                    <div class="question-list">
+                        <p data-lang-en="How many jobs have you actually applied to?" data-lang-zh="你真正申请了多少份工作？">How many jobs have you actually applied to?</p>
+                        <p data-lang-en="How many recruiters have called you?" data-lang-zh="有多少招聘人员给你打过电话？">How many recruiters have called you?</p>
+                        <p data-lang-en="If you haven't received 20 phone calls — you're not even trying." data-lang-zh="如果你还没收到20个电话——你根本没有努力尝试。">If you haven't received 20 phone calls — you're not even trying.</p>
+                    </div>
+                    <div class="truth-bombs">
+                        <p data-lang-en="It's not that no one wants to hire you." data-lang-zh="不是没人想雇佣你。">It's not that no one wants to hire you.</p>
+                        <p data-lang-en="You just haven't put yourself out there enough." data-lang-zh="你只是没有足够地推销自己。">You just haven't put yourself out there enough.</p>
+                    </div>
+                    <div class="call-to-action">
+                        <p data-lang-en="I don't want you to just think about job hunting anymore —" data-lang-zh="我不想让你只是思考求职——">I don't want you to just think about job hunting anymore —</p>
+                        <p data-lang-en="I want you to actually start." data-lang-zh="我想让你真正开始行动。">I want you to actually start.</p>
+                        <p data-lang-en="And we'll take the first step for you." data-lang-zh="我们将为你迈出第一步。">And we'll take the first step for you.</p>
+                    </div>
+                </div>
+                <div class="hero-info">
+                    <p class="hero-subtitle" data-lang-en="Meet your job-search AI agent." data-lang-zh="认识你的求职AI助手。">Meet your job-search AI agent.</p>
+                    <div class="users-badge" data-lang-en="100+ Job Seekers Empowered" data-lang-zh="100+ 求职者已使用">100+ Job Seekers Empowered</div>
+                    <p class="hero-description">
+                        <span data-lang-en="It controls your browser, reads job descriptions, matches your resume, and <b>auto-applies</b> for you — up to 100 LinkedIn Easy Apply jobs per day." data-lang-zh="它控制你的浏览器，阅读职位描述，匹配你的简历，并为你<b>自动投递</b>——每天高达100个LinkedIn一键申请职位。">It controls your browser, reads job descriptions, matches your resume, and <b>auto-applies</b> for you — up to 100 LinkedIn Easy Apply jobs per day.</span>
+                    </p>
+                    <div class="hero-cta">
+                        <a href="instructions.html" class="primary-btn" data-lang-en="Get Started Free" data-lang-zh="免费开始使用">Get Started Free</a>
+                        <a href="#how-it-works" class="secondary-btn" data-lang-en="How It Works" data-lang-zh="工作原理">How It Works</a>
+                    </div>
+                </div>
+                <div class="hero-bg-element">
+                    <div class="animated-circle"></div>
+                    <div class="animated-circle circle-2"></div>
+                    <div class="animated-circle circle-3"></div>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <section id="features" class="features-section">
+        <div class="container">
+            <h2 class="section-title" data-lang-en="Why Choose Nuomi.ai?" data-lang-zh="为何选择Nuomi.ai？">Why Choose Nuomi.ai?</h2>
+            <div class="features-grid">
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <i class="fas fa-rocket"></i>
+                    </div>
+                    <h3 data-lang-en="Mass Applications" data-lang-zh="批量申请">Mass Applications</h3>
+                    <p data-lang-en="Apply to 100+ LinkedIn jobs daily without lifting a finger" data-lang-zh="每天轻松申请100+个LinkedIn职位，无需手动操作">Apply to 100+ LinkedIn jobs daily without lifting a finger</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <i class="fas fa-robot"></i>
+                    </div>
+                    <h3 data-lang-en="AI-Powered Matching" data-lang-zh="AI智能匹配">AI-Powered Matching</h3>
+                    <p data-lang-en="Not just quantity — precision too. Our AI matches your resume to jobs before applying" data-lang-zh="不仅仅是数量——还有精准度。我们的AI在申请前匹配你的简历与职位">Not just quantity — precision too. Our AI matches your resume to jobs before applying</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <i class="fas fa-shield-alt"></i>
+                    </div>
+                    <h3 data-lang-en="Secure & Private" data-lang-zh="安全与隐私">Secure & Private</h3>
+                    <p data-lang-en="Your data never leaves your computer - everything runs locally" data-lang-zh="您的数据永远不会离开您的计算机 - 一切都在本地运行">Your data never leaves your computer - everything runs locally</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <i class="fas fa-chart-pie"></i>
+                    </div>
+                    <h3 data-lang-en="Auto Resume Submission" data-lang-zh="自动投递简历">Auto Resume Submission</h3>
+                    <p data-lang-en="Automatically submit your resume to 100+ matching jobs per day" data-lang-zh="每天自动向100+个匹配的职位投递简历">Automatically submit your resume to 100+ matching jobs per day</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section id="how-it-works" class="how-it-works-section">
+        <div class="container">
+            <h2 class="section-title" data-lang-en="How It Works" data-lang-zh="工作原理">How It Works</h2>
+            
+            <!-- 添加流程图图片 -->
+            <div class="workflow-diagram">
+                <img src="image/en.png" alt="Workflow Diagram" class="workflow-image" id="workflow-en">
+                <img src="image/zh.png" alt="工作流程图" class="workflow-image" id="workflow-zh" style="display:none;">
+            </div>
+            
+            <div class="steps-container">
+                <div class="step">
+                    <div class="step-number">1</div>
+                    <div class="step-content">
+                        <h3 data-lang-en="Upload Your Resume" data-lang-zh="上传简历">Upload Your Resume</h3>
+                        <p data-lang-en="Upload your resume and set your job preferences" data-lang-zh="上传您的简历并设置职位偏好">Upload your resume and set your job preferences</p>
+                    </div>
+                </div>
+                <div class="step">
+                    <div class="step-number">2</div>
+                    <div class="step-content">
+                        <h3 data-lang-en="Configure Bot Settings" data-lang-zh="配置机器人设置">Configure Bot Settings</h3>
+                        <p data-lang-en="Set job type, location, and application parameters" data-lang-zh="设置职位类型、地点和申请参数">Set job type, location, and application parameters</p>
+                    </div>
+                </div>
+                <div class="step">
+                    <div class="step-number">3</div>
+                    <div class="step-content">
+                        <h3 data-lang-en="Start The Bot" data-lang-zh="启动机器人">Start The Bot</h3>
+                        <p data-lang-en="Our AI handles the rest - searching and applying to matching jobs" data-lang-zh="我们的AI处理剩下的事情 - 搜索并申请匹配的职位">Our AI handles the rest - searching and applying to matching jobs</p>
+                    </div>
+                </div>
+                <div class="step">
+                    <div class="step-number">4</div>
+                    <div class="step-content">
+                        <h3 data-lang-en="Auto-Submit Applications" data-lang-zh="自动投递简历">Auto-Submit Applications</h3>
+                        <p data-lang-en="Our AI automatically submits your applications to matching jobs" data-lang-zh="我们的AI自动为你投递简历到匹配的职位">Our AI automatically submits your applications to matching jobs</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section id="pricing" class="pricing-section">
+        <div class="container">
+            <div class="pricing-wrapper">
+                <div class="pricing-header-section">
+                    <h2 class="section-title" data-lang-en="Free to Use" data-lang-zh="免费使用">Free to Use</h2>
+                    <p class="pricing-subtitle" data-lang-en="Get started today - no credit card required" data-lang-zh="立即开始 - 无需信用卡">Get started today - no credit card required</p>
+                </div>
+                
+                <div class="pricing-benefits">
+                    <div class="benefit-item">
+                        <div class="benefit-icon"><i class="fas fa-check-circle"></i></div>
+                        <p data-lang-en="100 Applications/Day" data-lang-zh="100份申请/天">100 Applications/Day</p>
+                    </div>
+                    <div class="benefit-item">
+                        <div class="benefit-icon"><i class="fas fa-check-circle"></i></div>
+                        <p data-lang-en="AI Resume Matching" data-lang-zh="AI简历匹配">AI Resume Matching</p>
+                    </div>
+                    <div class="benefit-item">
+                        <div class="benefit-icon"><i class="fas fa-check-circle"></i></div>
+                        <p data-lang-en="Basic Analytics" data-lang-zh="基础分析">Basic Analytics</p>
+                    </div>
+                    <div class="benefit-item">
+                        <div class="benefit-icon"><i class="fas fa-check-circle"></i></div>
+                        <p data-lang-en="LinkedIn Support" data-lang-zh="LinkedIn支持">LinkedIn Support</p>
+                    </div>
+                </div>
+                
+                <div class="pricing-cta">
+                    <a href="instructions.html" class="primary-btn large-btn" data-lang-en="Start Applying Now" data-lang-zh="立即开始申请">Start Applying Now</a>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section id="faq" class="faq-section">
+        <div class="container">
+            <h2 class="section-title" data-lang-en="Frequently Asked Questions" data-lang-zh="常见问题">Frequently Asked Questions</h2>
+            <div class="faq-container">
+                <div class="faq-item">
+                    <div class="faq-question">
+                        <h3 data-lang-en="Is this against LinkedIn's terms of service?" data-lang-zh="这是否违反LinkedIn的服务条款？">Is this against LinkedIn's terms of service?</h3>
+                        <i class="fas fa-chevron-down"></i>
+                    </div>
+                    <div class="faq-answer">
+                        <p data-lang-en="Nuomi.ai works just like a human would - we don't scrape or use LinkedIn's API. We simply automate the browser interaction that you would normally do manually." data-lang-zh="Nuomi.ai的工作方式就像人类一样 - 我们不抓取或使用LinkedIn的API。我们只是自动化您通常手动执行的浏览器交互。">Nuomi.ai works just like a human would - we don't scrape or use LinkedIn's API. We simply automate the browser interaction that you would normally do manually.</p>
+                    </div>
+                </div>
+                <div class="faq-item">
+                    <div class="faq-question">
+                        <h3 data-lang-en="Will employers know I'm using a bot?" data-lang-zh="雇主会知道我在使用机器人吗？">Will employers know I'm using a bot?</h3>
+                        <i class="fas fa-chevron-down"></i>
+                    </div>
+                    <div class="faq-answer">
+                        <p data-lang-en="No. Our bot applies exactly like a human would. There's no way for employers to tell the difference between our bot and a human applicant." data-lang-zh="不会。我们的机器人申请的方式与人类完全相同。雇主无法区分我们的机器人和人类申请者。">No. Our bot applies exactly like a human would. There's no way for employers to tell the difference between our bot and a human applicant.</p>
+                    </div>
+                </div>
+                <div class="faq-item">
+                    <div class="faq-question">
+                        <h3 data-lang-en="Is my data secure?" data-lang-zh="我的数据安全吗？">Is my data secure?</h3>
+                        <i class="fas fa-chevron-down"></i>
+                    </div>
+                    <div class="faq-answer">
+                        <p data-lang-en="Yes. All data is stored locally on your computer. We never access or store your personal information on our servers." data-lang-zh="是的。所有数据都存储在您的计算机本地。我们从不在我们的服务器上访问或存储您的个人信息。">Yes. All data is stored locally on your computer. We never access or store your personal information on our servers.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section id="cta" class="cta-section">
+        <div class="container">
+            <h2 class="section-title" data-lang-en="Ready to Supercharge Your Job Search?" data-lang-zh="准备好提升您的求职效率了吗？">Ready to Supercharge Your Job Search?</h2>
+            <div class="cta-buttons">
+                <a href="instructions.html" class="primary-btn large-btn" data-lang-en="Get Started Now" data-lang-zh="立即开始使用"><i class="fas fa-rocket"></i> Get Started Now</a>
+            </div>
+        </div>
+    </section>
+
+    <footer>
+        <div class="container">
+            <div class="footer-content">
+                <div class="footer-logo">
+                    <h3 data-lang-en="Nuomi.ai" data-lang-zh="Nuomi.ai">Nuomi.ai</h3>
+                    <p data-lang-en="Your AI Job Search Assistant" data-lang-zh="您的AI求职助手">Your AI Job Search Assistant</p>
+                </div>
+                <div class="footer-links">
+                    <div class="footer-links-column">
+                        <h4 data-lang-en="Product" data-lang-zh="产品">Product</h4>
+                        <ul>
+                            <li><a href="#features" data-lang-en="Features" data-lang-zh="功能">Features</a></li>
+                            <li><a href="#how-it-works" data-lang-en="How it works" data-lang-zh="工作原理">How it works</a></li>
+                        </ul>
+                    </div>
+                    <div class="footer-links-column">
+                        <h4 data-lang-en="Resources" data-lang-zh="资源">Resources</h4>
+                        <ul>
+                            <li><a href="instructions.html" data-lang-en="User Manual" data-lang-zh="使用手册">User Manual</a></li>
+                            <li><a href="#faq" data-lang-en="FAQ" data-lang-zh="常见问题">FAQ</a></li>
+                        </ul>
+                    </div>
+                    <div class="footer-links-column">
+                        <h4 data-lang-en="Contact" data-lang-zh="联系我们">Contact</h4>
+                        <ul>
+                            <li><a href="javascript:void(0)" onclick="showEmailModal()" data-lang-en="Email Us" data-lang-zh="给我们发邮件">Email Us</a></li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+            <div class="footer-bottom">
+                <p data-lang-en="© 2025 Nuomi.ai. All rights reserved." data-lang-zh="© 2024 Nuomi.ai. 版权所有。">© 2024 Nuomi.ai. All rights reserved.</p>
+                <p><span data-lang-en="Inspired by: " data-lang-zh="灵感来源：">Inspired by: </span> <a href="https://www.loopcv.pro/" target="_blank">LoopCV</a>, <a href="https://simplify.jobs/" target="_blank">Simplify</a></p>
+            </div>
+        </div>
+    </footer>
+
+    <!-- 邮箱模态窗口 -->
+    <div id="emailModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 data-lang-en="Contact Email" data-lang-zh="联系邮箱">Contact Email</h3>
+                <button class="modal-close" onclick="closeEmailModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p data-lang-en="Please use the following email address to contact us:" data-lang-zh="请使用以下邮箱地址联系我们：">Please use the following email address to contact us:</p>
+                <p style="font-weight: bold; color: var(--primary-color); text-align: center;">yeequn.xu@gmail.com</p>
+            </div>
+            <div class="modal-footer">
+                <button class="modal-btn" onclick="copyEmail()" data-lang-en="Copy Email" data-lang-zh="复制邮箱">Copy Email</button>
+                <button class="modal-btn" onclick="closeEmailModal()" data-lang-en="Close" data-lang-zh="关闭">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+    <script>
+        // 邮箱模态窗口
+        function showEmailModal() {
+            document.getElementById('emailModal').style.display = 'flex';
+            document.body.style.overflow = 'hidden';
+        }
+        
+        function closeEmailModal() {
+            document.getElementById('emailModal').style.display = 'none';
+            document.body.style.overflow = '';
+        }
+        
+        function copyEmail() {
+            const email = 'yeequn.xu@gmail.com';
+            navigator.clipboard.writeText(email).then(function() {
+                alert('Email copied to clipboard');
+            }).catch(function() {
+                // 如果剪贴板操作失败，创建一个临时输入框来复制
+                const tempInput = document.createElement('input');
+                tempInput.value = email;
+                document.body.appendChild(tempInput);
+                tempInput.select();
+                document.execCommand('copy');
+                document.body.removeChild(tempInput);
+                alert('Email copied to clipboard');
+            });
+        }
+        
+        // 点击模态窗口外部关闭
+        window.onclick = function(event) {
+            const modal = document.getElementById('emailModal');
+            if (event.target == modal) {
+                closeEmailModal();
+            }
+        }
+        
+        // 高级平滑滚动函数
+        function smoothScroll(targetElement, duration) {
+            const targetPosition = targetElement.getBoundingClientRect().top;
+            const startPosition = window.pageYOffset;
+            const navHeight = document.querySelector('nav').offsetHeight;
+            const distance = targetPosition - navHeight - 20;
+            let startTime = null;
+            
+            function animation(currentTime) {
+                if (startTime === null) startTime = currentTime;
+                const timeElapsed = currentTime - startTime;
+                
+                // 确保不会超过动画时长
+                if (timeElapsed > duration) {
+                    window.scrollTo(0, startPosition + distance);
+                    return;
+                }
+                
+                const run = easeInOutCubic(timeElapsed, startPosition, distance, duration);
+                window.scrollTo(0, run);
+                
+                if (timeElapsed < duration) {
+                    requestAnimationFrame(animation);
+                }
+            }
+            
+            // 更加平滑的缓动函数 - Cubic easing
+            function easeInOutCubic(t, b, c, d) {
+                t /= d/2;
+                if (t < 1) return c/2*t*t*t + b;
+                t -= 2;
+                return c/2*(t*t*t + 2) + b;
+            }
+            
+            // 确保动画帧请求正确启动
+            window.requestAnimationFrame(animation);
+        }
+        
+        // 检查是否有从instructions页面来的滚动目标
+        function checkStoredScrollTarget() {
+            const storedTarget = sessionStorage.getItem('scrollTarget');
+            if (storedTarget) {
+                console.log("index页面检测到存储的滚动目标:", storedTarget);
+                // 清除存储的目标，避免下次访问还使用它
+                sessionStorage.removeItem('scrollTarget');
+                
+                setTimeout(function() {
+                    const targetElement = document.querySelector(storedTarget);
+                    if (targetElement) {
+                        console.log("找到存储的目标元素，准备滚动");
+                        const navHeight = document.querySelector('nav').offsetHeight;
+                        const targetPosition = targetElement.getBoundingClientRect().top + window.pageYOffset - navHeight - 20;
+                        
+                        window.scrollTo({
+                            top: targetPosition,
+                            behavior: 'smooth'
+                        });
+                    }
+                }, 1000);
+            }
+        }
+        
+        // 增强平滑滚动效果
+        document.addEventListener('DOMContentLoaded', function() {
+            // 检查存储的滚动目标
+            checkStoredScrollTarget();
+            
+            const navLinks = document.querySelectorAll('.nav-links a[href^="#"]');
+            
+            navLinks.forEach(link => {
+                link.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    
+                    const targetId = this.getAttribute('href');
+                    if (targetId === '#') return;
+                    
+                    const targetElement = document.querySelector(targetId);
+                    if (!targetElement) return;
+                    
+                    // 自定义平滑滚动 - 减少持续时间让滚动更快
+                    smoothScroll(targetElement, 600);
+                    
+                    // 更新 URL 但不改变历史
+                    history.pushState(null, null, targetId);
+                });
+            });
+            
+            // 检查URL是否包含锚点，如果有则滚动到相应位置
+            if (window.location.hash) {
+                const targetId = window.location.hash;
+                // 给页面更充分的时间加载，然后滚动
+                setTimeout(function() {
+                    const targetElement = document.querySelector(targetId);
+                    if (targetElement) {
+                        // 强制页面到顶部，然后平滑滚动到目标位置
+                        window.scrollTo(0, 0);
+                        setTimeout(function() {
+                            smoothScroll(targetElement, 800);
+                        }, 100);
+                    }
+                }, 500);
+            }
+            
+            // 返回顶部按钮
+            const cta = document.querySelector('.cta-buttons .primary-btn');
+            if (cta) {
+                if (cta.getAttribute('href') === 'instructions.html') {
+                    // 不做任何改变，允许正常导航到说明页面
+                }
+            }
+            
+            // 添加返回顶部按钮
+            const backToTop = document.createElement('button');
+            backToTop.className = 'back-to-top';
+            backToTop.title = '返回顶部';
+            backToTop.innerHTML = '↑';
+            document.body.appendChild(backToTop);
+            
+            // 显示/隐藏返回顶部按钮
+            window.addEventListener('scroll', function() {
+                if (window.pageYOffset > 300) {
+                    backToTop.style.display = 'block';
+                } else {
+                    backToTop.style.display = 'none';
+                }
+            });
+            
+            // 返回顶部功能
+            backToTop.addEventListener('click', function(e) {
+                e.preventDefault();
+                // 页首滚动时间更短
+                smoothScroll(document.body, 500);
+            });
+            
+            // 添加返回顶部按钮样式
+            const style = document.createElement('style');
+            style.textContent = `
+                .back-to-top {
+                    position: fixed;
+                    bottom: 20px;
+                    right: 20px;
+                    background-color: #3A7BD5;
+                    color: white;
+                    border: none;
+                    border-radius: 50%;
+                    width: 50px;
+                    height: 50px;
+                    text-align: center;
+                    font-size: 20px;
+                    cursor: pointer;
+                    display: none;
+                    z-index: 999;
+                    opacity: 0.7;
+                    transition: opacity 0.3s;
+                    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+                }
+                
+                .back-to-top:hover {
+                    opacity: 1;
+                }
+            `;
+            document.head.appendChild(style);
+        });
+    </script>
+</body>
+</html> 

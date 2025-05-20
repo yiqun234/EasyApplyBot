@@ -32,6 +32,9 @@ TEXTS = {
         'language': 'Language',
         'ready': 'Ready',
         'invalid_entry': 'Invalid Entry',
+        'resume': 'Resume',
+        'cover_letter': 'Cover',
+        'photo': 'Photo',
     },
     
     # Login screen texts

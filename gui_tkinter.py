@@ -275,7 +275,7 @@ class EasyApplyApp(tk.Tk):
             
         # 设置窗口大小和标题
         self.geometry("500x450") # Increased height for language selector
-        self.title(self.texts['login']['app_title'] if 'login' in self.texts else "EasyApply Login")
+        self.title(self.texts['login']['app_title'] if 'login' in self.texts else "Nuomi.ai Login")
         
         # 创建登录框架
         self.login_frame = ttk.Frame(self, padding=20)
@@ -298,7 +298,7 @@ class EasyApplyApp(tk.Tk):
         self.login_language_selector.bind("<<ComboboxSelected>>", self._on_login_language_changed)
 
         # 标题
-        self.login_welcome_label = ttk.Label(self.login_frame, text=self.texts['login']['welcome'] if 'login' in self.texts else "Welcome to EasyApply", 
+        self.login_welcome_label = ttk.Label(self.login_frame, text=self.texts['login']['welcome'] if 'login' in self.texts else "Welcome to Nuomi.ai",
                   font=("Arial", 18, "bold"))
         self.login_welcome_label.pack(pady=(0, 20))
         
@@ -330,7 +330,7 @@ class EasyApplyApp(tk.Tk):
         self.login_status_text_label.pack_forget()  # 初始隐藏
         
         # 版权信息
-        self.login_copyright_label = ttk.Label(self.login_frame, text="© 2023-2024 EasyApply", font=("Arial", 8))
+        self.login_copyright_label = ttk.Label(self.login_frame, text="© 2025 Nuomi.ai", font=("Arial", 8))
         self.login_copyright_label.pack(side=tk.BOTTOM, pady=20)
     
     def _on_login_language_changed(self, event):
@@ -344,9 +344,9 @@ class EasyApplyApp(tk.Tk):
             self.texts = load_language(self.lang_code)
             
             # Update login screen UI elements
-            self.title(self.texts['login']['app_title'] if 'login' in self.texts else "EasyApply Login")
+            self.title(self.texts['login']['app_title'] if 'login' in self.texts else "Nuomi.ai Login")
             if self.login_welcome_label:
-                self.login_welcome_label.config(text=self.texts['login']['welcome'] if 'login' in self.texts else "Welcome to EasyApply")
+                self.login_welcome_label.config(text=self.texts['login']['welcome'] if 'login' in self.texts else "Welcome to Nuomi.ai")
             if self.login_please_login_label:
                 self.login_please_login_label.config(text=self.texts['login']['please_login'] if 'login' in self.texts else "Please login to continue")
             if self.login_main_button:
@@ -731,13 +731,13 @@ class EasyApplyApp(tk.Tk):
             filesize = os.path.getsize(filepath) / (1024 * 1024)  # 转换为MB
             
             # 根据文件类型检查大小限制
-            if "简历" in file_desc and filesize > 2:
+            if self.texts['common']['resume'] in file_desc and filesize > 2:
                 messagebox.showwarning(self.texts['common']['warning'], self.texts['messages']['file_too_large'].format(file_desc, "2MB", f"{filesize:.2f}"))
                 return
-            elif "求职信" in file_desc and filesize > 0.5:
+            elif self.texts['common']['cover_letter'] in file_desc and filesize > 0.5:
                 messagebox.showwarning(self.texts['common']['warning'], self.texts['messages']['file_too_large'].format(file_desc, "512KB", f"{filesize:.2f}"))
                 return
-            elif "照片" in file_desc and filesize > 1:
+            elif self.texts['common']['photo'] in file_desc and filesize > 1:
                 messagebox.showwarning(self.texts['common']['warning'], self.texts['messages']['file_too_large'].format(file_desc, "1MB", f"{filesize:.2f}"))
                 return
                 

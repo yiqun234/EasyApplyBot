@@ -15,7 +15,7 @@ AVAILABLE_LANGUAGES = {
 }
 
 # 默认语言
-DEFAULT_LANGUAGE = 'zh_CN'
+DEFAULT_LANGUAGE = 'en_US'
 
 def load_language(lang_code):
     """

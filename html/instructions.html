@@ -1,0 +1,1283 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LinkedIn Easy Apply Bot - 使用指南</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&family=Inter:wght@400;500;600&display=swap');
+        
+        /* 基础字体和颜色变量 */
+        :root {
+            --primary-color: #3A7BD5;
+            --secondary-color: #39AC73;
+            --accent-color: #FF6B6B;
+            --dark-text: #2c3e50;
+            --light-text: #555e64;
+            --bg-light: #f8f9fa;
+            --bg-white: #ffffff;
+            --shadow-sm: 0 2px 4px rgba(0,0,0,0.05);
+            --shadow-md: 0 4px 8px rgba(0,0,0,0.1);
+            --shadow-lg: 0 8px 16px rgba(0,0,0,0.1);
+            --border-radius-sm: 8px;
+            --border-radius-md: 12px;
+            --border-radius-lg: 20px;
+            --border-light: 1px solid #e9ecef;
+            --container-width: 1200px;
+            --transition-fast: 0.2s ease;
+            --transition-normal: 0.3s ease;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            line-height: 1.6;
+            color: var(--light-text);
+            background-color: var(--bg-white);
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+        }
+
+        h1, h2, h3, h4, h5, h6 {
+            font-family: 'Poppins', sans-serif;
+            color: var(--dark-text);
+            line-height: 1.3;
+        }
+
+        /* 仅保留不冲突的内容特定样式 */
+        .content {
+            flex: 1;
+            max-width: 900px;
+            padding: 20px 40px;
+            margin: 0 auto;
+            padding-bottom: 80px;
+        }
+        
+        .main-container {
+            display: flex;
+            position: relative;
+            min-height: 100vh;
+            margin: 0 auto;
+        }
+        
+        h1, h2, h3 {
+            color: #0077B5;
+        }
+        
+        h1 {
+            border-bottom: 2px solid #0077B5;
+            padding-bottom: 10px;
+        }
+        
+        h2 {
+            margin-top: 40px;
+            padding-top: 20px;
+            border-top: 1px solid #eee;
+        }
+        
+        code {
+            background-color: #f5f5f5;
+            padding: 2px 5px;
+            border-radius: 3px;
+            font-family: Consolas, Monaco, 'Andale Mono', monospace;
+        }
+        
+        pre {
+            background-color: #f5f5f5;
+            padding: 15px;
+            border-radius: 5px;
+            overflow-x: auto;
+        }
+        
+        .doc-container {
+            background-color: #f9f9f9;
+            border-left: 4px solid #0077B5;
+            padding: 15px;
+            margin: 20px 0;
+        }
+        
+        .warning {
+            background-color: #fff8e1;
+            border-left: 4px solid #ffc107;
+            padding: 15px;
+            margin: 20px 0;
+        }
+        
+        .feature {
+            display: flex;
+            margin: 20px 0;
+            border-bottom: 1px dotted #ccc;
+            padding-bottom: 20px;
+        }
+        
+        .feature-icon {
+            font-size: 2em;
+            margin-right: 20px;
+            color: #0077B5;
+        }
+        
+        .feature-content {
+            flex: 1;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+        }
+        
+        th, td {
+            padding: 12px 15px;
+            border: 1px solid #ddd;
+            text-align: left;
+        }
+        
+        th {
+            background-color: #0077B5;
+            color: white;
+        }
+        
+        tr:nth-child(even) {
+            background-color: #f5f5f5;
+        }
+        
+        /* 右侧固定导航样式 */
+        .sidebar {
+            width: 260px;
+            height: 90vh;
+            position: sticky;
+            top: 80px;
+            padding: 20px;
+            background-color: #fff;
+            border-left: 1px solid #eee;
+            overflow-y: auto;
+            margin-left: 20px;
+        }
+        
+        .doc-nav {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+        
+        .doc-nav-title {
+            font-size: 1.2em;
+            font-weight: bold;
+            color: #0077B5;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #ddd;
+        }
+        
+        .doc-nav-item {
+            margin-bottom: 10px;
+        }
+        
+        .doc-nav-link {
+            display: block;
+            padding: 8px 10px;
+            color: #333;
+            text-decoration: none;
+            border-left: 2px solid transparent;
+            transition: all 0.3s ease;
+            position: relative;
+        }
+        
+        .doc-nav-link::after {
+            display: none;
+        }
+        
+        .doc-nav-link:hover, .doc-nav-link.active {
+            background-color: rgba(0, 119, 181, 0.05);
+            color: var(--primary-color);
+            border-left-color: var(--primary-color);
+            transform: translateX(3px);
+        }
+        
+        /* 移动菜单按钮 */
+        .menu-toggle {
+            display: none;
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background-color: #0077B5;
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            font-size: 20px;
+            line-height: 50px;
+            text-align: center;
+            cursor: pointer;
+            z-index: 1100;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+        }
+        
+        /* 返回顶部按钮 */
+        .back-to-top {
+            position: fixed;
+            bottom: 80px;
+            right: 20px;
+            background-color: #0077B5;
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            text-align: center;
+            font-size: 20px;
+            cursor: pointer;
+            display: none;
+            z-index: 999;
+            opacity: 0.7;
+            transition: opacity 0.3s;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+        
+        .back-to-top:hover {
+            opacity: 1;
+        }
+        
+        /* 导航样式 - 从style.css提取 */
+        nav {
+            background-color: #ffffff;
+            border-bottom: 1px solid #e9ecef;
+            padding: 1rem 0;
+            position: sticky;
+            top: 0;
+            z-index: 1000;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+            backdrop-filter: blur(10px);
+        }
+
+        nav .container {
+            display: flex;
+            flex-direction: row;
+            justify-content: space-between;
+            align-items: center;
+            width: 90%;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 15px;
+        }
+
+        nav .logo {
+            font-family: 'Poppins', sans-serif;
+            font-size: 1.8rem;
+            font-weight: 700;
+            color: #3A7BD5;
+            transition: transform 0.3s ease, color 0.3s ease;
+        }
+
+        nav .logo:hover {
+            transform: scale(1.05);
+            color: #2962ac;
+        }
+
+        .nav-container {
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            flex: 1;
+        }
+
+        .nav-links {
+            display: flex;
+            list-style: none;
+            align-items: center;
+            margin: 0;
+            padding: 0;
+        }
+
+        .nav-links li {
+            margin-left: 2rem;
+        }
+
+        .nav-links a {
+            color: #2c3e50;
+            font-weight: 500;
+            font-size: 1rem;
+            transition: color 0.3s ease;
+            text-decoration: none;
+        }
+
+        .nav-links a:hover {
+            color: #3A7BD5;
+        }
+
+        .nav-links a[href="instructions.html"] {
+            color: #3A7BD5;
+            font-weight: 600;
+            padding: 0.5rem 1rem;
+            background-color: rgba(58, 123, 213, 0.1);
+            border-radius: 20px;
+            transition: all 0.3s ease;
+            display: inline-block;
+        }
+
+        .nav-links a[href="instructions.html"]:hover {
+            background-color: rgba(58, 123, 213, 0.2);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(58, 123, 213, 0.15);
+        }
+
+        .menu-right {
+            display: flex;
+            align-items: center;
+        }
+
+        #lang-switcher {
+            background-color: #3A7BD5;
+            color: white;
+            border: none;
+            padding: 0.5rem 1.2rem;
+            border-radius: 20px;
+            font-family: 'Poppins', sans-serif;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            margin-left: 1.5rem;
+        }
+
+        #lang-switcher:hover {
+            background-color: #2962ac;
+            transform: translateY(-2px);
+        }
+
+        .mobile-menu-btn {
+            display: none;
+            flex-direction: column;
+            justify-content: space-between;
+            width: 30px;
+            height: 24px;
+            cursor: pointer;
+        }
+
+        .mobile-menu-btn span {
+            width: 100%;
+            height: 3px;
+            background-color: #2c3e50;
+            border-radius: 2px;
+            transition: all 0.3s ease;
+        }
+
+        .mobile-lang-item {
+            display: none;
+        }
+        
+        /* 页脚样式 - 从style.css提取 */
+        footer {
+            background-color: #2c3e50;
+            color: white;
+            padding: 4rem 0 2rem;
+        }
+
+        footer .container {
+            width: 90%;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 15px;
+        }
+
+        .footer-content {
+            display: flex;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 3rem;
+            margin-bottom: 3rem;
+        }
+
+        .footer-logo h3 {
+            font-size: 1.8rem;
+            color: white;
+            margin-bottom: 0.5rem;
+        }
+
+        .footer-logo p {
+            color: rgba(255, 255, 255, 0.7);
+        }
+
+        .footer-links {
+            display: flex;
+            gap: 3rem;
+            flex-wrap: wrap;
+        }
+
+        .footer-links-column h4 {
+            color: white;
+            margin-bottom: 1.5rem;
+            font-size: 1.1rem;
+        }
+
+        .footer-links-column ul {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+
+        .footer-links-column ul li {
+            margin-bottom: 0.8rem;
+        }
+
+        .footer-links-column ul li a {
+            color: rgba(255, 255, 255, 0.7);
+            transition: color 0.3s ease;
+            text-decoration: none;
+        }
+
+        .footer-links-column ul li a:hover {
+            color: white;
+        }
+
+        .footer-bottom {
+            padding-top: 2rem;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+            text-align: center;
+        }
+
+        .footer-bottom p {
+            color: rgba(255, 255, 255, 0.7);
+            margin-bottom: 0.8rem;
+        }
+
+        .footer-bottom a {
+            color: rgba(255, 255, 255, 0.9);
+            text-decoration: none;
+        }
+
+        .footer-bottom a:hover {
+            color: white;
+        }
+        
+        /* 响应式调整 */
+        @media (max-width: 1200px) {
+            .main-container {
+                flex-direction: column;
+            }
+            
+            .content {
+                max-width: 100%;
+                padding: 20px;
+            }
+            
+            .sidebar {
+                width: 100%;
+                height: auto;
+                position: fixed;
+                top: 0;
+                left: 0;
+                right: 0;
+                bottom: 0;
+                transform: translateX(100%);
+                transition: transform 0.3s ease;
+                z-index: 1000;
+                border-left: none;
+                padding-top: 60px;
+                margin-left: 0;
+            }
+            
+            .sidebar.active {
+                transform: translateX(0);
+            }
+            
+            .menu-toggle {
+                display: block;
+            }
+            
+            .close-menu {
+                position: absolute;
+                top: 20px;
+                right: 20px;
+                background: none;
+                border: none;
+                font-size: 24px;
+                color: #333;
+                cursor: pointer;
+            }
+            
+            .feature {
+                flex-direction: column;
+            }
+            
+            .feature-icon {
+                margin-bottom: 10px;
+            }
+        }
+        
+        @media (max-width: 768px) {
+            .mobile-menu-btn {
+                display: flex;
+                margin-left: 15px;
+                z-index: 1005;
+            }
+            
+            .nav-links {
+                position: fixed;
+                top: 70px;
+                left: 0;
+                width: 100%;
+                background-color: #ffffff;
+                flex-direction: column;
+                align-items: center;
+                padding: 1rem 0;
+                box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+                display: none;
+                z-index: 1000;
+            }
+            
+            .nav-links.active {
+                display: flex;
+            }
+            
+            .nav-links li {
+                width: 100%;
+                margin: 0;
+                text-align: center;
+            }
+            
+            .nav-links a {
+                display: block;
+                padding: 1rem 2rem;
+            }
+            
+            #lang-switcher {
+                display: none;
+            }
+            
+            .mobile-lang-item {
+                display: block;
+                margin-top: 10px;
+            }
+            
+            #mobile-lang-switcher {
+                background-color: #3A7BD5;
+                color: white;
+                border: none;
+                padding: 0.5rem 1.2rem;
+                border-radius: 20px;
+                font-family: 'Poppins', sans-serif;
+                font-weight: 500;
+                cursor: pointer;
+                transition: all 0.3s ease;
+                width: 80%;
+                max-width: 200px;
+                margin: 0 auto;
+            }
+            
+            body.menu-open {
+                overflow: hidden;
+            }
+            
+            body.menu-open .mobile-menu-btn span:nth-child(1) {
+                transform: translateY(10px) rotate(45deg);
+            }
+            
+            body.menu-open .mobile-menu-btn span:nth-child(2) {
+                opacity: 0;
+            }
+            
+            body.menu-open .mobile-menu-btn span:nth-child(3) {
+                transform: translateY(-11px) rotate(-45deg);
+            }
+            
+            .footer-content {
+                flex-direction: column;
+                gap: 2rem;
+            }
+            
+            .footer-links {
+                flex-direction: column;
+                gap: 2rem;
+            }
+        }
+        
+        /* 产品主页按钮 */
+        .home-link {
+            margin-bottom: 30px;
+            padding-bottom: 20px;
+            border-bottom: 1px solid #ddd;
+            text-align: center;
+        }
+        
+        /* 按钮样式 */
+        .primary-btn {
+            display: inline-block;
+            font-family: 'Poppins', sans-serif;
+            font-weight: 600;
+            font-size: 1rem;
+            padding: 0.8rem 1.8rem;
+            border-radius: 20px;
+            transition: all 0.3s ease;
+            text-align: center;
+            background-color: #3A7BD5;
+            color: white;
+            box-shadow: 0 4px 10px rgba(58, 123, 213, 0.25);
+            text-decoration: none;
+        }
+        
+        .primary-btn:hover {
+            background-color: #2962ac;
+            transform: translateY(-2px);
+            box-shadow: 0 6px 12px rgba(58, 123, 213, 0.3);
+            color: white;
+        }
+        
+        .large-btn {
+            padding: 1rem 2.5rem;
+            font-size: 1.2rem;
+        }
+        
+        /* 添加语言切换按钮样式 */
+        #lang-switcher-sidebar {
+            width: 100%;
+            padding: 10px;
+            background-color: transparent;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            color: #333;
+        }
+
+        /* 模态窗口样式 */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            z-index: 2000;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .modal-content {
+            background-color: var(--bg-white);
+            width: 90%;
+            max-width: 400px;
+            border-radius: var(--border-radius-md);
+            box-shadow: var(--shadow-lg);
+            overflow: hidden;
+            animation: modalFadeIn 0.3s ease;
+        }
+
+        .modal-header {
+            background-color: var(--primary-color);
+            color: white;
+            padding: 15px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .modal-header h3 {
+            margin: 0;
+            color: white;
+            font-size: 1.2rem;
+        }
+
+        .modal-close {
+            cursor: pointer;
+            font-size: 1.5rem;
+            color: white;
+            background: none;
+            border: none;
+            padding: 0;
+        }
+
+        .modal-body {
+            padding: 20px;
+        }
+
+        .modal-body p {
+            margin: 0 0 15px 0;
+            font-size: 1.1rem;
+        }
+
+        .modal-footer {
+            padding: 15px 20px;
+            text-align: right;
+            border-top: 1px solid #eee;
+        }
+
+        .modal-btn {
+            padding: 8px 15px;
+            border: none;
+            border-radius: var(--border-radius-sm);
+            background-color: var(--primary-color);
+            color: white;
+            cursor: pointer;
+            font-weight: 500;
+            transition: all 0.3s ease;
+        }
+
+        .modal-btn:hover {
+            background-color: #2962ac;
+            transform: translateY(-2px);
+        }
+
+        @keyframes modalFadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(-20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        /* 平滑滚动效果 */
+        html {
+            scroll-behavior: smooth;
+        }
+        
+        /* 调整滚动位置，考虑固定导航栏高度 */
+        :target {
+            scroll-margin-top: 80px;
+        }
+    </style>
+</head>
+<body>
+    <!-- 顶部导航栏 - 与index.html完全一致 -->
+    <nav>
+        <div class="container">
+            <div class="logo" data-lang-en="Nuomi.ai" data-lang-zh="Nuomi.ai">Nuomi.ai</div>
+            <div class="nav-container">
+                <ul class="nav-links">
+                    <li><a href="index.html#features" data-lang-en="Features" data-lang-zh="功能" onclick="storeScrollTarget(event, '#features')">Features</a></li>
+                    <li><a href="index.html#how-it-works" data-lang-en="How it works" data-lang-zh="工作原理" onclick="storeScrollTarget(event, '#how-it-works')">How it works</a></li>
+                    <li><a href="instructions.html" data-lang-en="User Manual" data-lang-zh="使用手册">User Manual</a></li>
+                    <li class="mobile-lang-item"><button id="mobile-lang-switcher" data-lang-en="切换中文" data-lang-zh="Switch to English">切换中文</button></li>
+                </ul>
+                <div class="menu-right">
+                    <button id="lang-switcher" data-lang-en="切换中文" data-lang-zh="Switch to English">切换中文</button>
+                    <div class="mobile-menu-btn">
+                        <span></span>
+                        <span></span>
+                        <span></span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <div class="main-container">
+        <!-- 主内容区域 -->
+        <div class="content">
+            <h1 data-lang-en="LinkedIn Easy Apply Bot - User Guide" data-lang-zh="LinkedIn Easy Apply Bot - 使用指南">LinkedIn Easy Apply Bot - 使用指南</h1>
+            
+            <div id="overview" class="doc-container">
+                <p data-lang-en="LinkedIn Easy Apply Bot is a powerful automation tool that helps you automatically search and apply for jobs on LinkedIn. The tool supports automatic form filling, resume and cover letter uploading, and can use AI to automatically generate answers to interview questions." data-lang-zh="LinkedIn Easy Apply Bot 是一个强大的自动化工具，可以帮助您在 LinkedIn 上自动搜索和申请工作。该工具支持自动填写申请表格、上传简历和求职信，并可以使用 AI 自动生成回答面试问题。">LinkedIn Easy Apply Bot 是一个强大的自动化工具，可以帮助您在 LinkedIn 上自动搜索和申请工作。该工具支持自动填写申请表格、上传简历和求职信，并可以使用 AI 自动生成回答面试问题。</p>
+            </div>
+
+            <h2 id="demo" data-lang-en="Demo Video" data-lang-zh="演示视频">演示视频</h2>
+            <div class="doc-container">
+                <p data-lang-en="Demo video link: <a href='https://d2hs38sps04dvv.cloudfront.net/use.mp4' target='_blank'>Click to watch</a>" data-lang-zh="演示视频地址：<a href='https://d2hs38sps04dvv.cloudfront.net/use.mp4' target='_blank'>点击观看</a>">演示视频地址：<a href="https://d2hs38sps04dvv.cloudfront.net/use.mp4" target="_blank">点击观看</a></p>
+            </div>
+
+            <h2 id="download" data-lang-en="Source Code Download" data-lang-zh="源码下载">源码下载</h2>
+            <div class="doc-container">
+                <p data-lang-en="Source code download link: <a href='https://d2hs38sps04dvv.cloudfront.net/EasyApplyBot.zip' target='_blank'>Click to download</a>" data-lang-zh="源码下载地址：<a href='https://d2hs38sps04dvv.cloudfront.net/EasyApplyBot.zip' target='_blank'>点击下载</a>">源码下载地址：<a href="https://d2hs38sps04dvv.cloudfront.net/EasyApplyBot.zip" target="_blank">点击下载</a></p>
+            </div>
+
+            <h2 id="features" data-lang-en="Features" data-lang-zh="功能特点">功能特点</h2>
+
+            <div class="feature">
+                <div class="feature-icon">🔍</div>
+                <div class="feature-content">
+                    <h3 data-lang-en="Automatic Job Search" data-lang-zh="自动搜索工作">自动搜索工作</h3>
+                    <p data-lang-en="Automatically search for job opportunities on LinkedIn based on your set position, location, and filtering criteria." data-lang-zh="根据您设置的职位、地点和筛选条件自动搜索 LinkedIn 上的工作机会。">根据您设置的职位、地点和筛选条件自动搜索 LinkedIn 上的工作机会。</p>
+                </div>
+            </div>
+
+            <div class="feature">
+                <div class="feature-icon">📝</div>
+                <div class="feature-content">
+                    <h3 data-lang-en="Automatic Application Form Filling" data-lang-zh="自动填写申请表格">自动填写申请表格</h3>
+                    <p data-lang-en="Automatically fill out personal information, work experience, educational background, and other application form content, greatly saving application time." data-lang-zh="自动填写个人信息、工作经验、教育背景等申请表格内容，大大节省申请时间。">自动填写个人信息、工作经验、教育背景等申请表格内容，大大节省申请时间。</p>
+                </div>
+            </div>
+
+            <div class="feature">
+                <div class="feature-icon">📄</div>
+                <div class="feature-content">
+                    <h3 data-lang-en="Upload Resume and Cover Letter" data-lang-zh="上传简历和求职信">上传简历和求职信</h3>
+                    <p data-lang-en="Automatically upload your resume and cover letter (if needed)." data-lang-zh="自动上传您的简历和求职信（如果需要）。">自动上传您的简历和求职信（如果需要）。</p>
+                </div>
+            </div>
+
+            <div class="feature">
+                <div class="feature-icon">🤖</div>
+                <div class="feature-content">
+                    <h3 data-lang-en="AI Response Generation" data-lang-zh="AI 回答生成">AI 回答生成</h3>
+                    <p data-lang-en="Support for automatically generating answers to application questions using cloud service APIs." data-lang-zh="支持使用云服务 API 自动生成对申请问题的回答。">支持使用云服务 API 自动生成对申请问题的回答。</p>
+                </div>
+            </div>
+
+            <div class="feature">
+                <div class="feature-icon">⚖️</div>
+                <div class="feature-content">
+                    <h3 data-lang-en="Job Match Assessment" data-lang-zh="职位匹配度评估">职位匹配度评估</h3>
+                    <p data-lang-en="Use AI to analyze job descriptions and your qualifications to assess whether a position is worth applying for." data-lang-zh="使用 AI 分析职位描述和您的资历，评估职位是否值得申请。">使用 AI 分析职位描述和您的资历，评估职位是否值得申请。</p>
+                </div>
+            </div>
+
+            <div class="feature">
+                <div class="feature-icon">📊</div>
+                <div class="feature-content">
+                    <h3 data-lang-en="Application Records" data-lang-zh="应用记录">应用记录</h3>
+                    <p data-lang-en="Record applied positions for easy tracking." data-lang-zh="记录已申请的职位，方便后续跟踪。">记录已申请的职位，方便后续跟踪。</p>
+                </div>
+            </div>
+
+            <h2 id="installation" data-lang-en="Installation and Preparation" data-lang-zh="安装和准备">安装和准备</h2>
+
+            <h3 data-lang-en="System Requirements" data-lang-zh="系统要求">系统要求</h3>
+            <ul>
+                <li data-lang-en="Windows operating system (batch files are written for Windows)" data-lang-zh="Windows 操作系统（批处理文件基于 Windows 编写）">Windows 操作系统（批处理文件基于 Windows 编写）</li>
+                <li data-lang-en="Python 3.8 or higher <a target='_blank' href='https://www.python.org/downloads/'>Download Python</a>" data-lang-zh="Python 3.8 或更高版本 <a target='_blank' href='https://www.python.org/downloads/'>下载python</a>">Python 3.8 或更高版本 <a target="_blank" href="https://www.python.org/downloads/">下载python</a></li>
+                <li data-lang-en="Chrome browser" data-lang-zh="Chrome 浏览器">Chrome 浏览器</li>
+                <li data-lang-en="LinkedIn account" data-lang-zh="LinkedIn 账号">LinkedIn 账号</li>
+            </ul>
+
+            <h3 data-lang-en="Environment Preparation" data-lang-zh="环境准备">环境准备</h3>
+            <ol>
+                <li data-lang-en="Ensure Python and pip are installed" data-lang-zh="确保已安装 Python 和 pip">确保已安装 Python 和 pip</li>
+                <li data-lang-en="Ensure you have an available LinkedIn account" data-lang-zh="确保有可用的 LinkedIn 账号">确保有可用的 LinkedIn 账号</li>
+                <li data-lang-en="Prepare your resume PDF file" data-lang-zh="准备好您的简历 PDF 文件">准备好您的简历 PDF 文件</li>
+                <li data-lang-en="If using OpenAI API, prepare your API key" data-lang-zh="如果使用 OpenAI API，准备好 API 密钥">如果使用 OpenAI API，准备好 API 密钥</li>
+            </ol>
+
+            <h2 id="batch-files" data-lang-en="Using Batch Files" data-lang-zh="使用批处理文件">使用批处理文件</h2>
+
+            <h3 data-lang-en="start.bat File" data-lang-zh="start.bat 文件">start.bat 文件</h3>
+            <div class="doc-container">
+                <p data-lang-en="<code>start.bat</code> is the main startup script used to launch the GUI configuration tool. How to use:" data-lang-zh="<code>start.bat</code> 是主要的启动脚本，用于启动图形界面配置工具。使用方法："><code>start.bat</code> 是主要的启动脚本，用于启动图形界面配置工具。使用方法：</p>
+                <ol>
+                    <li data-lang-en="Double-click setup.bat when using it for the first time to install the necessary dependency packages for the program" data-lang-zh="在第一次使用时双击 setup.bat 安装程序必备的依赖包">在第一次使用时双击 setup.bat 安装程序必备的依赖包</li>
+                    <li data-lang-en="Double-click the start.bat file" data-lang-zh="双击 start.bat 文件">双击 start.bat 文件</li>
+                    <li data-lang-en="Wait for the program to start" data-lang-zh="等待程序启动">等待程序启动</li>
+                    <li data-lang-en="Configure your settings in the graphical interface" data-lang-zh="在图形界面中配置您的设置">在图形界面中配置您的设置</li>
+                </ol>
+            </div>
+
+            <div class="warning">
+                <p data-lang-en="<strong>Note:</strong> When running for the first time, if there is no config.yaml file, the system will prompt you to create a configuration file." data-lang-zh="<strong>注意：</strong> 首次运行时，如果没有 config.yaml 文件，系统会提示您创建一个配置文件。"><strong>注意：</strong> 首次运行时，如果没有 config.yaml 文件，系统会提示您创建一个配置文件。</p>
+            </div>
+
+            <h3 data-lang-en="Running the Bot" data-lang-zh="运行机器人">运行机器人</h3>
+            <p data-lang-en="After configuration, you can choose:" data-lang-zh="配置完成后，您可以选择：">配置完成后，您可以选择：</p>
+            <ul>
+                <li data-lang-en="Start the bot through the graphical interface - Operations and Status (recommended for new users)" data-lang-zh="通过图形界面-操作与状态中启动机器人（推荐新用户使用）">通过图形界面-操作与状态中启动机器人（推荐新用户使用）</li>
+            </ul>
+
+            <h2 id="configuration" data-lang-en="Configuration" data-lang-zh="配置说明">配置说明</h2>
+
+            <h3 data-lang-en="Basic Settings" data-lang-zh="基本设置">基本设置</h3>
+            <table>
+                <tr>
+                    <th data-lang-en="Setting" data-lang-zh="设置项">设置项</th>
+                    <th data-lang-en="Description" data-lang-zh="说明">说明</th>
+                </tr>
+                <tr>
+                    <td data-lang-en="LinkedIn Email" data-lang-zh="LinkedIn 邮箱">LinkedIn 邮箱</td>
+                    <td data-lang-en="Your LinkedIn account email" data-lang-zh="您的 LinkedIn 账号邮箱">您的 LinkedIn 账号邮箱</td>
+                </tr>
+                <tr>
+                    <td data-lang-en="LinkedIn Password" data-lang-zh="LinkedIn 密码">LinkedIn 密码</td>
+                    <td data-lang-en="Your LinkedIn account password" data-lang-zh="您的 LinkedIn 账号密码">您的 LinkedIn 账号密码</td>
+                </tr>
+                <tr>
+                    <td data-lang-en="OpenAI API Key" data-lang-zh="OpenAI API 密钥">OpenAI API 密钥</td>
+                    <td data-lang-en="Optional, AI features can be used when provided, cloud service API will be used when not provided" data-lang-zh="可选，提供后可使用 AI 功能，不提供时将使用云服务 API">可选，提供后可使用 AI 功能，不提供时将使用云服务 API</td>
+                </tr>
+                <tr>
+                    <td data-lang-en="Use Cloud Service API" data-lang-zh="使用云服务 API">使用云服务 API</td>
+                    <td data-lang-en="Whether to use cloud service API (enabled by default)" data-lang-zh="是否使用云服务 API（默认启用）">是否使用云服务 API（默认启用）</td>
+                </tr>
+                <tr>
+                    <td data-lang-en="Resume Path" data-lang-zh="简历路径">简历路径</td>
+                    <td data-lang-en="Path to your resume PDF file" data-lang-zh="您的简历 PDF 文件路径">您的简历 PDF 文件路径</td>
+                </tr>
+                <tr>
+                    <td data-lang-en="Resume Text Path" data-lang-zh="简历文本路径">简历文本路径</td>
+                    <td data-lang-en="Path to your resume text file, used for AI matching questions. You can copy the text content from the PDF to a txt file and upload the txt path" data-lang-zh="您的简历文本文件路径，用于AI匹配问题，可直接将pdf中的文本内容复制到txt文件，之后上传该txt路径">您的简历文本文件路径，用于AI匹配问题，可直接将pdf中的文本内容复制到txt文件，之后上传该txt路径</td>
+                </tr>
+                <tr>
+                    <td data-lang-en="Cover Letter Path" data-lang-zh="求职信路径">求职信路径</td>
+                    <td data-lang-en="Optional, path to your cover letter file" data-lang-zh="可选，您的求职信文件路径">可选，您的求职信文件路径</td>
+                </tr>
+            </table>
+
+            <h3 data-lang-en="Search Settings" data-lang-zh="搜索设置">搜索设置</h3>
+            <table>
+                <tr>
+                    <th data-lang-en="Setting" data-lang-zh="设置项">设置项</th>
+                    <th data-lang-en="Description" data-lang-zh="说明">说明</th>
+                </tr>
+                <tr>
+                    <td data-lang-en="Job Keywords" data-lang-zh="职位关键词">职位关键词</td>
+                    <td data-lang-en="Job keywords to search for, such as 'Software Engineer'" data-lang-zh="要搜索的职位关键词，如 "Software Engineer"">要搜索的职位关键词，如 "Software Engineer"</td>
+                </tr>
+                <tr>
+                    <td data-lang-en="Location" data-lang-zh="地点">地点</td>
+                    <td data-lang-en="Geographic location to search in, such as 'New York'" data-lang-zh="搜索的地理位置，如 "New York"">搜索的地理位置，如 "New York"</td>
+                </tr>
+                <tr>
+                    <td data-lang-en="Search Distance" data-lang-zh="搜索距离">搜索距离</td>
+                    <td data-lang-en="Distance to search from the center location (in miles)" data-lang-zh="从中心位置搜索的距离（单位：英里）">从中心位置搜索的距离（单位：英里）</td>
+                </tr>
+                <tr>
+                    <td data-lang-en="Remote Work" data-lang-zh="远程工作">远程工作</td>
+                    <td data-lang-en="Whether to only search for remote jobs" data-lang-zh="是否只搜索远程工作">是否只搜索远程工作</td>
+                </tr>
+                <tr>
+                    <td data-lang-en="Latest First" data-lang-zh="最新发布优先">最新发布优先</td>
+                    <td data-lang-en="Whether to prioritize the latest published positions" data-lang-zh="是否优先显示最新发布的职位">是否优先显示最新发布的职位</td>
+                </tr>
+            </table>
+
+            <h3 data-lang-en="Personal Information" data-lang-zh="个人信息">个人信息</h3>
+            <p data-lang-en="In this section, fill in your detailed personal information, which will be used to automatically fill out application forms:" data-lang-zh="在此部分填写您的详细个人信息，这些信息将用于自动填写申请表格：">在此部分填写您的详细个人信息，这些信息将用于自动填写申请表格：</p>
+            <ul>
+                <li data-lang-en="Name, gender, age" data-lang-zh="姓名、性别、年龄">姓名、性别、年龄</li>
+                <li data-lang-en="Contact information" data-lang-zh="联系方式">联系方式</li>
+                <li data-lang-en="Address information" data-lang-zh="地址信息">地址信息</li>
+                <li data-lang-en="Self-introduction" data-lang-zh="自我介绍">自我介绍</li>
+            </ul>
+
+            <h3 data-lang-en="Work Experience" data-lang-zh="工作经验">工作经验</h3>
+            <p data-lang-en="Add your work experience, including:" data-lang-zh="添加您的工作经验，包括：">添加您的工作经验，包括：</p>
+            <ul>
+                <li data-lang-en="Company name" data-lang-zh="公司名称">公司名称</li>
+                <li data-lang-en="Job title" data-lang-zh="职位名称">职位名称</li>
+                <li data-lang-en="Working time (year/month)" data-lang-zh="工作时间（年月）">工作时间（年月）</li>
+                <li data-lang-en="Job description" data-lang-zh="工作描述">工作描述</li>
+                <li data-lang-en="Whether it is the current job" data-lang-zh="是否为当前工作">是否为当前工作</li>
+            </ul>
+
+            <h3 data-lang-en="Education Background" data-lang-zh="教育背景">教育背景</h3>
+            <p data-lang-en="Add your educational experience, including:" data-lang-zh="添加您的教育经历，包括：">添加您的教育经历，包括：</p>
+            <ul>
+                <li data-lang-en="School name" data-lang-zh="学校名称">学校名称</li>
+                <li data-lang-en="Degree" data-lang-zh="学位">学位</li>
+                <li data-lang-en="Major" data-lang-zh="专业">专业</li>
+                <li data-lang-en="Attendance time (year/month)" data-lang-zh="就读时间（年月）">就读时间（年月）</li>
+                <li data-lang-en="Whether currently attending" data-lang-zh="是否在读">是否在读</li>
+            </ul>
+
+            <h2 id="ai-features" data-lang-en="AI Features" data-lang-zh="AI 功能说明">AI 功能说明</h2>
+
+            <h3 data-lang-en="Cloud Service API Instructions" data-lang-zh="云服务 API 使用说明">云服务 API 使用说明</h3>
+            <p data-lang-en="The system uses cloud service APIs to process application questions and job evaluations:" data-lang-zh="系统使用云服务 API 处理申请问题和职位评估：">系统使用云服务 API 处理申请问题和职位评估：</p>
+            <ul>
+                <li data-lang-en="<strong>Use Default Key</strong>: When no OpenAI API key is provided, the system will use the cloud service's default API key" data-lang-zh="<strong>使用默认密钥</strong>：不提供 OpenAI API 密钥时，系统将使用云服务的默认 API 密钥"><strong>使用默认密钥</strong>：不提供 OpenAI API 密钥时，系统将使用云服务的默认 API 密钥</li>
+                <li data-lang-en="<strong>Use Custom Key</strong>: After providing your own OpenAI API key, the cloud service will use your key for requests" data-lang-zh="<strong>使用自定义密钥</strong>：提供自己的 OpenAI API 密钥后，云服务将使用您的密钥进行请求"><strong>使用自定义密钥</strong>：提供自己的 OpenAI API 密钥后，云服务将使用您的密钥进行请求</li>
+            </ul>
+
+            <div class="doc-container">
+                <p data-lang-en="When you fill in your own OpenAI API key in the settings, the system will pass this key to the cloud service, which will prioritize using your key to process requests. This ensures that requests use your own account quota." data-lang-zh="当您在设置中填写了自己的 OpenAI API 密钥时，系统会将此密钥传递给云服务，云服务将优先使用您的密钥来处理请求。这样可以确保请求使用您自己的账户额度。">当您在设置中填写了自己的 OpenAI API 密钥时，系统会将此密钥传递给云服务，云服务将优先使用您的密钥来处理请求。这样可以确保请求使用您自己的账户额度。</p>
+            </div>
+
+            <h3 data-lang-en="AI Question Answering and Job Evaluation" data-lang-zh="AI 答题和职位评估">AI 答题和职位评估</h3>
+            <p data-lang-en="AI service will help:" data-lang-zh="AI 服务会帮助：">AI 服务会帮助：</p>
+            <ul>
+                <li data-lang-en="Automatically generate answers to application questions" data-lang-zh="自动生成申请问题的回答">自动生成申请问题的回答</li>
+                <li data-lang-en="Evaluate whether the position matches your qualifications" data-lang-zh="评估职位是否与您的资历匹配">评估职位是否与您的资历匹配</li>
+            </ul>
+
+            <h2 id="faq" data-lang-en="FAQ" data-lang-zh="常见问题">常见问题</h2>
+
+            <h3 data-lang-en="Q: What should I do if the bot cannot log in to LinkedIn?" data-lang-zh="Q: 机器人无法登录 LinkedIn 怎么办？">Q: 机器人无法登录 LinkedIn 怎么办？</h3>
+            <p data-lang-en="A: It may be because LinkedIn requires security verification. The program will prompt you to manually complete the verification and then continue running." data-lang-zh="A: 可能是因为 LinkedIn 要求安全验证。程序会提示您手动完成验证，然后继续运行。">A: 可能是因为 LinkedIn 要求安全验证。程序会提示您手动完成验证，然后继续运行。</p>
+
+            <h3 data-lang-en="Q: Why aren't some fields automatically filled?" data-lang-zh="Q: 为什么有些字段没有自动填写？">Q: 为什么有些字段没有自动填写？</h3>
+            <p data-lang-en="A: Some special or uncommon fields may not be automatically recognized. You can check these fields in the 'unprepared_questions.csv' log and add custom answers before the next run." data-lang-zh="A: 某些特殊或不常见的字段可能无法自动识别。您可以在 "unprepared_questions.csv" 日志中查看这些字段，并在下次运行前添加自定义答案。">A: 某些特殊或不常见的字段可能无法自动识别。您可以在 "unprepared_questions.csv" 日志中查看这些字段，并在下次运行前添加自定义答案。</p>
+
+            <h3 data-lang-en="Q: What if the AI-generated answers are not accurate enough?" data-lang-zh="Q: AI 生成的回答不够准确怎么办？">Q: AI 生成的回答不够准确怎么办？</h3>
+            <p data-lang-en="A: You can override AI answers by configuring custom questions and answers." data-lang-zh="A: 您可以通过配置自定义问题和答案来覆盖 AI 的回答。">A: 您可以通过配置自定义问题和答案来覆盖 AI 的回答。</p>
+
+            <h3 data-lang-en="Q: How can I limit the bot to only apply for specific types of jobs?" data-lang-zh="Q: 如何限制机器人只申请特定类型的工作？">Q: 如何限制机器人只申请特定类型的工作？</h3>
+            <p data-lang-en="A: You can set blacklists (companies, positions, publishers) in the configuration and use the job match assessment feature." data-lang-zh="A: 您可以在配置中设置黑名单（公司、职位、发布者）和使用职位匹配度评估功能。">A: 您可以在配置中设置黑名单（公司、职位、发布者）和使用职位匹配度评估功能。</p>
+
+            <div class="warning">
+                <p data-lang-en="<strong>Disclaimer:</strong> Please use this tool responsibly and comply with LinkedIn's terms of service. This tool is only meant to help job seekers improve efficiency, and should not be used for sending spam applications or other behaviors that violate platform rules." data-lang-zh="<strong>免责声明：</strong> 请负责任地使用此工具，并遵守 LinkedIn 的服务条款。此工具仅用于帮助求职者提高效率，不应用于发送垃圾申请或其他违反平台规则的行为。"><strong>免责声明：</strong> 请负责任地使用此工具，并遵守 LinkedIn 的服务条款。此工具仅用于帮助求职者提高效率，不应用于发送垃圾申请或其他违反平台规则的行为。</p>
+            </div>
+
+            <h2 id="help" data-lang-en="More Help" data-lang-zh="更多帮助">更多帮助</h2>
+            <p data-lang-en="For more help, please check the project source code or contact the developer." data-lang-zh="如需更多帮助，请查看项目源代码或联系开发者。">如需更多帮助，请查看项目源代码或联系开发者。</p>
+        </div>
+        
+        <!-- 右侧固定导航 -->
+        <div class="sidebar">
+            <div class="doc-nav-title" data-lang-en="Document Contents" data-lang-zh="文档目录">文档目录</div>
+            <div class="home-link">
+                <a href="index.html#features" class="primary-btn home-link-btn" style="width: 80%; padding: 10px;" data-lang-en="Homepage" data-lang-zh="主页" onclick="storeScrollTarget(event, '#features')">主页</a>
+            </div>
+            <ul class="doc-nav">
+                <li class="doc-nav-item"><a href="#overview" class="doc-nav-link" data-lang-en="Overview" data-lang-zh="概览">概览</a></li>
+                <li class="doc-nav-item"><a href="#demo" class="doc-nav-link" data-lang-en="Demo Video" data-lang-zh="演示视频">演示视频</a></li>
+                <li class="doc-nav-item"><a href="#download" class="doc-nav-link" data-lang-en="Source Code Download" data-lang-zh="源码下载">源码下载</a></li>
+                <li class="doc-nav-item"><a href="#features" class="doc-nav-link" data-lang-en="Features" data-lang-zh="功能特点">功能特点</a></li>
+                <li class="doc-nav-item"><a href="#installation" class="doc-nav-link" data-lang-en="Installation and Preparation" data-lang-zh="安装和准备">安装和准备</a></li>
+                <li class="doc-nav-item"><a href="#batch-files" class="doc-nav-link" data-lang-en="Batch Files" data-lang-zh="批处理文件">批处理文件</a></li>
+                <li class="doc-nav-item"><a href="#configuration" class="doc-nav-link" data-lang-en="Configuration" data-lang-zh="配置说明">配置说明</a></li>
+                <li class="doc-nav-item"><a href="#ai-features" class="doc-nav-link" data-lang-en="AI Features" data-lang-zh="AI功能">AI功能</a></li>
+                <li class="doc-nav-item"><a href="#faq" class="doc-nav-link" data-lang-en="FAQ" data-lang-zh="常见问题">常见问题</a></li>
+                <li class="doc-nav-item"><a href="#help" class="doc-nav-link" data-lang-en="More Help" data-lang-zh="更多帮助">更多帮助</a></li>
+            </ul>
+            <button class="close-menu" style="display: none;">&times;</button>
+            
+            
+        </div>
+    </div>
+    
+    <!-- 移动设备菜单按钮 -->
+    <button class="menu-toggle">☰</button>
+    
+    <!-- 返回顶部按钮 -->
+    <button class="back-to-top" title="返回顶部">↑</button>
+    
+    <!-- 添加与index.html完全相同的页脚 -->
+    <footer>
+        <div class="container">
+            <div class="footer-content">
+                <div class="footer-logo">
+                    <h3 data-lang-en="Nuomi.ai" data-lang-zh="Nuomi.ai">Nuomi.ai</h3>
+                    <p data-lang-en="Your AI Job Search Assistant" data-lang-zh="您的AI求职助手">Your AI Job Search Assistant</p>
+                </div>
+                <div class="footer-links">
+                    <div class="footer-links-column">
+                        <h4 data-lang-en="Product" data-lang-zh="产品">Product</h4>
+                        <ul>
+                            <li><a href="index.html#features" data-lang-en="Features" data-lang-zh="功能" onclick="storeScrollTarget(event, '#features')">Features</a></li>
+                            <li><a href="index.html#how-it-works" data-lang-en="How it works" data-lang-zh="工作原理" onclick="storeScrollTarget(event, '#how-it-works')">How it works</a></li>
+                        </ul>
+                    </div>
+                    <div class="footer-links-column">
+                        <h4 data-lang-en="Resources" data-lang-zh="资源">Resources</h4>
+                        <ul>
+                            <li><a href="instructions.html" data-lang-en="User Manual" data-lang-zh="使用手册">User Manual</a></li>
+                            <li><a href="index.html#faq" data-lang-en="FAQ" data-lang-zh="常见问题">FAQ</a></li>
+                        </ul>
+                    </div>
+                    <div class="footer-links-column">
+                        <h4 data-lang-en="Contact" data-lang-zh="联系我们">Contact</h4>
+                        <ul>
+                            <li><a href="javascript:void(0)" onclick="showEmailModal()" data-lang-en="Email Us" data-lang-zh="给我们发邮件">Email Us</a></li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+            <div class="footer-bottom">
+                <p data-lang-en="© 2025 Nuomi.ai. All rights reserved." data-lang-zh="© 2024 Nuomi.ai. 版权所有。">© 2024 Nuomi.ai. All rights reserved.</p>
+                <p><span data-lang-en="Inspired by: " data-lang-zh="灵感来源：">Inspired by: </span> <a href="https://www.loopcv.pro/" target="_blank">LoopCV</a>, <a href="https://simplify.jobs/" target="_blank">Simplify</a></p>
+            </div>
+        </div>
+    </footer>
+    
+    <!-- 邮箱模态窗口 -->
+    <div id="emailModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 data-lang-en="Contact Email" data-lang-zh="联系邮箱">Contact Email</h3>
+                <button class="modal-close" onclick="closeEmailModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p data-lang-en="Please use the following email address to contact us:" data-lang-zh="请使用以下邮箱地址联系我们：">Please use the following email address to contact us:</p>
+                <p style="font-weight: bold; color: var(--primary-color); text-align: center;">yeequn.xu@gmail.com</p>
+            </div>
+            <div class="modal-footer">
+                <button class="modal-btn" onclick="copyEmail()" data-lang-en="Copy Email" data-lang-zh="复制邮箱">Copy Email</button>
+                <button class="modal-btn" onclick="closeEmailModal()" data-lang-en="Close" data-lang-zh="关闭">Close</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 添加脚本引用 -->
+    <script src="script.js"></script>
+    <script>
+        // 邮箱模态窗口
+        function showEmailModal() {
+            document.getElementById('emailModal').style.display = 'flex';
+            document.body.style.overflow = 'hidden';
+        }
+        
+        // 存储滚动目标，用于从instructions页面跳转到index页面时的锚点处理
+        function storeScrollTarget(event, targetId) {
+            // 将目标ID存储到sessionStorage中
+            sessionStorage.setItem('scrollTarget', targetId);
+            console.log('存储滚动目标:', targetId);
+            // 继续正常的导航行为
+        }
+        
+        function closeEmailModal() {
+            document.getElementById('emailModal').style.display = 'none';
+            document.body.style.overflow = '';
+        }
+        
+        function copyEmail() {
+            const email = 'yeequn.xu@gmail.com';
+            navigator.clipboard.writeText(email).then(function() {
+                alert('Email copied to clipboard');
+            }).catch(function() {
+                // 如果剪贴板操作失败，创建一个临时输入框来复制
+                const tempInput = document.createElement('input');
+                tempInput.value = email;
+                document.body.appendChild(tempInput);
+                tempInput.select();
+                document.execCommand('copy');
+                document.body.removeChild(tempInput);
+                alert('Email copied to clipboard');
+            });
+        }
+        
+        // 点击模态窗口外部关闭
+        window.onclick = function(event) {
+            const modal = document.getElementById('emailModal');
+            if (event.target == modal) {
+                closeEmailModal();
+            }
+        }
+        
+        // 高级平滑滚动函数
+        function smoothScroll(targetElement, duration) {
+            const targetPosition = targetElement.getBoundingClientRect().top;
+            const startPosition = window.pageYOffset;
+            const navHeight = document.querySelector('nav').offsetHeight;
+            const distance = targetPosition - navHeight - 20;
+            let startTime = null;
+            
+            function animation(currentTime) {
+                if (startTime === null) startTime = currentTime;
+                const timeElapsed = currentTime - startTime;
+                
+                // 确保不会超过动画时长
+                if (timeElapsed > duration) {
+                    window.scrollTo(0, startPosition + distance);
+                    return;
+                }
+                
+                const run = easeInOutCubic(timeElapsed, startPosition, distance, duration);
+                window.scrollTo(0, run);
+                
+                if (timeElapsed < duration) {
+                    requestAnimationFrame(animation);
+                }
+            }
+            
+            // 更加平滑的缓动函数 - Cubic easing
+            function easeInOutCubic(t, b, c, d) {
+                t /= d/2;
+                if (t < 1) return c/2*t*t*t + b;
+                t -= 2;
+                return c/2*(t*t*t + 2) + b;
+            }
+            
+            // 确保动画帧请求正确启动
+            window.requestAnimationFrame(animation);
+        }
+        
+        // 移动菜单控制
+        document.querySelector('.menu-toggle').addEventListener('click', function() {
+            document.querySelector('.sidebar').classList.add('active');
+            document.querySelector('.close-menu').style.display = 'block';
+        });
+        
+        document.querySelector('.close-menu').addEventListener('click', function() {
+            document.querySelector('.sidebar').classList.remove('active');
+            this.style.display = 'none';
+        });
+        
+        // 侧边栏内的语言切换按钮
+        const sidebarLangSwitcher = document.getElementById('lang-switcher-sidebar');
+        if (sidebarLangSwitcher) {
+            sidebarLangSwitcher.addEventListener('click', function() {
+                const newLang = currentLang === 'en' ? 'zh' : 'en';
+                localStorage.setItem('language', newLang);
+                window.location.href = window.location.pathname + '?lang=' + newLang;
+            });
+        }
+        
+        // 文档页面导航滚动
+        document.addEventListener('DOMContentLoaded', function() {
+            const docNavLinks = document.querySelectorAll('.doc-nav-link');
+            
+            docNavLinks.forEach(link => {
+                link.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    
+                    // 视觉反馈
+                    docNavLinks.forEach(l => l.classList.remove('active'));
+                    this.classList.add('active');
+                    
+                    const targetId = this.getAttribute('href');
+                    if (targetId === '#') return;
+                    
+                    const targetElement = document.querySelector(targetId);
+                    if (!targetElement) return;
+                    
+                    // 自定义平滑滚动 - 减少持续时间让滚动更快
+                    smoothScroll(targetElement, 600);
+                    
+                    // 更新URL
+                    history.pushState(null, null, targetId);
+                });
+            });
+            
+            // 页首链接平滑滚动
+            const homeLink = document.querySelector('.home-link a');
+            if (homeLink && homeLink.getAttribute('href') === 'index.html') {
+                homeLink.addEventListener('click', function(e) {
+                    // 不阻止默认行为，允许页面导航
+                });
+            }
+        });
+        
+        // 自动高亮当前浏览的部分
+        window.addEventListener('scroll', function() {
+            const sections = document.querySelectorAll('h2[id]');
+            const navLinks = document.querySelectorAll('.doc-nav-link');
+            
+            let currentSection = '';
+            
+            sections.forEach(section => {
+                const sectionTop = section.offsetTop;
+                
+                if (window.pageYOffset >= sectionTop - 100) {
+                    currentSection = section.getAttribute('id');
+                }
+            });
+            
+            navLinks.forEach(link => {
+                link.classList.remove('active');
+                if(link.getAttribute('href') === '#' + currentSection) {
+                    link.classList.add('active');
+                }
+            });
+        });
+        
+        // 显示/隐藏返回顶部按钮
+        window.addEventListener('scroll', function() {
+            if (window.pageYOffset > 300) {
+                document.querySelector('.back-to-top').style.display = 'block';
+            } else {
+                document.querySelector('.back-to-top').style.display = 'none';
+            }
+        });
+        
+        // 返回顶部功能
+        document.querySelector('.back-to-top').addEventListener('click', function(e) {
+            e.preventDefault();
+            // 页首滚动时间更短
+            smoothScroll(document.body, 500);
+        });
+    </script>
+</body>
+</html> 

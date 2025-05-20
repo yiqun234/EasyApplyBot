@@ -29,9 +29,12 @@ TEXTS = {
         'import': '导入',
         'export': '导出',
         'search': '搜索',
-        'language': '语言',
+        'language': 'Language',
         'ready': '就绪',
         'invalid_entry': '无效条目',
+        'resume': '简历',
+        'cover_letter': '求职信',
+        'photo': '照片',
     },
     
     # 登录界面文本

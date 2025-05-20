@@ -89,7 +89,7 @@ posterBlacklist: []
 # so apply one job manually once, bot will reuse manually uploaded CV for automating the task.
 # Note: Prefer a path without spaces, i.e. instead of "Me My" to "MeMy" or "Me_My".
 uploads:
- resume: /home/lian/下载/yiqun-xu-resume.pdf
+ resume: /home/user/yiqun-xu-resume.pdf
  # Cover letter is optional
  coverLetter: C:\Users\myDirectory\CoverLettter.pdf
  # Photo is optional
