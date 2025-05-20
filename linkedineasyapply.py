@@ -668,16 +668,18 @@ class LinkedinEasyApply:
             print(f"job_results: {job_results_by_class}")
             print("Successfully located the element using the random class name.")
 
-            # Scroll logic (currently disabled for testing)
-            self.scroll_slow(job_results_by_class, step=600,)  # Scroll down
-            self.scroll_slow(job_results_by_class, step=900, reverse=True)  # Scroll up
-
             # Find job list elements
             job_list = self.browser.find_elements(By.CLASS_NAME, ul_element_class)[0].find_elements(By.CLASS_NAME, 'scaffold-layout__list-item')
             print(f"Found {len(job_list)} jobs on this page")
 
             if len(job_list) == 0:
                 raise Exception("No more jobs on this page.")  # TODO: Seemed to encounter an error where we ran out of jobs and didn't go to next page, perhaps because I didn't have scrolling on?
+            else:
+                job_list[0].find_element(By.TAG_NAME, 'a').click()
+                time.sleep(random.uniform(2, 3))
+                # Scroll logic (currently disabled for testing)
+                self.scroll_slow(job_results_by_class, step=600, )  # Scroll down
+                self.scroll_slow(job_results_by_class, step=900, reverse=True)  # Scroll up
 
         except NoSuchElementException:
             print("No job results found using the specified XPaths or class.")
@@ -705,7 +707,8 @@ class LinkedinEasyApply:
             try:
                 job_title_element = job_tile.find_element(By.TAG_NAME, 'a')
                 job_title = job_title_element.find_element(By.TAG_NAME, 'strong').text
-                link = job_title_element.get_attribute('href').split('?')[0]
+                # link = job_title_element.get_attribute('href').split('?')[0]
+                link = job_title_element.get_attribute('href')
             except:
                 pass
             try:
