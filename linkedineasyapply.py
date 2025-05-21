@@ -1705,6 +1705,7 @@ class LinkedinEasyApply:
             # 使用xpath获取id前缀为jobs-search-box-location-id-xxx的元素
             location_input = self.browser.find_element(By.XPATH, '//input[starts-with(@id,"jobs-search-box-location-id-")]')
             self.enter_text(location_input, keyword)
+            time.sleep(2)
 
             location_seach_button = self.browser.find_element(By.XPATH, '//*[@id="global-nav-search"]/div/div[2]/button[1]')
             location_seach_button.click()
