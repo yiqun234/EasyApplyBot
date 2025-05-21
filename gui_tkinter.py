@@ -329,9 +329,13 @@ class EasyApplyApp(tk.Tk):
         self.login_status_text_label.pack(pady=5)
         self.login_status_text_label.pack_forget()  # 初始隐藏
         
+        # 隐私声明
+        self.login_privacy_label = ttk.Label(self.login_frame, text=self.texts['common']['privacy_notice'] if 'common' in self.texts and 'privacy_notice' in self.texts['common'] else "We do not store your personal privacy information", font=("Arial", 8))
+        self.login_privacy_label.pack(side=tk.BOTTOM, pady=(0, 5))
+        
         # 版权信息
         self.login_copyright_label = ttk.Label(self.login_frame, text="© 2025 Nuomi.ai", font=("Arial", 8))
-        self.login_copyright_label.pack(side=tk.BOTTOM, pady=20)
+        self.login_copyright_label.pack(side=tk.BOTTOM, pady=(0, 15))
     
     def _on_login_language_changed(self, event):
         """处理登录界面语言变更事件"""
@@ -355,6 +359,10 @@ class EasyApplyApp(tk.Tk):
                 self.login_exit_button.config(text=self.texts['login']['exit'] if 'login' in self.texts else "Exit")
             if self.login_status_text_label and not self.login_progress_bar.winfo_ismapped(): # Only update if not in progress
                  self.login_status_text_label.config(text=self.texts['login']['ready'] if 'login' in self.texts else "Ready to login...")
+            
+            # 更新隐私声明
+            if hasattr(self, 'login_privacy_label'):
+                self.login_privacy_label.config(text=self.texts['common']['privacy_notice'] if 'common' in self.texts and 'privacy_notice' in self.texts['common'] else "We do not store your personal privacy information")
 
             # Also update the language selector label itself, if it exists within a frame that's part of login_frame
             # This assumes the label is the first child of the lang_selector_frame
@@ -631,6 +639,10 @@ class EasyApplyApp(tk.Tk):
         
         # --- 添加语言选择下拉菜单 ---
         self._create_language_selector()
+        
+        # 隐私声明
+        self.privacy_label = tk.Label(self, text=self.texts['common']['privacy_notice'] if 'common' in self.texts and 'privacy_notice' in self.texts['common'] else "We do not store your personal privacy information", font=("Arial", 8))
+        self.privacy_label.pack(side=tk.BOTTOM, pady=(0, 5))
         
         self.status_label = tk.Label(self, text=self.texts['common']['ready'], bd=1, relief=tk.SUNKEN, anchor=tk.W)
         self.status_label.pack(side=tk.BOTTOM, fill=tk.X)
@@ -1871,6 +1883,10 @@ class EasyApplyApp(tk.Tk):
             else:
                 # 恢复之前的选择
                 self.lang_var.set(f"{self.lang_code} - {AVAILABLE_LANGUAGES[self.lang_code]}")
+                
+            # 更新隐私声明
+            if hasattr(self, 'privacy_label'):
+                self.privacy_label.config(text=self.texts['common']['privacy_notice'] if 'common' in self.texts and 'privacy_notice' in self.texts['common'] else "We do not store your personal privacy information")
     
     def _on_closing(self):
         """直接关闭GUI，不再需要检查进程状态"""

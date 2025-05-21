@@ -133,7 +133,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 document.body.classList.remove('menu-open');
             }
         });
-    });
+        });
 
     // 监听窗口大小变化，在大屏幕下关闭菜单
     window.addEventListener('resize', function() {

@@ -35,6 +35,7 @@ TEXTS = {
         'resume': 'Resume',
         'cover_letter': 'Cover',
         'photo': 'Photo',
+        'privacy_notice': 'We do not store your personal privacy information',
     },
     
     # Login screen texts

@@ -35,6 +35,7 @@ TEXTS = {
         'resume': '简历',
         'cover_letter': '求职信',
         'photo': '照片',
+        'privacy_notice': '我们不会保存你的个人隐私',
     },
     
     # 登录界面文本
