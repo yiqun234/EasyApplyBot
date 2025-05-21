@@ -95,6 +95,8 @@ TEXTS = {
         'search_radius': '搜索半径 (公里):',
         'remote_only': '只搜索远程工作',
         'less_than_ten': '筛选"少于10名申请者"的职位',
+        'filter_less_than': '筛选少于',
+        'applicants_label': '名申请者的职位',
         'newest_first': '按最新发布日期排序',
         'resident_status': '居住在工作所在国家/地区',
         'position_name': '职位名称:',
@@ -421,7 +423,7 @@ TEXTS = {
         'sending_to_ocr': '正在发送PDF到OCR服务器...',
         'ocr_timeout': 'OCR服务请求超时。',
         'ocr_canceled': 'OCR请求已被用户取消。',
-        'missing_text_resume_hint': '文本简历缺失或无效。请选择一份 PDF 简历，然后点击“AI 提取文本”按钮（位于“基本设置”选项卡上）先生成。'
+        'missing_text_resume_hint': '文本简历缺失或无效。请选择一份 PDF 简历，然后点击"AI 提取文本"按钮（位于"基本设置"选项卡上）先生成。'
     },
     
     # 个人资料字段

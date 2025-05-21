@@ -95,6 +95,8 @@ TEXTS = {
         'search_radius': 'Search Radius (km):',
         'remote_only': 'Search Remote Jobs Only',
         'less_than_ten': 'Filter "Less than 10 applicants" jobs',
+        'filter_less_than': 'Filter less than',
+        'applicants_label': 'applicants',
         'newest_first': 'Sort by most recent',
         'resident_status': 'Resident in job country',
         'position_name': 'Position Name:',

@@ -963,14 +963,40 @@ class EasyApplyApp(tk.Tk):
         if 'lessApplicantsEnabled' not in self.vars:
             self.vars['lessApplicantsEnabled'] = tk.BooleanVar(value=False)
         if 'lessApplicantsCount' not in self.vars:
-            self.vars['lessApplicantsCount'] = tk.StringVar(value="100")
+            # 从配置中获取值，确保在1-100之间
+            default_count = 100
+            if 'lessApplicantsCount' in self.config:
+                try:
+                    config_value = int(self.config['lessApplicantsCount'])
+                    if 1 <= config_value <= 100:
+                        default_count = config_value
+                except (ValueError, TypeError):
+                    pass
+            self.vars['lessApplicantsCount'] = tk.StringVar(value=str(default_count))
             
-        # 添加复选框和下拉菜单
-        ttk.Checkbutton(less_than_frame, text="筛选少于", variable=self.vars['lessApplicantsEnabled']).pack(side=tk.LEFT)
-        less_count_combobox = ttk.Combobox(less_than_frame, textvariable=self.vars['lessApplicantsCount'], 
-                                          values=["100", "90", "80"], state="readonly", width=5)
-        less_count_combobox.pack(side=tk.LEFT, padx=(0, 5))
-        ttk.Label(less_than_frame, text="名申请者的职位").pack(side=tk.LEFT)
+        # 添加复选框和数字输入框
+        ttk.Checkbutton(less_than_frame, text=self.texts['job_tab']['filter_less_than'], variable=self.vars['lessApplicantsEnabled']).pack(side=tk.LEFT)
+        
+        # 创建一个验证函数，只允许输入1-100的整数
+        def validate_number(input_value):
+            # 允许空字符串以便于删除
+            if input_value == "":
+                return True
+            # 检查是否为数字
+            if not input_value.isdigit():
+                return False
+            # 检查范围是否为1-100
+            value = int(input_value)
+            return 1 <= value <= 100
+            
+        # 注册验证器
+        validate_cmd = self.register(validate_number)
+        
+        # 创建带验证的整数输入框
+        less_count_entry = ttk.Entry(less_than_frame, textvariable=self.vars['lessApplicantsCount'], 
+                               validate="key", validatecommand=(validate_cmd, '%P'), width=5)
+        less_count_entry.pack(side=tk.LEFT, padx=(0, 5))
+        ttk.Label(less_than_frame, text=self.texts['job_tab']['applicants_label']).pack(side=tk.LEFT)
         
         # 其他原有选项
         ttk.Checkbutton(chk_frame, text=self.texts['job_tab']['newest_first'], variable=self.vars['newestPostingsFirst']).pack(anchor=tk.W)
@@ -1562,7 +1588,21 @@ class EasyApplyApp(tk.Tk):
             self.config['remote'] = self.vars['search_remote'].get()
             self.config['lessthanTenApplicants'] = self.vars['lessthanTenApplicants'].get()
             self.config['lessApplicantsEnabled'] = self.vars['lessApplicantsEnabled'].get()
-            self.config['lessApplicantsCount'] = int(self.vars['lessApplicantsCount'].get())
+            
+            # 安全地转换申请者计数为整数，确保在1-100范围
+            try:
+                count_value = self.vars['lessApplicantsCount'].get()
+                count_int = int(count_value) if count_value else 100
+                # 确保在范围内
+                if count_int < 1:
+                    count_int = 1
+                elif count_int > 100:
+                    count_int = 100
+                self.config['lessApplicantsCount'] = count_int
+            except ValueError:
+                # 转换失败时使用默认值100
+                self.config['lessApplicantsCount'] = 100
+                
             self.config['newestPostingsFirst'] = self.vars['newestPostingsFirst'].get()
             self.config['residentStatus'] = self.vars['residentStatus'].get()
             
