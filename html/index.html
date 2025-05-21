@@ -107,25 +107,9 @@
             scroll-margin-top: 80px;
         }
 
-        /* 导航链接悬停和点击动画效果 */
+        /* 导航链接悬停和点击效果 - 移除下划线动画 */
         .nav-links a {
             position: relative;
-            overflow: hidden;
-        }
-        
-        .nav-links a::after {
-            content: '';
-            position: absolute;
-            bottom: 0;
-            left: 0;
-            width: 0;
-            height: 2px;
-            background-color: #3A7BD5;
-            transition: width 0.3s ease;
-        }
-        
-        .nav-links a:hover::after {
-            width: 100%;
         }
         
         .nav-links a:active {

@@ -159,10 +159,20 @@ nav .logo:hover {
     font-weight: 500;
     font-size: 1rem;
     transition: color var(--transition-normal);
+    position: relative;
 }
 
 .nav-links a:hover {
     color: var(--primary-color);
+}
+
+/* 删除令人讨厌的下划线效果 */
+.nav-links a::after {
+    content: none;
+}
+
+.nav-links a:hover::after {
+    width: 0;
 }
 
 .nav-links a[href="instructions.html"] {
@@ -872,9 +882,8 @@ footer {
         transition: none;
     }
     
-    /* 重置之前可能影响的其他样式 */
-    .nav-links.active,
-    .nav-links[style*="display: flex"] {
+    /* 修复移动端菜单显示问题 */
+    .nav-links.active {
         display: flex !important;
     }
     
@@ -1280,7 +1289,7 @@ body.menu-open {
         transition: all var(--transition-normal);
         width: 80%;
     }
-}
+} 
 
 /* 流程图样式 */
 .workflow-diagram {

@@ -115,17 +115,33 @@ document.addEventListener('DOMContentLoaded', function() {
             e.stopPropagation();
             
             // 切换菜单显示状态
-            if (navLinks.style.display === 'flex') {
-                navLinks.style.display = 'none';
+            if (navLinks.classList.contains('active')) {
+                navLinks.classList.remove('active');
                 document.body.classList.remove('menu-open');
             } else {
-                navLinks.style.display = 'flex';
+                navLinks.classList.add('active');
                 document.body.classList.add('menu-open');
             }
-            
-            console.log('菜单点击:', navLinks.style.display);
         });
     }
+    
+    // 点击菜单链接后关闭菜单
+    document.querySelectorAll('.nav-links a').forEach(link => {
+        link.addEventListener('click', function() {
+            if (window.innerWidth <= 768) {
+                navLinks.classList.remove('active');
+                document.body.classList.remove('menu-open');
+            }
+        });
+    });
+
+    // 监听窗口大小变化，在大屏幕下关闭菜单
+    window.addEventListener('resize', function() {
+        if (window.innerWidth > 768) {
+            navLinks.classList.remove('active');
+            document.body.classList.remove('menu-open');
+        }
+    });
 
     // FAQ折叠面板
     const faqItems = document.querySelectorAll('.faq-item');
@@ -162,9 +178,9 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // 关闭菜单点击文档其他地方
     document.addEventListener('click', function(event) {
-        if (navLinks && navLinks.style.display === 'flex') {
+        if (navLinks && navLinks.classList.contains('active')) {
             if (!navLinks.contains(event.target) && !mobileMenuBtn.contains(event.target)) {
-                navLinks.style.display = 'none';
+                navLinks.classList.remove('active');
                 document.body.classList.remove('menu-open');
             }
         }
@@ -297,6 +313,6 @@ function handleHashNavigation() {
             } else {
                 console.log("未找到目标元素:", targetId);
             }
-        }, 1500); // 增加延迟时间至1.5秒确保页面元素都已加载
+        }, 500);
     }
-}
+} 
