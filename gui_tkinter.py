@@ -14,7 +14,7 @@ import webbrowser
 from lang import load_language, AVAILABLE_LANGUAGES, DEFAULT_LANGUAGE  # 添加语言包支持
 import auth_server  # 导入认证服务模块
 
-OCR_API = "http://44.247.228.229:3000/api/ocr"
+OCR_API = "https://ocr.nuomi.ai/api/ocr"
 
 # 定义国家代码列表
 COUNTRY_CODES = [
@@ -575,7 +575,7 @@ class EasyApplyApp(tk.Tk):
             'personalInfo': {}, 'eeo': {}, 'degreeCompleted': {}, 'checkboxes': {},
             'useCloudAI': tk.BooleanVar(value=self.config.get('useCloudAI', False)),
             # AI服务器设置
-            'aiServerUrl': tk.StringVar(value=self.config.get('aiServerUrl', 'http://44.247.228.229:3001/api')),
+            'aiServerUrl': tk.StringVar(value=self.config.get('aiServerUrl', 'https://api.nuomi.ai/api')),
         }
 
         # --- Dynamic Variables Init --- (More robust against missing keys in loaded config)
