@@ -142,25 +142,41 @@
 
     <header class="hero">
         <div class="container">
-            <div class="hero-content-full">
-                <div class="cold-open">
-                    <span class="spark-emoji">💥</span>
-                    <h1 class="main-title" data-lang-en="Can't land a job? Stop blaming the market." data-lang-zh="找不到工作？别再怪市场了。">Can't land a job? Stop blaming the market.</h1>
-                    <div class="question-list">
-                        <p data-lang-en="How many jobs have you actually applied to?" data-lang-zh="你真正申请了多少份工作？">How many jobs have you actually applied to?</p>
-                        <p data-lang-en="How many recruiters have called you?" data-lang-zh="有多少招聘人员给你打过电话？">How many recruiters have called you?</p>
-                        <p data-lang-en="If you haven't received 20 phone calls — you're not even trying." data-lang-zh="如果你还没收到20个电话——你根本没有努力尝试。">If you haven't received 20 phone calls — you're not even trying.</p>
-                    </div>
-                    <div class="truth-bombs">
-                        <p data-lang-en="It's not that no one wants to hire you." data-lang-zh="不是没人想雇佣你。">It's not that no one wants to hire you.</p>
-                        <p data-lang-en="You just haven't put yourself out there enough." data-lang-zh="你只是没有足够地推销自己。">You just haven't put yourself out there enough.</p>
-                    </div>
-                    <div class="call-to-action">
-                        <p data-lang-en="I don't want you to just think about job hunting anymore —" data-lang-zh="我不想让你只是思考求职——">I don't want you to just think about job hunting anymore —</p>
-                        <p data-lang-en="I want you to actually start." data-lang-zh="我想让你真正开始行动。">I want you to actually start.</p>
-                        <p data-lang-en="And we'll take the first step for you." data-lang-zh="我们将为你迈出第一步。">And we'll take the first step for you.</p>
+            <!-- 顶部左右布局：左侧文字，右侧视频 -->
+            <div class="hero-layout">
+                <!-- 左侧内容 -->
+                <div class="hero-content">
+                    <div class="cold-open">
+                        <span class="spark-emoji">💥</span>
+                        <h1 class="main-title" data-lang-en="Can't land a job? Stop blaming the market." data-lang-zh="找不到工作？别再怪市场了。">Can't land a job? Stop blaming the market.</h1>
+                        <div class="question-list">
+                            <p data-lang-en="How many jobs have you actually applied to?" data-lang-zh="你真正申请了多少份工作？">How many jobs have you actually applied to?</p>
+                            <p data-lang-en="How many recruiters have called you?" data-lang-zh="有多少招聘人员给你打过电话？">How many recruiters have called you?</p>
+                            <p data-lang-en="If you haven't received 20 phone calls — you're not even trying." data-lang-zh="如果你还没收到20个电话——你根本没有努力尝试。">If you haven't received 20 phone calls — you're not even trying.</p>
+                        </div>
+                        <div class="truth-bombs">
+                            <p data-lang-en="I don't want you to just think about job hunting anymore —" data-lang-zh="我不想让你只是思考求职——">I don't want you to just think about job hunting anymore —</p>
+                        </div>
+                        <div class="call-to-action">
+                            <p data-lang-en="I want you to actually start." data-lang-zh="我想让你真正开始行动。">I want you to actually start.</p>
+                            <p data-lang-en="And we'll take the first step for you." data-lang-zh="我们将为你迈出第一步。">And we'll take the first step for you.</p>
+                        </div>
                     </div>
                 </div>
+                
+                <!-- 右侧视频 -->
+                <div class="hero-video">
+                    <div class="video-wrapper video-preview">
+                        <video muted loop autoplay playsinline class="promo-video">
+                            <source src="https://www.nuomi.ai/demo.mp4" type="video/mp4">
+                            您的浏览器不支持视频标签
+                        </video>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 居中的求职助手介绍框 -->
+            <div class="hero-info-container">
                 <div class="hero-info">
                     <p class="hero-subtitle" data-lang-en="Meet your job-search AI agent." data-lang-zh="认识你的求职AI助手。">Meet your job-search AI agent.</p>
                     <div class="users-badge" data-lang-en="100+ Job Seekers Empowered" data-lang-zh="100+ 求职者已使用">100+ Job Seekers Empowered</div>
@@ -169,27 +185,18 @@
                     </p>
                     <div class="hero-cta">
                         <a href="instructions.html" class="primary-btn" data-lang-en="Download Now" data-lang-zh="立即下载">Download Now</a>
-                        <a href="#how-it-works" class="secondary-btn" data-lang-en="How It Works" data-lang-zh="工作原理">How It Works</a>
+                        <a href="#" class="secondary-btn" onclick="showPreorderModal(); return false;" data-lang-en="Pre-order Workday Version" data-lang-zh="预订Workday版本">Pre-order Workday Version</a>
                     </div>
                 </div>
-                <div class="hero-bg-element">
-                    <div class="animated-circle"></div>
-                    <div class="animated-circle circle-2"></div>
-                    <div class="animated-circle circle-3"></div>
-                </div>
+            </div>
+            
+            <div class="hero-bg-element">
+                <div class="animated-circle"></div>
+                <div class="animated-circle circle-2"></div>
+                <div class="animated-circle circle-3"></div>
             </div>
         </div>
     </header>
-
-    <!-- 视频展示区域 -->
-    <section class="promo-video-section">
-        <div class="container">
-            <h2 class="section-title" data-lang-en="See How It Works" data-lang-zh="观看工作演示">See How It Works</h2>
-            <div class="video-container">
-                <iframe src="https://www.nuomi.ai/demo.mp4" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
-            </div>
-        </div>
-    </section>
 
     <section id="features" class="features-section">
         <div class="container">
@@ -339,15 +346,6 @@
         </div>
     </section>
 
-    <section id="cta" class="cta-section">
-        <div class="container">
-            <h2 class="section-title" data-lang-en="Ready to Supercharge Your Job Search?" data-lang-zh="准备好提升您的求职效率了吗？">Ready to Supercharge Your Job Search?</h2>
-            <div class="cta-buttons">
-                <a href="instructions.html" class="primary-btn large-btn" data-lang-en="Download Now" data-lang-zh="立即下载"><i class="fas fa-rocket"></i> Download Now</a>
-            </div>
-        </div>
-    </section>
-
     <footer>
         <div class="container">
             <div class="footer-content">
@@ -403,6 +401,58 @@
         </div>
     </div>
 
+    <!-- 视频灯箱效果 -->
+    <div id="videoLightbox" class="video-lightbox">
+        <span class="close-lightbox" onclick="closeVideoLightbox()">&times;</span>
+        <div class="lightbox-content">
+            <video id="fullVideo" controls>
+                <source src="https://www.nuomi.ai/demo.mp4" type="video/mp4">
+                您的浏览器不支持视频标签
+            </video>
+        </div>
+    </div>
+
+    <!-- 预订模态窗口 -->
+    <div id="preorderModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 data-lang-en="Pre-order Workday Version" data-lang-zh="预订Workday版本">Pre-order Workday Version</h3>
+                <button class="modal-close" onclick="closePreorderModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p data-lang-en="We're launching a Workday version soon! Leave your information to get early access." data-lang-zh="我们即将推出Workday版本！留下您的信息以获得抢先体验机会。">We're launching a Workday version soon! Leave your information to get early access.</p>
+                
+                <form id="preorderForm" onsubmit="submitPreorderForm(event)">
+                    <div class="form-group">
+                        <label for="name" data-lang-en="Name" data-lang-zh="姓名">Name</label>
+                        <input type="text" id="name" name="name" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="email" data-lang-en="Email" data-lang-zh="邮箱">Email</label>
+                        <input type="email" id="email" name="email" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="company" data-lang-en="Company (Optional)" data-lang-zh="公司 (选填)">Company (Optional)</label>
+                        <input type="text" id="company" name="company">
+                    </div>
+                    
+                    <div class="form-group">
+                        <button type="submit" class="modal-btn primary-btn" id="submitBtn">
+                            <span class="btn-text" data-lang-en="Pre-order Now" data-lang-zh="立即预订">Pre-order Now</span>
+                            <div class="spinner-loader" style="display: none;"></div>
+                        </button>
+                    </div>
+                </form>
+                
+                <div id="formSuccess" style="display: none; text-align: center; color: var(--secondary-color);">
+                    <p data-lang-en="Thank you for your interest! We'll notify you when the Workday version is available." data-lang-zh="感谢您的关注！当Workday版本可用时，我们会通知您。">Thank you for your interest! We'll notify you when the Workday version is available.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script src="script.js"></script>
     <script>
         // 邮箱模态窗口
@@ -414,6 +464,126 @@
         function closeEmailModal() {
             document.getElementById('emailModal').style.display = 'none';
             document.body.style.overflow = '';
+        }
+        
+        // 预订模态窗口
+        function showPreorderModal() {
+            const modal = document.getElementById('preorderModal');
+            const form = document.getElementById('preorderForm');
+            const success = document.getElementById('formSuccess');
+            
+            if (modal) {
+                modal.style.display = 'flex';
+                document.body.style.overflow = 'hidden';
+            }
+            
+            // 重置表单
+            if (form) {
+                form.reset();
+                form.style.display = 'block';
+            }
+            
+            if (success) {
+                success.style.display = 'none';
+            }
+        }
+        
+        function closePreorderModal() {
+            const modal = document.getElementById('preorderModal');
+            if (modal) {
+                modal.style.display = 'none';
+                document.body.style.overflow = '';
+            }
+        }
+        
+        function submitPreorderForm(event) {
+            event.preventDefault();
+            
+            const name = document.getElementById('name').value;
+            const email = document.getElementById('email').value;
+            const company = document.getElementById('company').value;
+            const submitBtn = document.getElementById('submitBtn');
+            
+            // 显示加载状态
+            if (submitBtn) {
+                submitBtn.classList.add('loading');
+                const btnText = submitBtn.querySelector('.btn-text');
+                if (btnText) {
+                    btnText.style.opacity = '0.7';
+                }
+                const loadingIcon = submitBtn.querySelector('.spinner-loader');
+                if (loadingIcon) {
+                    loadingIcon.style.display = 'inline-block';
+                }
+                submitBtn.disabled = true;
+            }
+            
+            // 创建要提交的数据对象
+            const formData = {
+                name: name,
+                email: email,
+                company: company
+            };
+            
+            // 发送到服务器端点
+            fetch('https://api.nuomi.ai/api/preorder', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(formData)
+            })
+            .then(response => {
+                // 显示成功消息
+                const form = document.getElementById('preorderForm');
+                const success = document.getElementById('formSuccess');
+                if (form) form.style.display = 'none';
+                if (success) success.style.display = 'block';
+                
+                // 5秒后关闭模态窗口
+                setTimeout(() => {
+                    closePreorderModal();
+                }, 5000);
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('提交信息时出错。请稍后重试。');
+            })
+            .finally(() => {
+                // 恢复按钮状态
+                if (submitBtn) {
+                    submitBtn.classList.remove('loading');
+                    const loadingIcon = submitBtn.querySelector('.spinner-loader');
+                    if (loadingIcon) {
+                        loadingIcon.style.display = 'none';
+                    }
+                    submitBtn.disabled = false;
+                }
+            });
+        }
+        
+        // 视频灯箱效果
+        function openVideoLightbox() {
+            const lightbox = document.getElementById('videoLightbox');
+            const fullVideo = document.getElementById('fullVideo');
+            
+            lightbox.style.display = 'flex';
+            document.body.style.overflow = 'hidden';
+            
+            // 重置视频并播放
+            fullVideo.currentTime = 0;
+            fullVideo.play().catch(e => console.log('自动播放被阻止:', e));
+        }
+        
+        function closeVideoLightbox() {
+            const lightbox = document.getElementById('videoLightbox');
+            const fullVideo = document.getElementById('fullVideo');
+            
+            lightbox.style.display = 'none';
+            document.body.style.overflow = '';
+            
+            // 暂停视频
+            fullVideo.pause();
         }
         
         function copyEmail() {
@@ -434,9 +604,15 @@
         
         // 点击模态窗口外部关闭
         window.onclick = function(event) {
-            const modal = document.getElementById('emailModal');
-            if (event.target == modal) {
+            const emailModal = document.getElementById('emailModal');
+            const videoLightbox = document.getElementById('videoLightbox');
+            
+            if (event.target == emailModal) {
                 closeEmailModal();
+            }
+            
+            if (event.target == videoLightbox) {
+                closeVideoLightbox();
             }
         }
         
@@ -602,6 +778,12 @@
                 }
             `;
             document.head.appendChild(style);
+            
+            // 设置视频预览点击事件
+            const videoPreview = document.querySelector('.video-preview');
+            if (videoPreview) {
+                videoPreview.addEventListener('click', openVideoLightbox);
+            }
         });
     </script>
 </body>
