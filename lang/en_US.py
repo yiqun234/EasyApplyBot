@@ -197,6 +197,11 @@ TEXTS = {
         'min_salary': 'Minimum Expected Salary:',
         'notice_period': 'Notice Period (weeks):',
         'evaluate_job_fit': 'Evaluate Job Fit',
+        'customize_prompt': 'Customize Prompt',
+        'prompt_dialog_title': 'Customize Job Fit Evaluation Prompt',
+        'prompt_description': 'Define criteria for AI to evaluate job fit. The default prompt recommends applying if the candidate meets 65% of core requirements with experience gap less than 2 years.',
+        'default_prompt': 'You are evaluating job fit for technical roles.\nRecommend APPLY if:\n- Candidate meets 65 percent of the core requirements\n- Experience gap is 2 years or less\n- Has relevant transferable skills\n\nReturn SKIP if:\n- Experience gap is greater than 2 years\n- Missing multiple core requirements\n- Role is clearly more senior\n- The role is focused on an uncommon technology or skill that is required and that the candidate does not have experience with\n- The role is a leadership role or a role that requires managing people and the candidate has no experience leading or managing people',
+        'reset_to_default': 'Reset to Default',
         'debug_mode': 'Debug Mode',
     },
     

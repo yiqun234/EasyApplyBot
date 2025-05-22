@@ -18,7 +18,7 @@ from openai import OpenAI
 class CloudAIResponseGenerator:
     """基于AWS Lambda的AI响应生成器，将请求发送到AWS API Gateway处理"""
     
-    def __init__(self, api_key=None, personal_info=None, experience=None, languages=None, resume_path=None, text_resume_path=None,customQuestions={}, debug=False):
+    def __init__(self, api_key=None, personal_info=None, experience=None, languages=None, resume_path=None, text_resume_path=None,customQuestions={}, debug=False, job_fit_prompt=''):
         """
         初始化云端AI响应生成器
         
@@ -33,6 +33,7 @@ class CloudAIResponseGenerator:
         self._resume_content = None
         self.debug = debug
         self.openai_api_key = api_key  # 保存用户提供的OpenAI API密钥
+        self.job_fit_prompt = job_fit_prompt  # 添加自定义提示词参数
 
         self.customQuestions = customQuestions
         
@@ -327,6 +328,10 @@ class CloudAIResponseGenerator:
                 "debug": self.debug
             }
             
+            # 添加自定义提示词
+            if self.job_fit_prompt:
+                request_data["system_prompt"] = self.job_fit_prompt
+            
             # 调用云端API
             response_data = self._call_cloud_api("evaluate-job-fit", request_data)
             print(response_data)
@@ -350,7 +355,7 @@ class CloudAIResponseGenerator:
             explanation = response_data.get("explanation", "")
             
             if explanation and self.debug:
-                print(f"AI评估解释: {explanation}")
+                print(f"AI Evaluation Explained: {explanation}")
                 
             # 决策应该是布尔值，但也接受字符串"APPLY"/"SKIP"
             if isinstance(decision, bool):
@@ -418,6 +423,7 @@ class LinkedinEasyApply:
         self.debug = parameters.get('debug', False)
         self.evaluate_job_fit = parameters.get('evaluateJobFit', False)
         self.customQuestions = parameters.get('customQuestions', {})
+        self.jobFitPrompt = parameters.get('jobFitPrompt', '')  # 添加自定义提示词参数
 
         self.workExperiences = parameters.get('workExperiences', [])
         self.education = parameters.get('educations', [])
@@ -431,7 +437,8 @@ class LinkedinEasyApply:
             languages=self.languages,
             resume_path=self.resume_dir,
             text_resume_path=self.text_resume,
-            customQuestions = self.customQuestions,
+            customQuestions=self.customQuestions,
+            job_fit_prompt=self.jobFitPrompt,  # 传递自定义提示词
             debug=self.debug
         )
 

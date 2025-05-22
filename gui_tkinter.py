@@ -1378,8 +1378,18 @@ class EasyApplyApp(tk.Tk):
         # ttk.Label(other_settings_frame, text=self.texts['advanced_fields']['min_salary']).grid(row=sub_row, column=0, sticky=tk.W, padx=5, pady=3); ttk.Entry(other_settings_frame, textvariable=self.vars['salaryMinimum'], width=15).grid(row=sub_row, column=1, sticky=tk.W, padx=5, pady=3); sub_row+=1
         # ttk.Label(other_settings_frame, text=self.texts['advanced_fields']['notice_period']).grid(row=sub_row, column=0, sticky=tk.W, padx=5, pady=3); ttk.Entry(other_settings_frame, textvariable=self.vars['noticePeriod'], width=15).grid(row=sub_row, column=1, sticky=tk.W, padx=5, pady=3); sub_row+=1
         bool_flag_frame = ttk.Frame(other_settings_frame); bool_flag_frame.grid(row=sub_row, column=0, columnspan=2, sticky=tk.W, padx=5, pady=5); sub_row+=1
-        ttk.Checkbutton(bool_flag_frame, text=self.texts['advanced_fields']['evaluate_job_fit'], variable=self.vars['evaluateJobFit']).pack(side=tk.LEFT, padx=5)
-        ttk.Checkbutton(bool_flag_frame, text=self.texts['advanced_fields']['debug_mode'], variable=self.vars['debug']).pack(side=tk.LEFT, padx=5)
+        
+        # 创建带"自定义提示词"按钮的评估工作匹配度选项
+        job_fit_frame = ttk.Frame(bool_flag_frame)
+        job_fit_frame.pack(side=tk.LEFT, padx=5)
+        ttk.Checkbutton(job_fit_frame, text=self.texts['advanced_fields']['evaluate_job_fit'], variable=self.vars['evaluateJobFit']).pack(side=tk.LEFT)
+        ttk.Button(job_fit_frame, text=self.texts['advanced_fields']['customize_prompt'], command=self._customize_job_fit_prompt, width=20).pack(side=tk.LEFT, padx=5)
+        
+        # Debug Mode单独一行
+        debug_frame = ttk.Frame(other_settings_frame)
+        debug_frame.grid(row=sub_row, column=0, columnspan=2, sticky=tk.W, padx=5, pady=5)
+        sub_row += 1
+        ttk.Checkbutton(debug_frame, text=self.texts['advanced_fields']['debug_mode'], variable=self.vars['debug']).pack(side=tk.LEFT, padx=5)
 
 
         # Checkboxes Frame (Standard Y/N Questions)
@@ -1711,6 +1721,11 @@ class EasyApplyApp(tk.Tk):
             self.config['noticePeriod'] = self.vars['noticePeriod'].get()
             self.config['evaluateJobFit'] = self.vars['evaluateJobFit'].get()
             self.config['debug'] = self.vars['debug'].get()
+            
+            # 确保自定义工作匹配度评估提示词被保存
+            if 'jobFitPrompt' not in self.config:
+                self.config['jobFitPrompt'] = self.texts['advanced_fields']['default_prompt']
+                
             # Completed degrees (use checked boolean vars to create list format from config)
             self.config['checkboxes']['degreeCompleted'] = [
                 degree for degree, var in self.vars['degreeCompleted'].items() if var.get()
@@ -4038,6 +4053,61 @@ class EasyApplyApp(tk.Tk):
         else:
             # 如果在子线程中，使用after方法在主线程中调度
             self.after(0, lambda: self._update_ai_log(message))
+
+    # 添加自定义工作匹配度评估提示词对话框
+    def _customize_job_fit_prompt(self):
+        dialog = tk.Toplevel(self)
+        dialog.title(self.texts['advanced_fields']['prompt_dialog_title'])
+        dialog.transient(self)
+        dialog.grab_set()
+        dialog.minsize(600, 400)
+        
+        # 确保config中有jobFitPrompt字段
+        if 'jobFitPrompt' not in self.config:
+            self.config['jobFitPrompt'] = self.texts['advanced_fields']['default_prompt']
+            
+        # 创建说明标签
+        ttk.Label(dialog, text=self.texts['advanced_fields']['prompt_description'], wraplength=550, justify=tk.LEFT).pack(pady=(10, 5), padx=20, anchor=tk.W)
+        
+        # 创建文本框框架
+        text_frame = ttk.Frame(dialog)
+        text_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=10)
+        
+        # 创建带滚动条的文本框
+        prompt_text = scrolledtext.ScrolledText(text_frame, wrap=tk.WORD, height=15)
+        prompt_text.pack(fill=tk.BOTH, expand=True)
+        prompt_text.insert(tk.END, self.config.get('jobFitPrompt', self.texts['advanced_fields']['default_prompt']))
+        
+        # 按钮框架
+        button_frame = ttk.Frame(dialog)
+        button_frame.pack(pady=15, padx=20)
+        
+        # 重置为默认按钮
+        def reset_to_default():
+            prompt_text.delete(1.0, tk.END)
+            prompt_text.insert(tk.END, self.texts['advanced_fields']['default_prompt'])
+            
+        ttk.Button(button_frame, text=self.texts['advanced_fields']['reset_to_default'], command=reset_to_default).pack(side=tk.LEFT, padx=5)
+        
+        # 确定按钮
+        def on_ok():
+            prompt_content = prompt_text.get(1.0, tk.END).strip()
+            if prompt_content:
+                self.config['jobFitPrompt'] = prompt_content
+            dialog.destroy()
+            
+        ttk.Button(button_frame, text=self.texts['common']['ok'], command=on_ok, width=8).pack(side=tk.RIGHT, padx=5)
+        
+        # 取消按钮
+        ttk.Button(button_frame, text=self.texts['common']['cancel'], command=dialog.destroy, width=8).pack(side=tk.RIGHT, padx=5)
+        
+        # 窗口居中
+        dialog.update_idletasks()
+        width = dialog.winfo_width()
+        height = dialog.winfo_height()
+        x = self.winfo_x() + (self.winfo_width() // 2) - (width // 2)
+        y = self.winfo_y() + (self.winfo_height() // 2) - (height // 2)
+        dialog.geometry(f"{width}x{height}+{x}+{y}")
 
 if __name__ == '__main__':
     in_venv = hasattr(sys, 'real_prefix') or (hasattr(sys, 'base_prefix') and sys.base_prefix != sys.prefix)
