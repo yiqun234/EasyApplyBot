@@ -207,6 +207,9 @@ TEXTS = {
         'prompt_description': '定义AI评估工作匹配度的标准。默认提示词建议在候选人满足65%核心要求且经验差距小于2年的情况下申请职位。',
         'default_prompt': 'You are evaluating job fit for technical roles.\nRecommend APPLY if:\n- Candidate meets 65 percent of the core requirements\n- Experience gap is 2 years or less\n- Has relevant transferable skills\n\nReturn SKIP if:\n- Experience gap is greater than 2 years\n- Missing multiple core requirements\n- Role is clearly more senior\n- The role is focused on an uncommon technology or skill that is required and that the candidate does not have experience with\n- The role is a leadership role or a role that requires managing people and the candidate has no experience leading or managing people',
         'reset_to_default': '重置为默认值',
+        'speed_mode': 'AI速度模式',
+        'speed_slow': '慢速模式（给予AI更长的思考时间）',
+        'speed_fast': '快速模式（减少AI思考时间）',
         'debug_mode': '调试模式',
     },
     

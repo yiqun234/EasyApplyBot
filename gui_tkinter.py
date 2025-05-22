@@ -584,6 +584,7 @@ class EasyApplyApp(tk.Tk):
             'useCloudAI': tk.BooleanVar(value=self.config.get('useCloudAI', False)),
             # AI服务器设置
             'aiServerUrl': tk.StringVar(value=self.config.get('aiServerUrl', 'https://api.nuomi.ai/api')),
+            'speed_mode': tk.StringVar(value='slow'),  # 添加速度模式变量，默认为慢速模式
         }
 
         # --- Dynamic Variables Init --- (More robust against missing keys in loaded config)
@@ -1391,6 +1392,17 @@ class EasyApplyApp(tk.Tk):
         sub_row += 1
         ttk.Checkbutton(debug_frame, text=self.texts['advanced_fields']['debug_mode'], variable=self.vars['debug']).pack(side=tk.LEFT, padx=5)
 
+        # 添加AI速度模式选择
+        speed_frame = ttk.Frame(other_settings_frame)
+        speed_frame.grid(row=sub_row, column=0, columnspan=2, sticky=tk.W, padx=5, pady=5)
+        sub_row += 1
+        ttk.Label(speed_frame, text=self.texts['advanced_fields']['speed_mode']).pack(side=tk.LEFT, padx=5)
+
+        # 创建单选按钮
+        ttk.Radiobutton(speed_frame, text=self.texts['advanced_fields']['speed_slow'], 
+                      variable=self.vars['speed_mode'], value='slow').pack(side=tk.LEFT, padx=(10, 20))
+        ttk.Radiobutton(speed_frame, text=self.texts['advanced_fields']['speed_fast'], 
+                      variable=self.vars['speed_mode'], value='fast').pack(side=tk.LEFT, padx=(0, 10))
 
         # Checkboxes Frame (Standard Y/N Questions)
         checkbox_frame = ttk.LabelFrame(self.scrollable_frame, text=self.texts['advanced_labels']['qa_default_frame'], padding=(10, 5))
@@ -1721,6 +1733,7 @@ class EasyApplyApp(tk.Tk):
             self.config['noticePeriod'] = self.vars['noticePeriod'].get()
             self.config['evaluateJobFit'] = self.vars['evaluateJobFit'].get()
             self.config['debug'] = self.vars['debug'].get()
+            self.config['speed_mode'] = self.vars['speed_mode'].get()
             
             # 确保自定义工作匹配度评估提示词被保存
             if 'jobFitPrompt' not in self.config:
