@@ -507,10 +507,6 @@
             // 显示加载状态
             if (submitBtn) {
                 submitBtn.classList.add('loading');
-                const btnText = submitBtn.querySelector('.btn-text');
-                if (btnText) {
-                    btnText.style.opacity = '0.7';
-                }
                 const loadingIcon = submitBtn.querySelector('.spinner-loader');
                 if (loadingIcon) {
                     loadingIcon.style.display = 'inline-block';
