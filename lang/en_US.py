@@ -114,6 +114,8 @@ TEXTS = {
         'month': 'Past Month',
         'week': 'Past Week',
         '24_hours': 'Past 24 Hours',
+        'past': 'Past',
+        'hours': 'Hours',
     },
     
     # Preferences tab labels

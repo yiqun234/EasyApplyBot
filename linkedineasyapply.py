@@ -1680,10 +1680,34 @@ class LinkedinEasyApply:
         date_url = ""
         dates = {"all time": "", "month": "&f_TPR=r2592000", "week": "&f_TPR=r604800", "24 hours": "&f_TPR=r86400"}
         date_table = parameters.get('date', [])
-        for key in date_table.keys():
-            if date_table[key]:
-                date_url = dates[key]
-                break
+        
+        # 处理自定义小时数
+        custom_hours_selected = False
+        custom_hours_value = 24  # 默认24小时
+        
+        # 检查是否有自定义小时数
+        if date_table and 'custom_hours' in date_table and date_table['custom_hours']:
+            custom_hours_selected = True
+            # 获取自定义小时数
+            if 'customHours' in parameters:
+                try:
+                    custom_hours_value = int(parameters['customHours'])
+                    if custom_hours_value <= 0:  # 确保是正数
+                        custom_hours_value = 24  # 如果无效则使用默认值
+                except (ValueError, TypeError):
+                    pass  # 使用默认值
+        
+        # 设置日期URL
+        if custom_hours_selected:
+            # 计算秒数：小时数 * 3600 秒/小时
+            seconds = custom_hours_value * 3600
+            date_url = f"&f_TPR=r{seconds}"
+        else:
+            # 处理标准日期选项
+            for key in date_table.keys():
+                if date_table[key] and key in dates:
+                    date_url = dates[key]
+                    break
 
         easy_apply_url = "&f_AL=true"
 

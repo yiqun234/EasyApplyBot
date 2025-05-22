@@ -103,7 +103,7 @@ DEFAULT_CONFIG = {
     'lessthanTenApplicants': True, 'newestPostingsFirst': False,
     'experienceLevel': {'internship': False, 'entry': True, 'associate': True, 'mid-senior level': True, 'director': False, 'executive': False},
     'jobTypes': {'full-time': True, 'contract': True, 'part-time': False, 'temporary': True, 'internship': False, 'other': False, 'volunteer': False},
-    'date': {'all time': True, 'month': False, 'week': False, '24 hours': False},
+    'date': {'all time': True, 'month': False, 'week': False, '24 hours': False, 'custom_hours': False},
     'positions': ['sales'], 'locations': ['united states'], 'residentStatus': False, 'distance': 100,
     'outputFileDirectory': '~/Documents/EasyApplyBot/', 'companyBlacklist': [], 'titleBlacklist': [], 'posterBlacklist': [],
     'uploads': {'resume': '', 'coverLetter': '', 'photo': ''},
@@ -687,8 +687,13 @@ class EasyApplyApp(tk.Tk):
     def _get_current_date_pref(self):
         date_prefs = self.config.get('date', {}); # Default to empty dict if missing
         if isinstance(date_prefs, dict):
+            # 检查custom_hours选项
+            if date_prefs.get('custom_hours', False):
+                return 'custom_hours'
+            # 检查其他标准选项
             for key, value in date_prefs.items():
-                if value: return key
+                if value and key != 'custom_hours': 
+                    return key
         return 'all time' # Fallback
 
     def _create_basic_tab(self):
@@ -1174,6 +1179,49 @@ class EasyApplyApp(tk.Tk):
             ttk.Radiobutton(date_frame, text=text, variable=self.vars['date_pref'], value=key).pack(
                 anchor=tk.W, padx=5, pady=1
             )
+            
+        # 添加自定义小时数选项
+        custom_hours_frame = ttk.Frame(date_frame)
+        custom_hours_frame.pack(anchor=tk.W, padx=5, pady=1)
+        
+        # 确保自定义小时数变量存在
+        if 'custom_hours' not in self.vars:
+            # 自定义小时数默认为1小时
+            default_hours = 1
+            if 'customHours' in self.config:
+                try:
+                    config_hours = int(self.config['customHours'])
+                    if config_hours > 0:  # 确保是正数
+                        default_hours = config_hours
+                except (ValueError, TypeError):
+                    pass  # 使用默认值
+            self.vars['custom_hours'] = tk.StringVar(value=str(default_hours))
+        
+        # 创建验证函数，只允许输入正整数
+        def validate_hours(input_value):
+            # 允许空字符串以便于删除
+            if input_value == "":
+                return True
+            # 检查是否为数字
+            if not input_value.isdigit():
+                return False
+            # 检查是否为正数
+            value = int(input_value)
+            return value > 0
+        
+        # 注册验证器
+        validate_cmd = self.register(validate_hours)
+        
+        # 创建单选按钮和输入框组合
+        ttk.Radiobutton(custom_hours_frame, text=self.texts['preferences_tab']['past'], 
+                      variable=self.vars['date_pref'], value='custom_hours').pack(side=tk.LEFT, padx=0, pady=0)
+        
+        # 创建带验证的小时数输入框
+        hours_entry = ttk.Entry(custom_hours_frame, textvariable=self.vars['custom_hours'], 
+                             validate="key", validatecommand=(validate_cmd, '%P'), width=5)
+        hours_entry.pack(side=tk.LEFT, padx=(5, 5))
+        
+        ttk.Label(custom_hours_frame, text=self.texts['preferences_tab']['hours']).pack(side=tk.LEFT)
 
 
     # --- Advanced Tab Creation ---
@@ -1626,8 +1674,33 @@ class EasyApplyApp(tk.Tk):
             # Preferences Tab - dynamically created checkboxes need manual update
             for level, var in self.vars['exp_level'].items(): self.config['experienceLevel'][level] = var.get()
             for jtype, var in self.vars['job_type'].items(): self.config['jobTypes'][jtype] = var.get()
-            # Handle date radio buttons specially
-            for date_key in self.config['date']: self.config['date'][date_key] = (self.vars['date_pref'].get() == date_key)
+            # 处理日期选项，包括自定义小时数
+            date_pref = self.vars['date_pref'].get()
+            # 先将所有日期选项设为False
+            for date_key in self.config['date']: 
+                self.config['date'][date_key] = False
+                
+            # 根据选择的选项设置对应值为True
+            if date_pref == 'custom_hours':
+                # 确保custom_hours键存在
+                if 'custom_hours' not in self.config['date']:
+                    self.config['date']['custom_hours'] = True
+                else:
+                    self.config['date']['custom_hours'] = True
+                
+                # 保存自定义小时数
+                try:
+                    hours_value = self.vars['custom_hours'].get()
+                    hours_int = int(hours_value) if hours_value else 24
+                    # 确保是正整数
+                    if hours_int <= 0:
+                        hours_int = 24
+                    self.config['customHours'] = hours_int
+                except ValueError:
+                    self.config['customHours'] = 24
+            else:
+                # 设置选中的标准选项为True
+                self.config['date'][date_pref] = True
             # Advanced Tab
             self.config['companyBlacklist'] = parse_list_from_textarea(self.company_bl_widget.get('1.0', tk.END))
             self.config['titleBlacklist'] = parse_list_from_textarea(self.title_bl_widget.get('1.0', tk.END))
