@@ -636,7 +636,8 @@ def validate_yaml():
     assert len(parameters['eeo'])
     eeo = parameters.get('eeo', [])
     for survey_question in eeo:
-        assert eeo[survey_question] != ''
+        if survey_question != 'citizenship' and survey_question != 'clearance':
+            assert eeo[survey_question] != ''
 
     if parameters.get('openaiApiKey') == 'sk-proj-your-openai-api-key':
         parameters['openaiApiKey'] = None

@@ -8,7 +8,7 @@
 TEXTS = {
     # 通用文本
     'common': {
-        'app_title': 'LinkedIn Easy Apply Bot - 配置工具 v3 (Tkinter)',
+        'app_title': 'LinkedIn Easy Apply Bot - 配置工具 v3.1 (Tkinter)',
         'browse': '浏览',
         'save': '保存',
         'cancel': '取消',

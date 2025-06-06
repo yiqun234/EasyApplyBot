@@ -8,7 +8,7 @@ English (US) language pack (en_US)
 TEXTS = {
     # Common texts
     'common': {
-        'app_title': 'LinkedIn Easy Apply Bot - Configuration Tool v3 (Tkinter)',
+        'app_title': 'LinkedIn Easy Apply Bot - Configuration Tool v3.1 (Tkinter)',
         'browse': 'Browse',
         'save': 'Save',
         'cancel': 'Cancel',
