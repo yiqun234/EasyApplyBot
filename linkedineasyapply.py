@@ -1678,10 +1678,10 @@ class LinkedinEasyApply:
                             if not choice:
                                 negative_keywords = ['prefer', 'decline', 'don\'t', 'specified', 'none', 'wish',
                                                      'choose']
-                        for option in options:
-                            if any(neg_keyword in option.lower() for neg_keyword in negative_keywords):
-                                choice = option
-                                break
+                                for option in options:
+                                    if any(neg_keyword in option.lower() for neg_keyword in negative_keywords):
+                                        choice = option
+                                        break
 
                         if not choice and options:
                             choice = options[len(options) - 1]
