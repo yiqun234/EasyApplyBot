@@ -1582,7 +1582,113 @@ class LinkedinEasyApply:
                             choice = options[len(options) - 1]
                         self.select_dropdown(dropdown_field, choice)
 
-                    elif 'citizenship' in question_text and (any('yes' in option.lower() for option in options)):
+                    elif any(keyword in question_text.lower() for keyword in
+                             [
+                                 'aboriginal', 'native', 'indigenous', 'tribe', 'first nations',
+                                 'native american', 'native hawaiian', 'inuit', 'metis', 'maori',
+                                 'aborigine', 'ancestral', 'native peoples', 'original people',
+                                 'first people', 'gender', 'race', 'disability', 'latino', 'veteran'
+                             ]):
+
+                        print(f"EEO-related dropdown question detected: {question_text}")
+
+                        # 使用AI来智能选择最佳EEO选项
+                        choice = options[len(options) - 1]  # 默认选择最后一个选项
+                        choices = [(i, option) for i, option in enumerate(options)]
+
+                        # 构建EEO上下文信息
+                        eeo_context = ""
+                        if hasattr(self, 'eeo') and self.eeo:
+                            eeo_info = []
+                            for key, value in self.eeo.items():
+                                if value:
+                                    eeo_info.append(f"{key}: {value}")
+                            if eeo_info:
+                                eeo_context = f" My EEO information: {', '.join(eeo_info)}."
+
+                        # 添加EEO上下文到问题中
+                        enhanced_question = question_text + eeo_context
+
+                        ai_response = self.ai_response_generator.generate_response(
+                            enhanced_question,
+                            response_type="choice",
+                            options=choices
+                        )
+
+                        if ai_response is not None:
+                            choice = options[ai_response]
+                            print(f"AI selected EEO option: '{choice}' for question: '{question_text}'")
+                        else:
+                            # AI失败时的后备逻辑 - 使用配置的EEO信息进行基本匹配
+                            print("AI response failed, using fallback EEO matching logic")
+
+                            # 尝试使用EEO配置
+                            if 'gender' in question_text.lower() and 'gender' in self.eeo:
+                                eeo_value = self.eeo['gender']
+                                if 'male' in eeo_value.lower():
+                                    choice = next((option for option in options if
+                                                   'male' in option.lower() and 'female' not in option.lower()), "")
+                                elif 'female' in eeo_value.lower():
+                                    choice = next((option for option in options if 'female' in option.lower()), "")
+
+                            elif 'race' in question_text.lower() and 'race' in self.eeo:
+                                eeo_value = self.eeo['race']
+                                race_mapping = {
+                                    'asian': 'asian',
+                                    'white': 'white',
+                                    'black': ['black', 'african'],
+                                    'hispanic': ['hispanic', 'latino'],
+                                    'american indian': ['american indian', 'alaska'],
+                                    'hawaiian': ['hawaiian', 'pacific'],
+                                    'two or more': ['two', 'more']
+                                }
+
+                                for race_key, search_terms in race_mapping.items():
+                                    if race_key in eeo_value.lower():
+                                        if isinstance(search_terms, list):
+                                            choice = next((option for option in options if
+                                                           any(term in option.lower() for term in search_terms)), "")
+                                        else:
+                                            choice = next(
+                                                (option for option in options if search_terms in option.lower()), "")
+                                        break
+
+                            elif 'disability' in question_text.lower() and 'disability' in self.eeo:
+                                eeo_value = self.eeo['disability']
+                                if 'yes' in eeo_value.lower():
+                                    choice = next((option for option in options if 'yes' in option.lower()), "")
+                                elif 'no' in eeo_value.lower():
+                                    choice = next((option for option in options if 'no' in option.lower()), "")
+
+                            elif 'veteran' in question_text.lower() and 'veteran' in self.eeo:
+                                eeo_value = self.eeo['veteran']
+                                if 'protected veteran' in eeo_value.lower():
+                                    choice = next((option for option in options if
+                                                   'protected' in option.lower() and 'veteran' in option.lower() and 'not' not in option.lower()),
+                                                  "")
+                                elif 'not a protected veteran' in eeo_value.lower():
+                                    choice = next((option for option in options if
+                                                   'not' in option.lower() and 'protected' in option.lower()), "")
+                                elif 'veteran but not' in eeo_value.lower():
+                                    choice = next((option for option in options if
+                                                   'veteran' in option.lower() and 'not' in option.lower() and 'protected' in option.lower()),
+                                                  "")
+
+                            # 如果仍然没有找到匹配项，使用默认的拒绝回答选项
+                            if not choice:
+                                negative_keywords = ['prefer', 'decline', 'don\'t', 'specified', 'none', 'wish',
+                                                     'choose']
+                        for option in options:
+                            if any(neg_keyword in option.lower() for neg_keyword in negative_keywords):
+                                choice = option
+                                break
+
+                        if not choice and options:
+                            choice = options[len(options) - 1]
+
+                        self.select_dropdown(dropdown_field, choice)
+
+                    elif 'citizenship' in question_text:
                         answer = self.get_answer('legallyAuthorized')
                         choice = ""
                         for option in options:
@@ -1603,103 +1709,6 @@ class LinkedinEasyApply:
                                 if 'no' in option.lower():
                                     choice = option
                         if choice == "":
-                            choice = options[len(options) - 1]
-
-                        self.select_dropdown(dropdown_field, choice)
-
-                    elif any(keyword in question_text.lower() for keyword in
-                             [
-                                 'aboriginal', 'native', 'indigenous', 'tribe', 'first nations',
-                                 'native american', 'native hawaiian', 'inuit', 'metis', 'maori',
-                                 'aborigine', 'ancestral', 'native peoples', 'original people',
-                                 'first people', 'gender', 'race', 'disability', 'latino', 'veteran'
-                             ]):
-                        
-                        print(f"EEO-related dropdown question detected: {question_text}")
-                        
-                        # 使用AI来智能选择最佳EEO选项
-                        choice = options[len(options) - 1]  # 默认选择最后一个选项
-                        choices = [(i, option) for i, option in enumerate(options)]
-                        
-                        # 构建EEO上下文信息
-                        eeo_context = ""
-                        if hasattr(self, 'eeo') and self.eeo:
-                            eeo_info = []
-                            for key, value in self.eeo.items():
-                                if value:
-                                    eeo_info.append(f"{key}: {value}")
-                            if eeo_info:
-                                eeo_context = f" My EEO information: {', '.join(eeo_info)}."
-                        
-                        # 添加EEO上下文到问题中
-                        enhanced_question = question_text + eeo_context
-                        
-                        ai_response = self.ai_response_generator.generate_response(
-                            enhanced_question,
-                            response_type="choice",
-                            options=choices
-                        )
-                        
-                        if ai_response is not None:
-                            choice = options[ai_response]
-                            print(f"AI selected EEO option: '{choice}' for question: '{question_text}'")
-                        else:
-                            # AI失败时的后备逻辑 - 使用配置的EEO信息进行基本匹配
-                            print("AI response failed, using fallback EEO matching logic")
-                            
-                            # 尝试使用EEO配置
-                            if 'gender' in question_text.lower() and 'gender' in self.eeo:
-                                eeo_value = self.eeo['gender']
-                                if 'male' in eeo_value.lower():
-                                    choice = next((option for option in options if 'male' in option.lower() and 'female' not in option.lower()), "")
-                                elif 'female' in eeo_value.lower():
-                                    choice = next((option for option in options if 'female' in option.lower()), "")
-                                    
-                            elif 'race' in question_text.lower() and 'race' in self.eeo:
-                                eeo_value = self.eeo['race']
-                                race_mapping = {
-                                    'asian': 'asian',
-                                    'white': 'white',
-                                    'black': ['black', 'african'],
-                                    'hispanic': ['hispanic', 'latino'],
-                                    'american indian': ['american indian', 'alaska'],
-                                    'hawaiian': ['hawaiian', 'pacific'],
-                                    'two or more': ['two', 'more']
-                                }
-                                
-                                for race_key, search_terms in race_mapping.items():
-                                    if race_key in eeo_value.lower():
-                                        if isinstance(search_terms, list):
-                                            choice = next((option for option in options if any(term in option.lower() for term in search_terms)), "")
-                                        else:
-                                            choice = next((option for option in options if search_terms in option.lower()), "")
-                                        break
-                                        
-                            elif 'disability' in question_text.lower() and 'disability' in self.eeo:
-                                eeo_value = self.eeo['disability']
-                                if 'yes' in eeo_value.lower():
-                                    choice = next((option for option in options if 'yes' in option.lower()), "")
-                                elif 'no' in eeo_value.lower():
-                                    choice = next((option for option in options if 'no' in option.lower()), "")
-                                    
-                            elif 'veteran' in question_text.lower() and 'veteran' in self.eeo:
-                                eeo_value = self.eeo['veteran']
-                                if 'protected veteran' in eeo_value.lower():
-                                    choice = next((option for option in options if 'protected' in option.lower() and 'veteran' in option.lower() and 'not' not in option.lower()), "")
-                                elif 'not a protected veteran' in eeo_value.lower():
-                                    choice = next((option for option in options if 'not' in option.lower() and 'protected' in option.lower()), "")
-                                elif 'veteran but not' in eeo_value.lower():
-                                    choice = next((option for option in options if 'veteran' in option.lower() and 'not' in option.lower() and 'protected' in option.lower()), "")
-
-                            # 如果仍然没有找到匹配项，使用默认的拒绝回答选项
-                            if not choice:
-                                negative_keywords = ['prefer', 'decline', 'don\'t', 'specified', 'none', 'wish', 'choose']
-                        for option in options:
-                            if any(neg_keyword in option.lower() for neg_keyword in negative_keywords):
-                                choice = option
-                                break
-                        
-                        if not choice and options:
                             choice = options[len(options) - 1]
 
                         self.select_dropdown(dropdown_field, choice)
