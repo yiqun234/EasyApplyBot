@@ -94,6 +94,56 @@ COUNTRY_CODES = [
     "Zambia (+260)", "Zimbabwe (+263)"
 ]
 
+# EEO选项定义 - 显示文本与标准值的映射
+EEO_OPTIONS = {
+    'gender': {
+        'standard_values': ['I do not wish to identify', 'Male', 'Female'],
+        'display_text': {
+            'en': ['I do not wish to identify', 'Male', 'Female'],
+            'zh': ['我不愿意透露', '男性', '女性']
+        }
+    },
+    'race': {
+        'standard_values': ['I do not wish to self identify',
+                            'American Indian or Alaska Native', 'Asian',
+                            'Black or African American', 'Hispanic or Latino',
+                            'Native Hawaiian or Other Pacific Islander',
+                            'Two or More Races', 'White'],
+        'display_text': {
+            'en': ['I do not wish to self identify', 'American Indian or Alaska Native', 'Asian',
+                   'Black or African American', 'Hispanic or Latino',
+                   'Native Hawaiian or Other Pacific Islander',
+                   'Two or More Races', 'White'],
+            'zh': ['我不愿意自我识别', '美洲原住民或阿拉斯加原住民', '亚裔',
+                   '黑人或非裔美国人', '西班牙裔或拉丁裔',
+                   '夏威夷原住民或其他太平洋岛民',
+                   '两个或更多种族', '白人']
+        }
+    },
+    'veteran': {
+        'standard_values': ['I choose not to self-identify', 'I am a protected veteran',
+                            'I am a veteran but not a protected veteran',
+                            'I am not a protected veteran'],
+        'display_text': {
+            'en': ['I choose not to self-identify', 'I am a protected veteran',
+                   'I am a veteran but not a protected veteran',
+                   'I am not a protected veteran'],
+            'zh': ['我选择不自我识别', '我是受保护的退伍军人', '我是退伍军人但不是受保护的退伍军人',
+                   '我不是受保护的退伍军人']
+        }
+    },
+    'disability': {
+        'standard_values': ['I choose not to self-identify', 'Yes, I have a disability, or have had one in the past',
+                            'No, I do not have a disability and have not had one in the past'],
+        'display_text': {
+            'en': ['I choose not to self-identify', 'Yes, I have a disability, or have had one in the past',
+                   'No, I do not have a disability and have not had one in the past'],
+            'zh': ['我选择不自我识别', '是的，我有残疾或曾经有过',
+                   '不，我没有残疾且从未有过']
+        }
+    }
+}
+
 
 CONFIG_FILE = "config.yaml"
 # DEFAULT_CONFIG now primarily defines structure and default *values* if a key *exists* but has no value,
@@ -109,7 +159,8 @@ DEFAULT_CONFIG = {
     'uploads': {'resume': '', 'coverLetter': '', 'photo': ''},
     'checkboxes': {'driversLicence': True, 'requireVisa': False, 'legallyAuthorized': False, 'certifiedProfessional': True, 'urgentFill': True, 'commute': True, 'remote': True, 'drugTest': True, 'assessment': True, 'securityClearance': False, 'degreeCompleted': ["High School Diploma", "Bachelor's Degree"], 'backgroundCheck': True},
     'universityGpa': 4.0, 'salaryMinimum': 65000, 'languages': {'english': 'Native or bilingual'},
-    'noticePeriod': 2, 'experience': {'default': 0}, 'personalInfo': {}, 'eeo': {}, 'textResume': '',
+    'noticePeriod': 2, 'experience': {'default': 0}, 'personalInfo': {}, 
+    'eeo': {'gender': EEO_OPTIONS["gender"]["standard_values"][0], 'race': EEO_OPTIONS["race"]["standard_values"][0],'veteran': EEO_OPTIONS["veteran"]["standard_values"][0], 'disability': EEO_OPTIONS["disability"]["standard_values"][0]}, 'textResume': '',
     'evaluateJobFit': False, 'debug': False,
     'customQuestions': {},  # 自定义问答配置
     'useCloudAI': True,  # 是否使用云服务API，默认为True
@@ -210,6 +261,7 @@ def parse_list_from_textarea(text_content):
 class EasyApplyApp(tk.Tk):
     def __init__(self):
         super().__init__()
+        self.EEO_OPTIONS = EEO_OPTIONS
         self.config = load_config()
         self.lang_code = self.config.get('language', DEFAULT_LANGUAGE)
         self.texts = load_language(self.lang_code)
@@ -228,7 +280,6 @@ class EasyApplyApp(tk.Tk):
         self.login_copyright_label = None
         self.login_language_selector = None
         self.login_lang_var = None
-
 
         # Initialize other necessary attributes
         self.bot_process = None
@@ -1978,6 +2029,12 @@ class EasyApplyApp(tk.Tk):
                 self.config['language'] = selected
                 self._save_config(self.config)
                 
+                # 更新EEO下拉框的语言（在重启前）
+                old_lang_code = self.lang_code
+                self.lang_code = selected
+                self._update_eeo_language()
+                self.lang_code = old_lang_code
+                
                 # 重启应用
                 python = sys.executable
                 os.execl(python, python, *sys.argv)
@@ -1988,6 +2045,101 @@ class EasyApplyApp(tk.Tk):
             # 更新隐私声明
             if hasattr(self, 'privacy_label'):
                 self.privacy_label.config(text=self.texts['common']['privacy_notice'] if 'common' in self.texts and 'privacy_notice' in self.texts['common'] else "We do not store your personal privacy information")
+    
+    def _update_eeo_language(self):
+        """Update EEO dropdown options when language changes"""
+        if not hasattr(self, 'eeo_combos'):
+            return
+            
+        lang_key = 'zh' if self.lang_code.startswith('zh') else 'en'
+        
+        for field_key, combo_info in self.eeo_combos.items():
+            combo = combo_info['combo']
+            current_standard_value = combo_info['var'].get()
+            
+            # 获取新语言的显示选项
+            new_display_options = self.EEO_OPTIONS.get(field_key, {}).get('display_text', {}).get(lang_key, ['Select an option'])
+            standard_values = combo_info['standard_values']
+            
+            # 更新combo的选项
+            combo['values'] = new_display_options
+            combo_info['display_options'] = new_display_options
+            
+            # 根据当前标准值设置显示文本
+            if current_standard_value and current_standard_value in standard_values:
+                index = standard_values.index(current_standard_value)
+                combo.set(new_display_options[index])
+            else:
+                combo.set(new_display_options[0])
+
+    def _map_ai_value_to_standard_eeo(self, field_key, ai_value):
+        """将AI提取的值映射到标准EEO选项"""
+        # 获取该字段的标准值列表
+        standard_values = self.EEO_OPTIONS.get(field_key, {}).get('standard_values', [])
+        
+        # 如果AI值为空或无效，返回默认的"不愿透露"选项（第一个选项）
+        if not ai_value or not isinstance(ai_value, str) or not ai_value.strip():
+            return standard_values[0] if standard_values else ''
+        
+        ai_value_lower = ai_value.lower().strip()
+        
+        # 性别映射
+        if field_key == 'gender':
+            if ai_value_lower in ['male', 'man', 'm', '男', '男性']:
+                return 'Male'
+            elif ai_value_lower in ['female', 'woman', 'f', '女', '女性']:
+                return 'Female'
+            elif ai_value_lower in ['prefer not to say', 'not specified', 'other', 'non-binary', 'prefer not to answer']:
+                return 'I do not wish to identify'
+        
+        # 种族映射
+        elif field_key == 'race':
+            if any(keyword in ai_value_lower for keyword in ['american indian', 'alaska native', 'native american']):
+                return 'American Indian or Alaska Native'
+            elif any(keyword in ai_value_lower for keyword in ['white', 'caucasian']):
+                return 'White'
+            elif any(keyword in ai_value_lower for keyword in ['asian', 'chinese', 'japanese', 'korean']) and 'indian' not in ai_value_lower:
+                return 'Asian'
+            elif any(keyword in ai_value_lower for keyword in ['black', 'african american', 'african']):
+                return 'Black or African American'
+            elif any(keyword in ai_value_lower for keyword in ['hispanic', 'latino', 'latina']):
+                return 'Hispanic or Latino'
+            elif any(keyword in ai_value_lower for keyword in ['hawaiian', 'pacific islander']):
+                return 'Native Hawaiian or Other Pacific Islander'
+            elif any(keyword in ai_value_lower for keyword in ['two or more', 'multiple', 'mixed']):
+                return 'Two or More Races'
+            elif any(keyword in ai_value_lower for keyword in ['prefer not', 'not specified', 'decline']):
+                return 'I do not wish to self identify'
+        
+        # 退伍军人映射
+        elif field_key == 'veteran':
+            if any(keyword in ai_value_lower for keyword in ['protected veteran', 'disabled veteran']) and 'not' not in ai_value_lower:
+                return 'I am a protected veteran'
+            elif 'veteran' in ai_value_lower and any(keyword in ai_value_lower for keyword in ['not protected', 'not a protected'])  and 'but' in ai_value_lower:
+                return 'I am a veteran but not a protected veteran'
+            elif 'not' in ai_value_lower and 'veteran' in ai_value_lower:
+                return 'I am not a protected veteran'
+            elif any(keyword in ai_value_lower for keyword in ['yes', 'true', 'veteran']) and 'not' not in ai_value_lower:
+                return 'I am a veteran but not a protected veteran'  # 默认为非保护退伍军人
+            elif any(keyword in ai_value_lower for keyword in ['prefer not', 'decline', 'not specified']):
+                return 'I choose not to self-identify'
+        
+        # 残疾映射
+        elif field_key == 'disability':
+            if any(keyword in ai_value_lower for keyword in ['prefer not', 'decline', 'not specified']):
+                return 'I choose not to self-identify'
+            elif any(keyword in ai_value_lower for keyword in ['no', 'false', 'no disability']) or ai_value_lower.startswith('not have'):
+                return 'No, I do not have a disability and have not had one in the past'
+            elif any(keyword in ai_value_lower for keyword in ['yes', 'true', 'have', 'disability', 'disabled']):
+                return 'Yes, I have a disability, or have had one in the past'
+        
+        # 尝试直接匹配标准值
+        for standard_value in standard_values:
+            if standard_value and ai_value.lower() == standard_value.lower():
+                return standard_value
+        
+        # 如果没有找到匹配，返回默认的"不愿透露"选项（第一个选项）
+        return standard_values[0] if standard_values else ''
     
     def _on_closing(self):
         """直接关闭GUI，不再需要检查进程状态"""
@@ -2764,19 +2916,79 @@ class EasyApplyApp(tk.Tk):
         
         sub_row += (len(personal_keys) + 1) // 2
 
-        # EEO Fields (Dynamically created based on loaded config keys)
+        # EEO Fields (Standard dropdown selections)
         ttk.Label(personal_frame, text=self.texts['advanced_labels']['eeo_info_title'], font='-weight bold').grid(row=sub_row, column=0, columnspan=4, sticky=tk.W, padx=5, pady=5)
         sub_row += 1
         
-        eeo_keys = list(self.config.get('eeo', {}).keys()) # Iterate over keys present in loaded config
-        for i, key in enumerate(eeo_keys):
+        # 确保配置中有EEO字段
+        if 'eeo' not in self.config:
+            self.config['eeo'] = {}
+            
+        # 定义标准EEO字段
+        standard_eeo_fields = ['gender', 'race', 'veteran', 'disability']
+        
+        # 添加不存在的EEO字段到配置中
+        for field in standard_eeo_fields:
+            if field not in self.config['eeo']:
+                self.config['eeo'][field] = ''
+        
+        # 创建EEO下拉选择框
+        self.eeo_combos = {}  # 存储combo引用以便后续更新
+        for i, key in enumerate(standard_eeo_fields):
             col = (i % 2) * 2
             row_offset = i // 2
-            ttk.Label(personal_frame, text=f"{key.replace('_',' ').title()}:").grid(row=sub_row + row_offset, column=col, sticky=tk.W, padx=5, pady=2)
+            
+            # 获取字段显示名称
+            field_name = self.texts.get('eeo_fields', {}).get(key, f"{key.replace('_',' ').title()}:")
+            ttk.Label(personal_frame, text=field_name).grid(row=sub_row + row_offset, column=col, sticky=tk.W, padx=5, pady=2)
+            
+            # 创建下拉选择框
             if key not in self.vars['eeo']:
                 self.vars['eeo'][key] = tk.StringVar(value=self.config.get('eeo', {}).get(key, ''))
-            entry = ttk.Entry(personal_frame, textvariable=self.vars['eeo'][key], width=25)
-            entry.grid(row=sub_row + row_offset, column=col + 1, sticky=tk.EW, padx=5, pady=2)
+            
+            # 获取当前语言的显示文本
+            lang_key = 'zh' if self.lang_code.startswith('zh') else 'en'
+            display_options = self.EEO_OPTIONS.get(key, {}).get('display_text', {}).get(lang_key, ['Select an option'])
+            standard_values = self.EEO_OPTIONS.get(key, {}).get('standard_values', [''])
+            
+            combo = ttk.Combobox(personal_frame, values=display_options, state='readonly', width=22)
+            combo.grid(row=sub_row + row_offset, column=col + 1, sticky=tk.EW, padx=5, pady=2)
+            
+            # 存储combo引用
+            self.eeo_combos[key] = {
+                'combo': combo,
+                'var': self.vars['eeo'][key],
+                'standard_values': standard_values,
+                'display_options': display_options
+            }
+            
+            # 设置当前值的显示
+            current_standard_value = self.config.get('eeo', {}).get(key, '')
+            if current_standard_value and current_standard_value in standard_values:
+                # 找到对应的显示文本
+                index = standard_values.index(current_standard_value)
+                combo.set(display_options[index])
+            else:
+                # 如果值为空或不在标准值中，设置为第一个选项（"不愿透露"）
+                combo.set(display_options[0])
+                # 同时更新配置和变量为默认值
+                default_value = standard_values[0]
+                self.config['eeo'][key] = default_value
+                self.vars['eeo'][key].set(default_value)
+            
+            # 绑定选择事件来更新标准值
+            def on_eeo_select(event, field_key=key):
+                combo_widget = self.eeo_combos[field_key]['combo']
+                display_text = combo_widget.get()
+                display_list = self.eeo_combos[field_key]['display_options']
+                standard_list = self.eeo_combos[field_key]['standard_values']
+                
+                if display_text in display_list:
+                    index = display_list.index(display_text)
+                    standard_value = standard_list[index]
+                    self.eeo_combos[field_key]['var'].set(standard_value)
+            
+            combo.bind('<<ComboboxSelected>>', on_eeo_select)
         
         # 工作经历区
         work_frame = ttk.LabelFrame(frame, text=self.texts['experience_labels']['work_frame'], padding=(10, 5))
@@ -3207,7 +3419,7 @@ class EasyApplyApp(tk.Tk):
             'languages': tk.BooleanVar(value=True),
             'skills': tk.BooleanVar(value=True),
             'personal_info': tk.BooleanVar(value=True),
-            'eeo': tk.BooleanVar(value=False),
+            'eeo': tk.BooleanVar(value=True),
             'salary': tk.BooleanVar(value=False),
             'work_experience': tk.BooleanVar(value=True),
             'education': tk.BooleanVar(value=True),
@@ -3574,8 +3786,6 @@ class EasyApplyApp(tk.Tk):
                     'disability': 'disability',
                     'veteran_status': 'veteran',
                     'disability_status': 'disability',
-                    'citizenship': 'citizenship',
-                    'clearance': 'clearance'
                 }
                 
                 # 遍历EEO字段并更新
@@ -3601,21 +3811,26 @@ class EasyApplyApp(tk.Tk):
                     
                     # 如果找到匹配的字段，且字段存在于配置中，更新配置和界面
                     if config_key and config_key in existing_eeo_fields:
-                        # 标准化值格式
-                        if config_key in ['veteran', 'disability'] and isinstance(value, str):
-                            # 将"Yes"/"No"标准化为小写的"yes"/"no"
-                            value = value.lower()
-                            if value in ["false", "f", "n"]:
-                                value = "no"
-                            elif value in ["true", "t", "y"]:
-                                value = "yes"
+                        # 映射AI提取的值到标准EEO选项
+                        standard_value = self._map_ai_value_to_standard_eeo(config_key, value)
                         
+                        if standard_value:
                         # 更新配置
-                        self.config['eeo'][config_key] = value
+                            self.config['eeo'][config_key] = standard_value
                         
                         # 如果GUI中有对应的变量，更新它
                         if config_key in self.vars.get('eeo', {}):
-                            self.vars['eeo'][config_key].set(value)
+                            self.vars['eeo'][config_key].set(standard_value)
+
+                            # 如果存在EEO下拉框，更新显示值
+                            if hasattr(self, 'eeo_combos') and config_key in self.eeo_combos:
+                                combo_info = self.eeo_combos[config_key]
+                                standard_values = combo_info['standard_values']
+                                if standard_value in standard_values:
+                                    index = standard_values.index(standard_value)
+                                    display_options = combo_info['display_options']
+                                    combo_info['combo'].set(display_options[index])
+                                
                             eeo_count += 1
                 
                 if eeo_count > 0:
@@ -4004,11 +4219,11 @@ class EasyApplyApp(tk.Tk):
                                'Hispanic/Latino', 'Native Hawaiian', 'Pacific Islander', 'White', 
                                'Two or More Races', 'Prefer not to disclose']
                 },
-                'veteran_status': {
+                'veteran': {
                     'label': self.texts['ai_tab']['metadata_veteran_status'],
                     'options': ['Protected Veteran', 'Not a Protected Veteran', 'Prefer not to disclose']
                 },
-                'disability_status': {
+                'disability': {
                     'label': self.texts['ai_tab']['metadata_disability_status'],
                     'options': ['Yes', 'No', 'Prefer not to disclose']
                 }
