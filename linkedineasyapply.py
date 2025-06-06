@@ -1482,7 +1482,7 @@ class LinkedinEasyApply:
                                 if 'no' in option.lower():
                                     choice = option
                         if choice == "":
-                            self.record_unprepared_question(text_field_type, question_text)
+                            self.record_unprepared_question("dropdown", question_text)
                         self.select_dropdown(dropdown_field, choice)
 
                     elif 'assessment' in question_text:
@@ -1708,6 +1708,16 @@ class LinkedinEasyApply:
                             else:
                                 if 'no' in option.lower():
                                     choice = option
+                        if choice == "":
+                            choice = options[len(options) - 1]
+
+                        self.select_dropdown(dropdown_field, choice)
+                    elif 'notifications' in question_text and options:
+                        choice = ""
+                        for option in options:
+                            if 'yes' in option.lower():
+                                choice = option
+
                         if choice == "":
                             choice = options[len(options) - 1]
 
