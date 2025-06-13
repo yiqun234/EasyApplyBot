@@ -922,7 +922,6 @@ class LinkedinEasyApply:
         submit_application_text = 'submit application'
 
         while submit_application_text not in button_text.lower() and '提交' not in button_text:
-            print(button_text)
             try:
                 self.fill_up()
                 next_button = self.browser.find_element(By.CLASS_NAME, "artdeco-button--primary")
@@ -2224,32 +2223,33 @@ class LinkedinEasyApply:
                                 # Find month selector
                                 month_select = from_fieldset.find_element(By.XPATH, ".//select[@data-test-month-select]")
                                 select = Select(month_select)
+                                # Get month from data
+                                month_to_select = item.get('from_month', "January")
                                 try:
-                                    # Get month from data
-                                    month_to_select = item.get('from_month', "January")
                                     select.select_by_visible_text(month_to_select)
                                 except:
                                     # Select first non-empty option
                                     options = select.options
                                     for option in options:
-                                        if option.get_attribute('value'):
+                                        option_text = option.text
+                                        if option_text == month_to_select:
                                             option.click()
                                             break
                                             
                                 # Find year selector
                                 year_select = from_fieldset.find_element(By.XPATH, ".//select[@data-test-year-select]")
                                 select = Select(year_select)
+                                # Get year from data
+                                default_year = "2020" if form_type == 'work' else "2015"
+                                year_to_select = str(item.get('from_year', default_year))
                                 try:
-                                    # Get year from data
-                                    default_year = "2020" if form_type == 'work' else "2015"
-                                    year_to_select = item.get('from_year', default_year)
                                     select.select_by_visible_text(year_to_select)
                                 except:
                                     # Select a reasonable year
                                     options = select.options
                                     for option in options:
                                         option_text = option.text
-                                        if option_text.isdigit() and len(option_text) == 4 and int(option_text) > 2010:
+                                        if option_text.isdigit() and len(option_text) == 4 and int(option_text) == int(year_to_select):
                                             option.click()
                                             break
                             
@@ -2259,32 +2259,33 @@ class LinkedinEasyApply:
                                 # Find month selector
                                 month_select = to_fieldset.find_element(By.XPATH, ".//select[@data-test-month-select]")
                                 select = Select(month_select)
+                                # Get month from data
+                                month_to_select = item.get('to_month', "January")
                                 try:
-                                    # Get month from data
-                                    month_to_select = item.get('to_month', "January")
                                     select.select_by_visible_text(month_to_select)
                                 except:
                                     # Select first non-empty option
                                     options = select.options
                                     for option in options:
-                                        if option.get_attribute('value'):
+                                        option_text = option.text
+                                        if option_text == month_to_select:
                                             option.click()
                                             break
 
                                 # Find year selector
                                 year_select = to_fieldset.find_element(By.XPATH, ".//select[@data-test-year-select]")
                                 select = Select(year_select)
+                                # Get year from data
+                                default_year = "2020" if form_type == 'work' else "2019"
+                                year_to_select = str(item.get('to_year', default_year))
                                 try:
-                                    # Get year from data
-                                    default_year = "2020" if form_type == 'work' else "2019"
-                                    year_to_select = item.get('to_year', default_year)
                                     select.select_by_visible_text(year_to_select)
                                 except:
                                     # Select a reasonable year
                                     options = select.options
                                     for option in options:
                                         option_text = option.text
-                                        if option_text.isdigit() and len(option_text) == 4 and int(option_text) > 2010:
+                                        if option_text.isdigit() and len(option_text) == 4 and int(option_text) == int(year_to_select):
                                             option.click()
                                             break
                             
