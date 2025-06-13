@@ -1344,7 +1344,7 @@ class LinkedinEasyApply:
 
                     # If there is no matching custom answer, use the original logic
                     to_enter = ''
-                    if 'experience' in question_text or 'how many years in' in question_text:
+                    if ('experience' in question_text and 'salary' not in question_text) or 'how many years in' in question_text:
                         no_of_years = None
                         for experience in self.experience:
                             if experience.lower() in question_text:
