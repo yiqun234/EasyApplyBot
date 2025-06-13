@@ -757,10 +757,10 @@ class LinkedinEasyApply:
                 pass
 
             contains_blacklisted_keywords = False
-            job_title_parsed = job_title.lower().split(' ')
+
 
             for word in self.title_blacklist:
-                if word.lower() in job_title_parsed:
+                if word.lower() in job_title.lower():
                     contains_blacklisted_keywords = True
                     break
 
@@ -886,7 +886,7 @@ class LinkedinEasyApply:
                     # pass # Original was pass, consider if seen_jobs needs update here
             else:
                 # This 'else' corresponds to the blacklist/seen_jobs check
-                # print(f"Job for {company} by {poster} contains a blacklisted word or already seen.") # Original log was here
+                print(f"Job for {company} by {poster} contains a blacklisted word or already seen.") # Original log was here
                 if link not in self.seen_jobs and link: # If skipped due to blacklist but not seen, mark seen
                     self.seen_jobs.append(link)
                 # else: # If already in seen_jobs, no need to re-add or log verbosely
