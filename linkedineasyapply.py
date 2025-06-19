@@ -886,7 +886,10 @@ class LinkedinEasyApply:
                     # pass # Original was pass, consider if seen_jobs needs update here
             else:
                 # This 'else' corresponds to the blacklist/seen_jobs check
-                print(f"Job for {company} by {poster} contains a blacklisted word or already seen.") # Original log was here
+                try:
+                    print(f"Job for {company} by {poster} contains a blacklisted word or already seen.") # Original log was here
+                except UnicodeEncodeError:
+                    print(f"Job for {company.encode('gbk', 'replace').decode('gbk')} by {poster.encode('gbk', 'replace').decode('gbk')} contains a blacklisted word or already seen.")
                 if link not in self.seen_jobs and link: # If skipped due to blacklist but not seen, mark seen
                     self.seen_jobs.append(link)
                 # else: # If already in seen_jobs, no need to re-add or log verbosely
