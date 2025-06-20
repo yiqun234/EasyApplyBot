@@ -12,143 +12,143 @@ import subprocess
 import socket
 import urllib.parse
 
-# 全局变量用于存储认证数据
+# Global variables for storing authentication data
 auth_data = None
 auth_complete = threading.Event()
 server_running = threading.Event()
 
 class AuthHTTPRequestHandler(BaseHTTPRequestHandler):
-    """处理认证回调请求的HTTP处理器"""
+    """HTTP handler for processing authentication callback requests"""
     
     def do_OPTIONS(self):
-        """处理预检请求"""
+        """Handle preflight requests"""
         self.send_response(200)
         self.send_header('Access-Control-Allow-Origin', '*')
         self.send_header('Access-Control-Allow-Methods', 'POST, OPTIONS')
         self.send_header('Access-Control-Allow-Headers', 'Content-Type')
-        self.send_header('Access-Control-Max-Age', '86400')  # 24小时
+        self.send_header('Access-Control-Max-Age', '86400')  # 24 hours
         self.end_headers()
     
     def do_POST(self):
-        """处理POST请求，接收认证数据"""
+        """Handle POST requests to receive authentication data"""
         global auth_data
         
-        # 设置CORS头，允许跨域请求
+        # Set CORS headers to allow cross-origin requests
         self.send_response(200)
         self.send_header('Access-Control-Allow-Origin', '*')
         self.send_header('Content-type', 'application/json')
         self.end_headers()
         
-        # 读取请求体
+        # Read request body
         content_length = int(self.headers['Content-Length'])
         post_data = self.rfile.read(content_length)
         
-        # 解析JSON数据
+        # Parse JSON data
         try:
             auth_data = json.loads(post_data.decode('utf-8'))
-            print("[认证服务器] 接收到认证数据")
+            print("[Auth Server] Authentication data received")
             
-            # 通知等待线程已收到认证数据
+            # Notify waiting thread that authentication data has been received
             auth_complete.set()
             
-            # 发送成功响应
-            response = {'success': True, 'message': '认证数据已成功接收'}
+            # Send success response
+            response = {'success': True, 'message': 'Authentication data received successfully'}
             self.wfile.write(json.dumps(response).encode('utf-8'))
             
         except Exception as e:
-            # 发送错误响应
-            print(f"[认证服务器] 处理认证数据时出错: {str(e)}")
-            response = {'success': False, 'message': f'处理认证数据时出错: {str(e)}'}
+            # Send error response
+            print(f"[Auth Server] Error processing authentication data: {str(e)}")
+            response = {'success': False, 'message': f'Error processing authentication data: {str(e)}'}
             self.wfile.write(json.dumps(response).encode('utf-8'))
     
     def log_message(self, format, *args):
-        """自定义日志输出，可以屏蔽或定制"""
-        # 可以注释掉下面这行以禁用日志
-        print(f"[认证服务器] {self.address_string()} - {format%args}")
+        """Custom log output, can be disabled or customized"""
+        # Comment out the line below to disable logging
+        print(f"[Auth Server] {self.address_string()} - {format%args}")
 
 def is_port_available(port):
-    """检查端口是否可用"""
+    """Check if port is available"""
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         return s.connect_ex(('localhost', port)) != 0
 
 def find_available_port(start_port=5000, max_tries=10):
-    """查找可用端口"""
+    """Find available port"""
     for port in range(start_port, start_port + max_tries):
         if is_port_available(port):
             return port
-    raise RuntimeError(f"无法找到 {start_port} 到 {start_port + max_tries - 1} 范围内的可用端口")
+    raise RuntimeError(f"Unable to find available port in range {start_port} to {start_port + max_tries - 1}")
 
 def run_server(port):
-    """运行HTTP服务器"""
+    """Run HTTP server"""
     global server_running
     
-    # 创建HTTP服务器
+    # Create HTTP server
     server = HTTPServer(('localhost', port), AuthHTTPRequestHandler)
-    print(f"[认证服务器] 认证服务器启动在 http://localhost:{port}")
+    print(f"[Auth Server] Authentication server started at http://localhost:{port}")
     server_running.set()
     
-    # 启动服务器直到收到认证数据或超时
-    max_wait_time = 300  # 最大等待时间(秒)
+    # Start server until authentication data is received or timeout
+    max_wait_time = 300  # Maximum wait time (seconds)
     start_time = time.time()
     
     while not auth_complete.is_set() and (time.time() - start_time) < max_wait_time:
         server.handle_request()
     
-    print("[认证服务器] 认证服务器已关闭")
+    print("[Auth Server] Authentication server closed")
 
 def open_auth_url(auth_server_url, redirect_url, lang='en-US'):
-    """打开浏览器进行认证，支持多语言"""
-    # 构建完整的认证URL
+    """Open browser for authentication with multi-language support"""
+    # Build complete authentication URL
     query_params = urllib.parse.urlencode({
         'callback': redirect_url,
         'lang': lang
     })
     full_auth_url = f"{auth_server_url}?{query_params}"
     
-    print(f"[认证服务器] 打开浏览器进行认证: {full_auth_url}")
+    print(f"[Auth Server] Opening browser for authentication: {full_auth_url}")
     
-    # 尝试打开浏览器
+    # Try to open browser
     try:
         webbrowser.open(full_auth_url)
     except Exception as e:
-        print(f"[认证服务器] 无法打开浏览器: {str(e)}")
-        print(f"[认证服务器] 请手动访问此URL进行认证: {full_auth_url}")
+        print(f"[Auth Server] Unable to open browser: {str(e)}")
+        print(f"[Auth Server] Please manually visit this URL for authentication: {full_auth_url}")
 
-def start_auth_process(server_url="https://api.nuomi.ai", lang='en-US'):
-    """启动完整认证流程，支持多语言"""
-    # 查找可用端口
+def start_auth_process(server_url="", lang='en-US'):
+    """Start complete authentication process with multi-language support"""
+    # Find available port
     port = find_available_port()
     
-    # 创建并启动服务器线程
+    # Create and start server thread
     server_thread = threading.Thread(target=run_server, args=(port,))
     server_thread.daemon = True
     server_thread.start()
     
-    # 等待服务器启动
+    # Wait for server to start
     server_running.wait()
     
-    # 认证服务器和回调URL
-    auth_server_url = server_url  # 使用传入的参数，可能是远程服务器
+    # Authentication server and callback URL
+    auth_server_url = server_url  # Use passed parameter, might be remote server
     redirect_url = f"http://localhost:{port}/auth/callback"
     
-    # 打开浏览器进行认证，传递lang参数
+    # Open browser for authentication, pass lang parameter
     open_auth_url(auth_server_url, redirect_url, lang=lang)
     
-    # 等待认证完成或超时
-    timeout = 300  # 秒
+    # Wait for authentication completion or timeout
+    timeout = 300  # seconds
     auth_success = auth_complete.wait(timeout)
     
     if auth_success:
-        print("[认证服务器] 认证成功！")
+        print("[Auth Server] Authentication successful!")
         return auth_data
     else:
-        print("[认证服务器] 认证超时或失败")
+        print("[Auth Server] Authentication timeout or failed")
         return None
 
 def check_node_server():
-    """检查Node.js认证服务器是否正在运行"""
+    """Check if Node.js authentication server is running"""
     try:
-        # 尝试连接到Node.js服务器
+        # Try to connect to Node.js server
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             s.settimeout(2)
             result = s.connect_ex(('localhost', 3000))
@@ -157,53 +157,53 @@ def check_node_server():
         return False
 
 def start_node_server():
-    """启动Node.js认证服务器"""
+    """Start Node.js authentication server"""
     try:
-        # 检查当前目录下是否有node文件夹
+        # Check if node folder exists in current directory
         node_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'node')
         
         if not os.path.exists(node_dir):
-            print("[认证服务器] 错误: 找不到Node.js服务器目录")
+            print("[Auth Server] Error: Node.js server directory not found")
             return False
         
-        # 切换到node目录
+        # Change to node directory
         os.chdir(node_dir)
         
-        # 根据操作系统类型选择启动命令
+        # Choose start command based on operating system
         if platform.system() == 'Windows':
             subprocess.Popen('npm start', shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         else:
             subprocess.Popen('npm start', shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         
-        # 等待服务器启动
+        # Wait for server to start
         for _ in range(10):
             if check_node_server():
-                print("[认证服务器] Node.js认证服务器已成功启动")
+                print("[Auth Server] Node.js authentication server started successfully")
                 return True
             time.sleep(1)
         
-        print("[认证服务器] 启动Node.js认证服务器超时")
+        print("[Auth Server] Starting Node.js authentication server timeout")
         return False
     
     except Exception as e:
-        print(f"[认证服务器] 启动Node.js认证服务器时发生错误: {str(e)}")
+        print(f"[Auth Server] Error starting Node.js authentication server: {str(e)}")
         return False
 
 def save_auth_data(auth_data):
-    """保存认证数据到本地JSON文件"""
+    """Save authentication data to local JSON file"""
     if not auth_data:
         return False
     
     try:
-        # 确保有用户ID和API密钥
+        # Ensure user ID and API key exist
         user_id = auth_data.get('user_id')
         api_key = auth_data.get('api_key')
-        
+
         if not user_id or not api_key:
-            print("[认证服务器] 认证数据不完整，无法保存")
+            print("[Auth Server] Authentication data incomplete, cannot save")
             return False
-            
-        # 创建认证数据JSON对象
+
+        # Create authentication data JSON object
         auth_json = {
             "userId": user_id,
             "apiKey": api_key,
@@ -211,20 +211,20 @@ def save_auth_data(auth_data):
             "timestamp": time.time()
         }
         
-        # 保存到当前文件夹
+        # Save to current folder
         auth_file_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'auth.json')
         
-        # 写入JSON文件
+        # Write to JSON file
         with open(auth_file_path, 'w', encoding='utf-8') as f:
             json.dump(auth_json, f, indent=2)
         return True
         
     except Exception as e:
-        print(f"[认证服务器] 保存认证数据时出错: {str(e)}")
+        print(f"[Auth Server] Error saving authentication data: {str(e)}")
         return False
 
 def get_auth_data():
-    """从本地JSON文件获取认证数据"""
+    """Get authentication data from local JSON file"""
     try:
         auth_file_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'auth.json')
         
@@ -234,7 +234,7 @@ def get_auth_data():
         with open(auth_file_path, 'r', encoding='utf-8') as f:
             auth_data = json.load(f)
             
-        # 验证数据完整性
+        # Validate data integrity
         if not auth_data.get('userId') or not auth_data.get('apiKey'):
             return None
             
@@ -244,24 +244,24 @@ def get_auth_data():
         }
         
     except Exception as e:
-        print(f"[认证服务器] 读取认证数据时出错: {str(e)}")
+        print(f"[Auth Server] Error reading authentication data: {str(e)}")
         return None
 
 def authenticate(lang='en-US'):
-    """主认证函数，返回认证数据，支持多语言"""
-    # 首先检查是否已有保存的认证数据
+    """Main authentication function, returns authentication data with multi-language support"""
+    # First check if saved authentication data exists
     existing_auth = get_auth_data()
     if existing_auth:
-        print("[认证服务器] 使用现有认证数据")
+        print("[Auth Server] Using existing authentication data")
         return existing_auth
     
-    # 检查远程服务器URL是否设置
-    remote_server_url = os.environ.get('EASYAPPLY_AUTH_SERVER') or "https://api.nuomi.ai"
+    # Check if remote server URL is set
+    remote_server_url = os.environ.get('EASYAPPLY_AUTH_SERVER') or "http://localhost:5173/authorize" # https://api.nuomi.ai
     
-    # 启动认证流程，传递lang参数
+    # Start authentication process, pass lang parameter
     auth_result = start_auth_process(server_url=remote_server_url, lang=lang)
     
-    # 如果认证成功，保存数据
+    # If authentication successful, save data
     if auth_result:
         save_auth_data(auth_result)
     

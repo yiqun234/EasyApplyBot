@@ -11,8 +11,6 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import Select
 from datetime import date, datetime
 from itertools import product
-from pypdf import PdfReader
-from openai import OpenAI
 
 # 添加CloudAIResponseGenerator类
 class CloudAIResponseGenerator:
