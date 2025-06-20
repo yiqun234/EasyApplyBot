@@ -52,12 +52,12 @@ class FirebaseManager:
             if firebase_config:
                 print("[Firebase] Found cloud config, loading...")
                 self.update_callback(firebase_config)
-            else:
-                print("[Firebase] No cloud config, uploading local config...")
-                # If Firebase has no config, upload local config
-                local_config = self._load_local_config()
-                if local_config:
-                    self.save_config(local_config)
+            # else:
+            #     print("[Firebase] No cloud config, uploading local config...")
+            #     # If Firebase has no config, upload local config
+            #     local_config = self._load_local_config()
+            #     if local_config:
+            #         self.save_config(local_config)
             
         except Exception as e:
             print(f"[Firebase] Initial sync error: {e}")
