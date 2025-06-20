@@ -5,5 +5,5 @@ openai
 requests
 pyautogui
 webdriver_manager
-empyrebase
+pyrebase4
 sseclient-py

@@ -1819,8 +1819,6 @@ class EasyApplyApp(tk.Tk):
         else:
             self.after(0, append_text)
     def _start_bot(self):
-        """启动main.py并在GUI中显示输出"""
-        self._save_gui_config()
         if not self.config.get('email') or not self.config.get('password'):
             messagebox.showwarning(self.texts['common']['warning'], self.texts['messages']['missing_credentials'])
             return
@@ -4299,57 +4297,58 @@ class EasyApplyApp(tk.Tk):
         dialog.geometry(f"{width}x{height}+{x}+{y}")
 
     def _init_firebase_listener(self):
-        """初始化 Firebase 监听器"""
+        """Initialize Firebase Listener"""
         try:
-            # 从 auth.json 读取用户ID
+            # Read user ID from auth.json
             user_id = None
             try:
                 with open('auth.json', 'r', encoding='utf-8') as f:
                     auth_data = json.load(f)
                     user_id = auth_data.get('userId')
             except (FileNotFoundError, json.JSONDecodeError, KeyError):
-                self._log_message("❌ 无法读取 auth.json 或未找到 userId")
+                self._log_message("❌ Unable to read auth.json or userId not found")
                 return
             
             if not user_id:
-                self._log_message("❌ auth.json 中没有有效的 userId")
+                self._log_message("❌ No valid userId in auth.json")
                 return
                 
-            # 初始化 Firebase 连接
+            # Initialize Firebase connection
             self.firebase_manager = firebase_manager.FirebaseManager(
                 user_id=user_id,
                 update_callback=self._on_firebase_config_update,
                 initial_sync_done_callback=self._on_firebase_sync_done
             )
             
-            # Firebase 管理器已在初始化时自动开始同步和监听
-            self._log_message(f"🔥 正在连接 Firebase (用户: {user_id[:8]}...)...")
+            # Start initial sync and listening
+            self.firebase_manager.initial_sync_and_listen()
+            self._log_message(f"🔥 Connecting to Firebase (User: {user_id[:8]}...)...")
             
         except Exception as e:
-            self._log_message(f"❌ Firebase 初始化失败: {str(e)}")
+            self._log_message(f"❌ Firebase initialization failed: {str(e)}")
 
     def _on_firebase_config_update(self, firebase_config):
-        """Firebase 配置更新回调（在后台线程中调用）"""
-        # 使用 after 方法在主线程中执行 UI 更新
+        """Firebase config update callback (called in a background thread)"""
+        # Use the after method to execute UI updates in the main thread
         self.after(0, self._update_config_from_firebase, firebase_config)
 
     def _on_firebase_sync_done(self):
-        """Firebase 初始同步完成回调"""
-        self.after(0, self._log_message, "✅ Firebase 初始同步完成")
+        """Firebase initial sync completion callback"""
+        self.after(0, self._log_message, "✅ Firebase initial sync complete")
 
     def _update_config_from_firebase(self, firebase_config):
-        """从 Firebase 更新本地配置"""
+        """Update local config from Firebase"""
         try:
-            # 更新内存中的配置
+            # Update in-memory config
             self.config.update(firebase_config)
             
-            # 保存到本地 config.yaml
+            # Save to local config.yaml
             save_config(firebase_config)
             
-            self._log_message("🔄 配置已从 Firebase 同步更新")
+            self._log_message("🔄 Configuration updated from Firebase sync")
             
         except Exception as e:
-            self._log_message(f"❌ 更新配置失败: {str(e)}")
+            self._log_message(f"❌ Failed to update config: {str(e)}")
 
 if __name__ == '__main__':
     in_venv = hasattr(sys, 'real_prefix') or (hasattr(sys, 'base_prefix') and sys.base_prefix != sys.prefix)
