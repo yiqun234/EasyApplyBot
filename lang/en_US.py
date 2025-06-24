@@ -8,7 +8,7 @@ English (US) language pack (en_US)
 TEXTS = {
     # Common texts
     'common': {
-        'app_title': 'LinkedIn Easy Apply Bot - Configuration Tool v3.1 (Tkinter)',
+        'app_title': 'LinkedIn Easy Apply Bot - Configuration Tool',
         'browse': 'Browse',
         'save': 'Save',
         'cancel': 'Cancel',
@@ -70,6 +70,7 @@ TEXTS = {
     # Basic Settings tab
     'basic_tab': {
         'account_resume': 'Account and Resume',
+        'file': 'File',
         'email': 'LinkedIn Email:',
         'password': 'LinkedIn Password:',
         'openai_api_key': 'OpenAI API Key:',
@@ -340,6 +341,7 @@ TEXTS = {
         'start_bot': 'Start Bot',
         'stop_bot': 'Stop',
         'edit_yaml': 'Edit YAML',
+        'edit_web_config': 'Modify Config',
     },
     
     # Dialog texts
@@ -434,7 +436,9 @@ TEXTS = {
         'sending_to_ocr': 'Sending PDF to OCR server...',
         'ocr_timeout': 'The OCR service request timed out.',
         'ocr_canceled': 'The OCR request was canceled by the user.',
-        'missing_text_resume_hint': 'Text resume is missing or invalid. Please select a PDF resume and click the \"AI Extract Text\" button (on the Basic Settings tab) to generate it first.'
+        'missing_text_resume_hint': 'Text resume is missing or invalid. Please select a PDF resume and click the "AI Extract Text" button (on the Basic Settings tab) to generate it first.',
+        'opening_web_config': 'Opening configuration page: {}',
+        'cannot_open_browser': 'Cannot open browser: {}',
     },
     
     # Personal info fields

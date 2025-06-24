@@ -10,12 +10,16 @@ import traceback
 import json
 import datetime  # 导入datetime模块用于获取当前年份
 import requests
+import webbrowser
 
 from lang import load_language, AVAILABLE_LANGUAGES, DEFAULT_LANGUAGE  # 添加语言包支持
 import auth_server  # 导入认证服务模块
 import firebase_manager  # 导入 Firebase 管理模块
 
+# --- Constants ---
+VERSION = "3.1"
 OCR_API = "https://ocr.nuomi.ai/api/ocr"
+WEB_CONFIG_URL = "http://localhost:3000/dashboard" # 您可以在此处修改您的在线配置地址
 
 # 定义国家代码列表
 COUNTRY_CODES = [
@@ -180,6 +184,27 @@ def deep_update(source, overrides):
         else: source[key] = value
     return source
 
+def decode_keys(obj):
+    """
+    Recursively decode Firebase-safe keys back to their original format.
+    """
+    if isinstance(obj, dict):
+        new_dict = {}
+        for k, v in obj.items():
+            # The decoding map
+            k = k.replace('__dot__', '.')
+            k = k.replace('__hash__', '#')
+            k = k.replace('__dollar__', '$')
+            k = k.replace('__obracket__', '[')
+            k = k.replace('__cbracket__', ']')
+            k = k.replace('__slash__', '/')
+            new_dict[k] = decode_keys(v)
+        return new_dict
+    elif isinstance(obj, list):
+        return [decode_keys(elem) for elem in obj]
+    else:
+        return obj
+
 def load_config():
     final_config = {}
     for k, v in DEFAULT_CONFIG.items():
@@ -327,7 +352,7 @@ class EasyApplyApp(tk.Tk):
             
         # 设置窗口大小和标题
         self.geometry("500x450") # Increased height for language selector
-        self.title(self.texts['login']['app_title'] if 'login' in self.texts else "Nuomi.ai Login")
+        self.title(f"{self.texts['login']['app_title']} v{VERSION}" if 'login' in self.texts else "Nuomi.ai Login")
         
         # 创建登录框架
         self.login_frame = ttk.Frame(self, padding=20)
@@ -549,7 +574,7 @@ class EasyApplyApp(tk.Tk):
             
         # 重新设置窗口大小
         self.geometry("900x800")
-        self.title(self.texts['common']['app_title'])
+        self.title(f"{self.texts['common']['app_title']} v{VERSION}")
         
         # --- 旧配置迁移到 positionsWithCount ---
         if (self.config.get('positions') and 
@@ -665,13 +690,16 @@ class EasyApplyApp(tk.Tk):
         for degree in STANDARD_DEGREES:
             self.vars['degreeCompleted'][degree] = tk.BooleanVar(value=(degree in degrees_in_config))
 
-        # --- GUI Structure --- (只保留控制面板，其他配置移至 Firebase web 端)
+        # --- GUI Structure --- (只保留控制面板、上传文件，其他配置移至 Firebase web 端)
         self.notebook = ttk.Notebook(self)
+        self.basic_tab = ttk.Frame(self.notebook)
         self.control_tab = ttk.Frame(self.notebook)
+        self.notebook.add(self.basic_tab, text=self.texts['tabs']['basic'])
         self.notebook.add(self.control_tab, text=self.texts['tabs']['control'])
         self.notebook.pack(expand=True, fill='both', padx=10, pady=5)
         
-        # 只创建控制面板
+        # 只创建基础配置和控制面板
+        self._create_basic_tab()
         self._create_control_tab()
         
         # 初始化 Firebase 监听
@@ -711,9 +739,15 @@ class EasyApplyApp(tk.Tk):
 
     def _create_basic_tab(self):
         # (No significant changes needed, uses _browse_file now)
-        frame = ttk.LabelFrame(self.basic_tab, text=self.texts['basic_tab']['account_resume'], padding=(10, 5)); frame.pack(expand=True, fill="both", padx=10, pady=5); frame.columnconfigure(1, weight=1); current_row=0
-        ttk.Label(frame, text=self.texts['basic_tab']['email']).grid(row=current_row, column=0, sticky=tk.W, padx=5, pady=3); ttk.Entry(frame, textvariable=self.vars['email'], width=60).grid(row=current_row, column=1, sticky=tk.EW, padx=5, pady=3); current_row+=1
-        ttk.Label(frame, text=self.texts['basic_tab']['password']).grid(row=current_row, column=0, sticky=tk.W, padx=5, pady=3); ttk.Entry(frame, textvariable=self.vars['password'], width=60).grid(row=current_row, column=1, sticky=tk.EW, padx=5, pady=3); current_row+=1
+        frame = ttk.LabelFrame(self.basic_tab, text=self.texts['basic_tab']['file'], padding=(10, 5))
+        frame.pack(expand=True, fill="both", padx=10, pady=5); frame.columnconfigure(1, weight=1)
+        current_row=0
+        # ttk.Label(frame, text=self.texts['basic_tab']['email']).grid(row=current_row, column=0, sticky=tk.W, padx=5, pady=3)
+        # ttk.Entry(frame, textvariable=self.vars['email'], width=60).grid(row=current_row, column=1, sticky=tk.EW, padx=5, pady=3)
+        # current_row+=1
+        # ttk.Label(frame, text=self.texts['basic_tab']['password']).grid(row=current_row, column=0, sticky=tk.W, padx=5, pady=3)
+        # ttk.Entry(frame, textvariable=self.vars['password'], width=60).grid(row=current_row, column=1, sticky=tk.EW, padx=5, pady=3)
+        # current_row+=1
         # ttk.Label(frame, text=self.texts['basic_tab']['openai_api_key']).grid(row=current_row, column=0, sticky=tk.W, padx=5, pady=3); ttk.Entry(frame, textvariable=self.vars['openaiApiKey'], width=60).grid(row=current_row, column=1, sticky=tk.EW, padx=5, pady=3); current_row+=1
         # ttk.Label(frame, text=self.texts['basic_tab']['openai_api_key_note']).grid(row=current_row, column=1, sticky=tk.W, padx=5); current_row+=1
         
@@ -752,7 +786,7 @@ class EasyApplyApp(tk.Tk):
         ttk.Label(frame, text=self.texts['basic_tab']['photo_note']).grid(row=current_row, column=1, sticky=tk.W, padx=5)
         current_row+=1
         
-        ttk.Checkbutton(frame, text=self.texts['basic_tab']['disable_antilock'], variable=self.vars['disableAntiLock']).grid(row=current_row, column=0, columnspan=2, sticky=tk.W, padx=5, pady=10); current_row+=1
+        # ttk.Checkbutton(frame, text=self.texts['basic_tab']['disable_antilock'], variable=self.vars['disableAntiLock']).grid(row=current_row, column=0, columnspan=2, sticky=tk.W, padx=5, pady=10); current_row+=1
 
     def _browse_file(self, path_var, file_desc, file_pattern):
         filepath = filedialog.askopenfilename(title=f"{self.texts['common']['select_file']} {file_desc}", filetypes=((f"{file_desc} Files", file_pattern), ("All Files", "*.*")))
@@ -859,7 +893,7 @@ class EasyApplyApp(tk.Tk):
                                 self.after(0, lambda: self._save_config(current_config))
                                 
                                 # NEW: Switch to AI Assistant tab and run AI
-                                self.after(0, self._switch_to_ai_assistant_and_run_ai)
+                                self.after(0, self._switch_to_control_tab_and_run_ai)
                             else:
                                 error_msg = data.get('message', 'Unknown error')
                                 self.after(0, lambda: self._log_message(f"{self.texts['messages']['extract_fail'].format(pdf_filename)}: {error_msg}"))
@@ -892,35 +926,28 @@ class EasyApplyApp(tk.Tk):
             self._log_message(self.texts['messages']['extract_error'].format(str(e)))
             messagebox.showerror(self.texts['common']['error'], self.texts['messages']['extract_error'].format(str(e)))
 
-    def _switch_to_ai_assistant_and_run_ai(self):
-        """Switches to the AI Assistant tab and triggers the Run AI action."""
+    def _switch_to_control_tab_and_run_ai(self):
+        """Switches to the Control tab and triggers the Run AI action."""
         try:
-            ai_tab_text = self.texts['tabs']['ai_assistant']
+            target_tab_text = self.texts['tabs']['control']
             tab_id_to_select = None
-            # Iterate through tab IDs to find the AI Assistant tab by its text
+            # Iterate through tab IDs to find the target tab by its text
             for tab_id in self.notebook.tabs():
-                if self.notebook.tab(tab_id, "text") == ai_tab_text:
+                if self.notebook.tab(tab_id, "text") == target_tab_text:
                     tab_id_to_select = tab_id
                     break
             
-            if tab_id_to_select is not None: # Check if tab_id_to_select was found
+            if tab_id_to_select is not None:
                 self.notebook.select(tab_id_to_select)
-                self._log_message(f"Switched to {ai_tab_text} tab.")
-                
-                self.update_idletasks() # Ensure UI updates before running AI
-                
-                # This function should ideally read the resume text from the updated
-                # self.vars['textResume_path'] or the content displayed in the AI assistant tab.
-                self._run_ai_assistant()
             else:
-                self._log_message(f"Error: Could not find {ai_tab_text} tab.。")
-                messagebox.showerror(self.texts['common']['error'], f"Not Found {ai_tab_text} tab.")
+                self._log_message(f"Error: Could not find {target_tab_text} tab.")
+                messagebox.showerror(self.texts['common']['error'], f"Not Found {target_tab_text} tab.")
         except Exception as e:
             # Log the full traceback for debugging
             import traceback
             tb_str = traceback.format_exc()
-            self._log_message(f"Error when switching to AI Assistant and running AI: {e}\\n{tb_str}")
-            messagebox.showerror(self.texts['common']['error'], f"Error when switching to AI Assistant and running AI: {e}")
+            self._log_message(f"Error when switching to Control tab and running AI: {e}\\n{tb_str}")
+            messagebox.showerror(self.texts['common']['error'], f"Error when switching to Control tab and running AI: {e}")
 
     def _browse_text_resume_and_update_ai_tab(self):
         """浏览文本简历文件并更新AI助手标签页中的状态"""
@@ -1370,17 +1397,6 @@ class EasyApplyApp(tk.Tk):
         ttk.Button(customq_button_frame, text=self.texts['advanced_tab']['batch_add_qa'], command=self._batch_add_customquestions, width=12).pack(pady=2, fill=tk.X)
         ttk.Button(customq_button_frame, text=self.texts['advanced_tab']['batch_delete_qa'], command=self._batch_remove_customquestions, width=12).pack(pady=2, fill=tk.X)
 
-        # --- Degree Completed Frame (Checkboxes) --- (已移动到经历管理标签页)
-        # degree_frame = ttk.LabelFrame(self.scrollable_frame, text=self.texts['advanced_labels']['degree_frame'], padding=(10, 5))
-        # degree_frame.grid(row=current_row, column=0, columnspan=2, padx=10, pady=5, sticky=tk.EW); current_row += 1
-        # row, col = 0, 0
-        # for degree in STANDARD_DEGREES:
-        #     var = self.vars['degreeCompleted'][degree]
-        #     ttk.Checkbutton(degree_frame, text=degree, variable=var).grid(row=row, column=col, sticky=tk.W, padx=5, pady=1)
-        #     col += 1; # Adjust layout - maybe 2 columns?
-        #     if col >= 2: col = 0; row += 1
-
-
         # --- Other Settings Frame (GPA, Salary, etc.) ---
         other_settings_frame = ttk.LabelFrame(self.scrollable_frame, text=self.texts['advanced_labels']['other_settings_frame'], padding=(10, 5))
         other_settings_frame.grid(row=current_row, column=0, columnspan=2, padx=10, pady=5, sticky=tk.EW); other_settings_frame.columnconfigure(1, weight=1); current_row += 1
@@ -1631,7 +1647,7 @@ class EasyApplyApp(tk.Tk):
         self.save_button = ttk.Button(button_frame, text=self.texts['control_tab']['save_config'], command=self._save_gui_config); self.save_button.pack(side=tk.LEFT, padx=5)
         self.start_button = ttk.Button(button_frame, text=self.texts['control_tab']['start_bot'], command=self._start_bot); self.start_button.pack(side=tk.LEFT, padx=5)
         self.stop_button = ttk.Button(button_frame, text=self.texts['control_tab']['stop_bot'], command=self._stop_bot, state='disabled'); self.stop_button.pack(side=tk.LEFT, padx=5)
-        edit_config_button = ttk.Button(button_frame, text=self.texts['control_tab']['edit_yaml'], command=self._open_config_file); edit_config_button.pack(side=tk.LEFT, padx=5)
+        ttk.Button(button_frame, text=self.texts['control_tab']['edit_web_config'], command=self._open_web_config).pack(side=tk.LEFT, padx=5)
 
     def _clear_log(self):
         self.output_area.config(state='normal')
@@ -1661,6 +1677,15 @@ class EasyApplyApp(tk.Tk):
                         messagebox.showwarning(self.texts['common']['warning'], f"{self.texts['messages']['file_open_error']} {CONFIG_FILE}")
         except Exception as e: messagebox.showerror(self.texts['common']['error'], f"{self.texts['messages']['file_open_error']}: {e}")
 
+    def _open_web_config(self):
+        """Opens the web configuration URL in the default browser."""
+        try:
+            self._log_message(self.texts['messages']['opening_web_config'].format(WEB_CONFIG_URL))
+            webbrowser.open(WEB_CONFIG_URL, new=2)
+        except Exception as e:
+            error_msg = self.texts['messages']['cannot_open_browser'].format(e)
+            self._log_message(error_msg)
+            messagebox.showerror(self.texts['common']['error'], error_msg)
 
     def _update_config_from_gui(self):
         """Update 'config' data structure from current GUI state"""
@@ -1787,23 +1812,39 @@ class EasyApplyApp(tk.Tk):
 
 
     # --- Other Methods (_save_gui_config, etc.) --- (No changes needed in these core logic methods)
-    def _save_gui_config(self):
+    def _save_gui_config(self, silent=False):
+        """仅将基础标签页中的文件路径保存到 config.yaml，并保留所有其他设置。"""
         try:
-            # 先确保所有设置已从GUI更新到配置对象中
-            if self._update_config_from_gui():
-                if save_config(self.config):
-                    self._log_message(self.texts['messages']['save_success'] + "\n")
-                    return True
-                else:
-                    messagebox.showerror(self.texts['common']['error'], self.texts['messages']['save_error'])
-                    return False
-            else:
-                return False
+            # 1. 从文件加载最新的配置，以避免覆盖其他设置
+            config_from_file = load_config()
+
+            # 2. 确保 'uploads' 字典存在
+            if 'uploads' not in config_from_file or not isinstance(config_from_file['uploads'], dict):
+                config_from_file['uploads'] = {}
+
+            # 3. 从UI变量获取文件路径并更新配置
+            config_from_file['uploads']['resume'] = self.vars.get('resume_path', tk.StringVar()).get()
+            config_from_file['uploads']['coverLetter'] = self.vars.get('coverletter_path', tk.StringVar()).get()
+            config_from_file['uploads']['photo'] = self.vars.get('photo_path', tk.StringVar()).get()
+
+            # 4. 将更新后的配置对象保存回文件
+            self._save_config(config_from_file)
+
+            # 5. 更新内存中的配置以匹配刚保存的内容
+            self.config = config_from_file
+
+            success_message = "Save Success!!"
+            self._log_message(success_message)
+            if not silent:
+                messagebox.showinfo(self.texts['message']['save_success'], success_message)
+            return True
         except Exception as e:
-            import traceback
-            traceback.print_exc()
-            messagebox.showerror(self.texts['common']['error'], f"{self.texts['messages']['save_error']}: {e}")
+            traceback_str = traceback.format_exc()
+            self._log_message(f"{self.texts['messages']['config_save_error']}: {traceback_str}")
+            if not silent:
+                messagebox.showerror(self.texts['common']['error'], f"{self.texts['messages']['config_save_error']}: {e}")
             return False
+
     def _log_message(self, message):
         # 结尾不是\n结尾，则添加换行符
         if not message.endswith('\n'):
@@ -1819,6 +1860,12 @@ class EasyApplyApp(tk.Tk):
         else:
             self.after(0, append_text)
     def _start_bot(self):
+        # Automatically save the current uploads configuration before starting
+        self._log_message("Auto-saving file paths before starting bot...")
+        if not self._save_gui_config(silent=True):
+            self._log_message("Failed to auto-save configuration. Aborting start.")
+            return # Stop if saving fails
+
         if not self.config.get('email') or not self.config.get('password'):
             messagebox.showwarning(self.texts['common']['warning'], self.texts['messages']['missing_credentials'])
             return
@@ -3992,13 +4039,6 @@ class EasyApplyApp(tk.Tk):
             self._update_ai_log(f"{self.texts['ai_tab']['apply_data_error']}: {str(e)}")
             traceback_str = traceback.format_exc()
             print(f"{self.texts['messages']['gui_update_error']}: {traceback_str}")  # 调试输出
-    
-    def _update_test_result(self, message):
-        """更新测试结果到AI输出区域"""
-        self.ai_output.config(state="normal")
-        self.ai_output.insert(tk.END, message + "\n")
-        self.ai_output.see(tk.END)
-        self.ai_output.config(state="disabled")
 
     def _get_data_structure(self, options):
         """根据选项生成请求的数据结构"""
@@ -4054,7 +4094,7 @@ class EasyApplyApp(tk.Tk):
                     "title": "",
                     "city": "",
                     "state": "",
-                    "country": "", 
+                    "country": '',
                     "from_month": 1,
                     "from_year": 2020,
                     "to_month": 1,
@@ -4337,18 +4377,27 @@ class EasyApplyApp(tk.Tk):
         self.after(0, self._log_message, "✅ Firebase initial sync complete")
 
     def _update_config_from_firebase(self, firebase_config):
-        """Update local config from Firebase"""
+        """Update local config from Firebase using deep update and key decoding."""
         try:
-            # Update in-memory config
-            self.config.update(firebase_config)
+            # 1. Decode keys from Firebase to handle special characters
+            decoded_config = decode_keys(firebase_config)
             
-            # Save to local config.yaml
-            save_config(firebase_config)
+            # 2. Load the current local configuration to ensure no data is lost
+            local_config = load_config()
+
+            # 3. Perform a deep update, merging cloud changes into local config
+            updated_config = deep_update(local_config, decoded_config)
             
-            self._log_message("🔄 Configuration updated from Firebase sync")
+            # 4. Update the in-memory config for the application
+            self.config = updated_config
+            
+            # 5. Save the complete, merged configuration back to config.yaml
+            save_config(self.config)
+            
+            self._log_message("🔄 Configuration intelligently synced from Firebase.")
             
         except Exception as e:
-            self._log_message(f"❌ Failed to update config: {str(e)}")
+            self._log_message(f"❌ Failed to update config from Firebase: {str(e)}")
 
 if __name__ == '__main__':
     in_venv = hasattr(sys, 'real_prefix') or (hasattr(sys, 'base_prefix') and sys.base_prefix != sys.prefix)

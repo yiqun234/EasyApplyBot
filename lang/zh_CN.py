@@ -8,7 +8,7 @@
 TEXTS = {
     # 通用文本
     'common': {
-        'app_title': 'LinkedIn Easy Apply Bot - 配置工具 v3.1 (Tkinter)',
+        'app_title': 'LinkedIn Easy Apply Bot - 配置工具',
         'browse': '浏览',
         'save': '保存',
         'cancel': '取消',
@@ -70,6 +70,7 @@ TEXTS = {
     # 基本设置标签页
     'basic_tab': {
         'account_resume': '账户和简历',
+        'file': '文件',
         'email': '领英邮箱:',
         'password': '领英密码:',
         'openai_api_key': 'OpenAI API密钥:',
@@ -345,6 +346,7 @@ TEXTS = {
         'start_bot': '启动机器人',
         'stop_bot': '停止',
         'edit_yaml': '编辑YAML',
+        'edit_web_config': '修改配置',
     },
     
     # 对话框文本
@@ -439,7 +441,9 @@ TEXTS = {
         'sending_to_ocr': '正在发送PDF到OCR服务器...',
         'ocr_timeout': 'OCR服务请求超时。',
         'ocr_canceled': 'OCR请求已被用户取消。',
-        'missing_text_resume_hint': '文本简历缺失或无效。请选择一份 PDF 简历，然后点击"AI 提取文本"按钮（位于"基本设置"选项卡上）先生成。'
+        'missing_text_resume_hint': '文本简历缺失或无效。请选择一份 PDF 简历，然后点击"AI 提取文本"按钮（位于"基本设置"选项卡上）先生成。',
+        'opening_web_config': '正在打开配置页面: {}',
+        'cannot_open_browser': '无法打开浏览器: {}',
     },
     
     # 个人资料字段
