@@ -51,7 +51,7 @@ echo The GUI will be launched to create a config file.
 :skipwarning
 
 echo Launching GUI...
-python gui_tkinter.py
+python gui_web_tkinter.py
 
 REM If you want to run the bot directly (without GUI), uncomment the line below
 REM python main.py
