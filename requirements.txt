@@ -2,8 +2,11 @@ PyYAML
 selenium
 pypdf
 openai
-requests
+requests==2.28.2
 pyautogui
 webdriver_manager
 pyrebase4
 sseclient-py
+setuptools<81.0.0
+urllib3<2.0
+validate_email

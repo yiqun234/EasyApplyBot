@@ -32,7 +32,7 @@ if exist venv\.requirements_installed (
 ) else (
     echo Installing dependencies...
     python -m pip install --upgrade pip
-    pip install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple/
+    pip install -r requirements.txt
     if %errorlevel% equ 0 (
         echo Dependencies installed successfully.
         REM Create a flag file to indicate successful installation

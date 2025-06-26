@@ -8,13 +8,13 @@ import threading
 import collections.abc # Used for deep update
 import traceback
 import json
-import datetime  # 导入datetime模块用于获取当前年份
+import datetime
 import requests
 import webbrowser
 
-from lang import load_language, AVAILABLE_LANGUAGES, DEFAULT_LANGUAGE  # 添加语言包支持
-import auth_server  # 导入认证服务模块
-import firebase_manager  # 导入 Firebase 管理模块
+from lang import load_language, AVAILABLE_LANGUAGES, DEFAULT_LANGUAGE
+import auth_server
+import firebase_manager
 
 # --- Constants ---
 VERSION = "4.0"

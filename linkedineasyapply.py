@@ -1,4 +1,11 @@
 import time, random, csv, pyautogui, traceback, os, re, json, requests, logging
+import sys
+import io
+
+# Force stdout to be UTF-8, to prevent `UnicodeEncodeError` on Windows
+if sys.platform == "win32":
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', line_buffering=True)
+
 from urllib.parse import urlparse, parse_qs
 
 from selenium.webdriver.support.ui import WebDriverWait
