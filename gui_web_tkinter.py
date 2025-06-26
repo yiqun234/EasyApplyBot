@@ -1836,7 +1836,7 @@ class EasyApplyApp(tk.Tk):
             success_message = "Save Success!!"
             self._log_message(success_message)
             if not silent:
-                messagebox.showinfo(self.texts['message']['save_success'], success_message)
+                messagebox.showinfo(self.texts['messages']['save_success'], self.texts['messages']['save_success'])
             return True
         except Exception as e:
             traceback_str = traceback.format_exc()
@@ -2031,7 +2031,7 @@ class EasyApplyApp(tk.Tk):
                 self.texts['messages']['switch_language']
             ):
                 # 保存当前配置
-                self._update_config_from_gui()
+                # self._update_config_from_gui()
                 self.config['language'] = selected
                 self._save_config(self.config)
                 
