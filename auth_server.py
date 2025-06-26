@@ -256,7 +256,7 @@ def authenticate(lang='en-US'):
         return existing_auth
     
     # Check if remote server URL is set
-    remote_server_url = os.environ.get('EASYAPPLY_AUTH_SERVER') or "http://localhost:3000/authorize" # https://api.nuomi.ai
+    remote_server_url = os.environ.get('EASYAPPLY_AUTH_SERVER') or "https://account.nuomi.ai/authorize"
     
     # Start authentication process, pass lang parameter
     auth_result = start_auth_process(server_url=remote_server_url, lang=lang)

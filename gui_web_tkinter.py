@@ -17,9 +17,9 @@ import auth_server  # 导入认证服务模块
 import firebase_manager  # 导入 Firebase 管理模块
 
 # --- Constants ---
-VERSION = "3.1"
+VERSION = "4.0"
 OCR_API = "https://ocr.nuomi.ai/api/ocr"
-WEB_CONFIG_URL = "http://localhost:3000/dashboard" # 您可以在此处修改您的在线配置地址
+WEB_CONFIG_URL = "https://account.nuomi.ai/dashboard"
 
 # 定义国家代码列表
 COUNTRY_CODES = [
