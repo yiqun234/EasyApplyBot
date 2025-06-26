@@ -1174,7 +1174,7 @@ body.menu-open {
     overflow: hidden;
 }
 
-@media (max-width: 768px) {
+@media (max-width: 848px) {
     .mobile-menu-btn span:nth-child(1) {
         transform-origin: center;
     }
@@ -1367,7 +1367,7 @@ body.menu-open {
 }
 
 /* 移动导航样式 */
-@media (max-width: 768px) {
+@media (max-width: 883px) {
     .mobile-menu-btn {
         display: flex;
         margin-left: 15px;
@@ -1458,9 +1458,9 @@ body.menu-open {
 }
 
 /* 移动设备视频容器响应式调整 - 删除，不再使用 */
-@media (max-width: 768px) {
+@media (max-width: 848px) {
     .video-container {
-        display: none;
+        padding-top: 75%; /* 4:3 Aspect Ratio */
     }
 }
 
@@ -1468,6 +1468,8 @@ body.menu-open {
 .video-preview {
     cursor: pointer;
     position: relative;
+    border-radius: 12px;
+    box-shadow: 0 8px 16px rgba(0,0,0,0.1);
 }
 
 /* 视频灯箱效果 */
@@ -1551,7 +1553,7 @@ body.menu-open {
     margin-top: 1rem;
 }
 
-@media (max-width: 768px) {
+@media (max-width: 848px) {
     .form-group {
         margin-bottom: 1rem;
     }
@@ -1592,9 +1594,8 @@ button.loading .btn-text {
 /* 为移动设备优化按钮加载状态 */
 @media (max-width: 768px) {
     .spinner-loader {
-        width: 14px;
-        height: 14px;
-        margin-left: 8px;
+        width: 1em;
+        height: 1em;
     }
 }
 

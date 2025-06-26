@@ -557,7 +557,7 @@
             }
         }
         
-        @media (max-width: 768px) {
+        @media (max-width: 848px) {
             .mobile-menu-btn {
                 display: flex;
                 margin-left: 15px;
@@ -828,6 +828,7 @@
                     <li><a href="index.html#features" data-lang-en="Features" data-lang-zh="功能" onclick="storeScrollTarget(event, '#features')">Features</a></li>
                     <li><a href="index.html#how-it-works" data-lang-en="How it works" data-lang-zh="工作原理" onclick="storeScrollTarget(event, '#how-it-works')">How it works</a></li>
                     <li><a href="instructions.html" data-lang-en="User Manual" data-lang-zh="使用手册">User Manual</a></li>
+                    <li><a href="https://account.nuomi.ai" target="_blank"><i class="fas fa-user"></i> <span data-lang-en="User Center" data-lang-zh="用户中心">User Center</span></a></li>
                     <li class="mobile-lang-item"><button id="mobile-lang-switcher" data-lang-en="切换中文" data-lang-zh="Switch to English">切换中文</button></li>
                 </ul>
                 <div class="menu-right">
@@ -858,7 +859,7 @@
 
             <h2 id="download" data-lang-en="Source Code Download" data-lang-zh="源码下载">源码下载</h2>
             <div class="doc-container">
-                <p data-lang-en="Source code download link: <a href='https://www.nuomi.ai/EasyApplyBot.zip' target='_blank'>Click to download</a>" data-lang-zh="源码下载地址：<a href='https://www.nuomi.ai/EasyApplyBot.zip' target='_blank'>点击下载</a>">源码下载地址：<a href="https://www.nuomi.ai/EasyApplyBot.zip" target="_blank">点击下载</a></p>
+                <p data-lang-en="Source code download link: <a href='https://www.nuomi.ai/EasyApplyBot.zip?t=202505261102' target='_blank'>Click to download</a>" data-lang-zh="源码下载地址：<a href='https://www.nuomi.ai/EasyApplyBot.zip?t=202505261102' target='_blank'>点击下载</a>">源码下载地址：<a href="https://www.nuomi.ai/EasyApplyBot.zip?t=202505261102" target="_blank">点击下载</a></p>
             </div>
 
             <h2 id="features" data-lang-en="Features" data-lang-zh="功能特点">功能特点</h2>
@@ -1314,7 +1315,7 @@
                     history.pushState(null, null, targetId);
                     
                     // 但在移动端点击时关闭侧边栏
-                    if (window.innerWidth <= 1200) {
+                    if (window.innerWidth <= 848) {
                         document.querySelector('.sidebar').classList.remove('active');
                         document.querySelector('.close-menu').style.display = 'none';
                         // 更新菜单按钮状态
@@ -1331,7 +1332,7 @@
                 homeLink.addEventListener('click', function(e) {
                     // 不阻止默认行为，允许页面导航
                     // 但在移动端点击时关闭侧边栏
-                    if (window.innerWidth <= 1200) {
+                    if (window.innerWidth <= 848) {
                         document.querySelector('.sidebar').classList.remove('active');
                         document.querySelector('.close-menu').style.display = 'none';
                         // 更新菜单按钮状态
@@ -1380,6 +1381,24 @@
             e.preventDefault();
             // 页首滚动时间更短
             smoothScroll(document.body, 500);
+        });
+
+        // 点击菜单链接后关闭菜单
+        document.querySelectorAll('.nav-links a').forEach(link => {
+            link.addEventListener('click', function() {
+                if (window.innerWidth <= 848) {
+                    navLinks.classList.remove('active');
+                    document.body.classList.remove('menu-open');
+                }
+            });
+        });
+
+        // 监听窗口大小变化，在大屏幕下关闭菜单
+        window.addEventListener('resize', function() {
+            if (window.innerWidth > 848) {
+                navLinks.classList.remove('active');
+                document.body.classList.remove('menu-open');
+            }
         });
     </script>
 
