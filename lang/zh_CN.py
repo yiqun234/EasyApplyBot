@@ -84,6 +84,11 @@ TEXTS = {
         'photo_path': '照片文件路径:',
         'photo_note': '支持PNG, JPG, JPEG (最大1MB)',
         'disable_antilock': '禁用系统防锁定/休眠',
+        # Application Settings
+        'application_config': '投递配置',
+        'avoid_duplicate': '启用防重复投递功能 (避免投递已申请过的职位)',
+        'start_page': '起始页面:',
+        'start_page_note': '(从第几页开始搜索投递，默认从第1页开始)',
     },
     
     # 职位和位置标签页

@@ -84,6 +84,11 @@ TEXTS = {
         'photo_path': 'Photo File Path:',
         'photo_note': 'PNG, JPG, JPEG supported (max 1MB)',
         'disable_antilock': 'Disable System Anti-lock/Sleep',
+        # Application Settings
+        'application_config': 'Application Settings',
+        'avoid_duplicate': 'Enable duplicate application prevention (avoid applying to already applied jobs)',
+        'start_page': 'Start Page:',
+        'start_page_note': '(Which page to start from, default starts from page 1)',
     },
     
     # Jobs & Locations tab

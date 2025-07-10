@@ -142,18 +142,6 @@ class CloudAIResponseGenerator:
                         return self._resume_content
                 except Exception as e:
                     print(f"Could not read text resume: {str(e)}")
-
-            # Fall back to PDF resume if text resume fails or isn't available
-            try:
-                content = []
-                reader = PdfReader(self.pdf_resume_path)
-                for page in reader.pages:
-                    content.append(page.extract_text())
-                self._resume_content = "\n".join(content)
-                print("Successfully loaded PDF resume")
-            except Exception as e:
-                print(f"Could not extract text from resume PDF: {str(e)}")
-                self._resume_content = ""
         return self._resume_content
         
     def _build_context(self):
@@ -397,6 +385,14 @@ class LinkedinEasyApply:
         self.title_blacklist = parameters.get('titleBlacklist', []) or []
         self.poster_blacklist = parameters.get('posterBlacklist', []) or []
         
+        # Duplicate application prevention configuration
+        self.avoid_duplicate_applications = parameters.get('avoidDuplicateApplications', False)
+        self.applied_jobs_file = parameters.get('appliedJobsFile', 'applied_jobs.json')
+        self.applied_jobs = set()  # Store applied job links
+        
+        # Start from specific page configuration
+        self.start_from_page = max(1, int(parameters.get('startFromPage', 1)))  # Minimum page 1
+        
         # 少于X名申请者的筛选选项
         self.lessApplicantsEnabled = parameters.get('lessApplicantsEnabled', False)
         self.lessApplicantsCount = parameters.get('lessApplicantsCount', 100)
@@ -461,6 +457,62 @@ class LinkedinEasyApply:
             eeo=self.eeo,  # 传递EEO信息
             debug=self.debug
         )
+        
+        # Load applied job records
+        if self.avoid_duplicate_applications:
+            self.load_applied_jobs()
+            print(f"Duplicate application prevention enabled, currently tracking {len(self.applied_jobs)} applied jobs")
+        else:
+            print("Duplicate application prevention disabled")
+        
+        # Display start page configuration
+        if self.start_from_page > 1:
+            print(f"Configured to start from page {self.start_from_page}")
+        else:
+            print("Starting from page 1 (default)")
+
+    def load_applied_jobs(self):
+        """Load applied job records"""
+        try:
+            if os.path.exists(self.applied_jobs_file):
+                with open(self.applied_jobs_file, 'r', encoding='utf-8') as f:
+                    applied_list = json.load(f)
+                    self.applied_jobs = set(applied_list)
+                print(f"Successfully loaded {len(self.applied_jobs)} applied job records")
+            else:
+                print("Applied jobs record file not found, creating new record")
+                self.applied_jobs = set()
+        except Exception as e:
+            print(f"Failed to load applied job records: {e}")
+            self.applied_jobs = set()
+
+    def save_applied_jobs(self):
+        """Save applied job records"""
+        try:
+            with open(self.applied_jobs_file, 'w', encoding='utf-8') as f:
+                json.dump(list(self.applied_jobs), f, ensure_ascii=False, indent=2)
+            print(f"Saved {len(self.applied_jobs)} applied job records")
+        except Exception as e:
+            print(f"Failed to save applied job records: {e}")
+
+    def is_job_already_applied(self, job_link):
+        """Check if job has already been applied to"""
+        if not self.avoid_duplicate_applications:
+            return False
+        
+        # Clean link, remove query parameters, keep only base link
+        clean_link = job_link.split('?')[0] if job_link else ""
+        return clean_link in self.applied_jobs
+
+    def add_applied_job(self, job_link):
+        """Add applied job to records"""
+        if not self.avoid_duplicate_applications or not job_link:
+            return
+        
+        # Clean link, remove query parameters, keep only base link
+        clean_link = job_link.split('?')[0]
+        self.applied_jobs.add(clean_link)
+        self.save_applied_jobs()
 
     def login(self):
         try:
@@ -541,8 +593,8 @@ class LinkedinEasyApply:
                         break  # Break from location loop, move to next position_config
 
                     location_url = "&location=" + location + "&geoId=" + self.click_location_url(location)
-                    job_page_number = -1
-                    print(f"Searching for position '{position_name}' in '{location}'.")
+                    job_page_number = self.start_from_page - 2  # Will be incremented to start_from_page - 1 in loop
+                    print(f"Searching for position '{position_name}' in '{location}' starting from page {self.start_from_page}.")
 
                     try:
                         while True:
@@ -600,9 +652,9 @@ class LinkedinEasyApply:
 
         for (position, location) in searches:
             location_url = "&location=" + location + "&geoId=" + self.click_location_url(location)
-            job_page_number = -1
+            job_page_number = self.start_from_page - 2  # Will be incremented to start_from_page - 1 in loop
 
-            print("Starting the search for " + position + " in " + location + ".")
+            print(f"Starting the search for {position} in {location} from page {self.start_from_page}.")
 
             try:
                 while True:
@@ -771,7 +823,8 @@ class LinkedinEasyApply:
 
             if company.lower() not in [word.lower() for word in self.company_blacklist] and \
                     poster.lower() not in [word.lower() for word in self.poster_blacklist] and \
-                    contains_blacklisted_keywords is False and link not in self.seen_jobs:
+                    contains_blacklisted_keywords is False and link not in self.seen_jobs and \
+                    not self.is_job_already_applied(link):
                 try:
                     # Click the job to load description
                     max_retries = 3
@@ -857,6 +910,8 @@ class LinkedinEasyApply:
                         done_applying = self.apply_to_job()
                         if done_applying:
                             print(f"Application sent to {company} for the position of {job_title}.")
+                            # Add to applied records
+                            self.add_applied_job(link)
                             # === START: New logic for incrementing count ===
                             if current_position_config:
                                 target_position_name_for_count = current_position_config['name']

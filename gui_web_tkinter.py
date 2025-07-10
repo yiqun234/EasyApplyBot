@@ -634,6 +634,9 @@ class EasyApplyApp(tk.Tk):
             'disableAntiLock': tk.BooleanVar(value=self.config.get('disableAntiLock', False)),
             'coverletter_path': tk.StringVar(value=self.config.get('uploads', {}).get('coverLetter', '')),
             'photo_path': tk.StringVar(value=self.config.get('uploads', {}).get('photo', '')),
+            # Application Settings
+            'avoidDuplicateApplications': tk.BooleanVar(value=self.config.get('avoidDuplicateApplications', False)),
+            'startFromPage': tk.IntVar(value=self.config.get('startFromPage', 1)),
             # Job
             'positions': tk.StringVar(value=safe_join_list(self.config.get('positions', []))),
             'locations': tk.StringVar(value=safe_join_list(self.config.get('locations', []))),
@@ -785,6 +788,28 @@ class EasyApplyApp(tk.Tk):
         current_row+=1
         ttk.Label(frame, text=self.texts['basic_tab']['photo_note']).grid(row=current_row, column=1, sticky=tk.W, padx=5)
         current_row+=1
+        
+        # --- Application Configuration Frame ---
+        app_config_frame = ttk.LabelFrame(frame, text=self.texts['basic_tab']['application_config'], padding=(10, 5))
+        app_config_frame.grid(row=current_row, column=0, columnspan=2, sticky=tk.EW, padx=5, pady=10)
+        app_config_frame.columnconfigure(1, weight=1)
+        current_row+=1
+        
+        # 防重复投递功能
+        config_row = 0
+        ttk.Checkbutton(app_config_frame, text=self.texts['basic_tab']['avoid_duplicate'], 
+                       variable=self.vars['avoidDuplicateApplications']).grid(row=config_row, column=0, columnspan=2, sticky=tk.W, padx=5, pady=3)
+        config_row+=1
+        
+        # 起始页面配置
+        ttk.Label(app_config_frame, text=self.texts['basic_tab']['start_page']).grid(row=config_row, column=0, sticky=tk.W, padx=5, pady=3)
+        start_page_frame = ttk.Frame(app_config_frame)
+        start_page_spinbox = tk.Spinbox(start_page_frame, from_=1, to=50, width=10, 
+                                       textvariable=self.vars['startFromPage'])
+        start_page_spinbox.pack(side=tk.LEFT)
+        ttk.Label(start_page_frame, text="  " + self.texts['basic_tab']['start_page_note']).pack(side=tk.LEFT)
+        start_page_frame.grid(row=config_row, column=1, sticky=tk.W, padx=5, pady=3)
+        config_row+=1
         
         # ttk.Checkbutton(frame, text=self.texts['basic_tab']['disable_antilock'], variable=self.vars['disableAntiLock']).grid(row=current_row, column=0, columnspan=2, sticky=tk.W, padx=5, pady=10); current_row+=1
 
@@ -1694,6 +1719,9 @@ class EasyApplyApp(tk.Tk):
             self.config['email'] = self.vars['email'].get(); self.config['password'] = self.vars['password'].get(); self.config['openaiApiKey'] = self.vars['openaiApiKey'].get()
             self.config['disableAntiLock'] = self.vars['disableAntiLock'].get(); self.config['uploads']['resume'] = self.vars['resume_path'].get(); self.config['textResume'] = self.vars['textResume_path'].get()
             self.config['uploads']['coverLetter'] = self.vars['coverletter_path'].get(); self.config['uploads']['photo'] = self.vars['photo_path'].get()
+            # Application Settings
+            self.config['avoidDuplicateApplications'] = self.vars['avoidDuplicateApplications'].get()
+            self.config['startFromPage'] = max(1, self.vars['startFromPage'].get())  # Ensure minimum of 1
             
             # Job Tab - Update for new structure
             # positionsWithCount is already updated directly in self.config by dialogs
@@ -1826,11 +1854,15 @@ class EasyApplyApp(tk.Tk):
             config_from_file['uploads']['resume'] = self.vars.get('resume_path', tk.StringVar()).get()
             config_from_file['uploads']['coverLetter'] = self.vars.get('coverletter_path', tk.StringVar()).get()
             config_from_file['uploads']['photo'] = self.vars.get('photo_path', tk.StringVar()).get()
+            
+            # 4. 保存投递配置
+            config_from_file['avoidDuplicateApplications'] = self.vars.get('avoidDuplicateApplications', tk.BooleanVar()).get()
+            config_from_file['startFromPage'] = max(1, self.vars.get('startFromPage', tk.IntVar(value=1)).get())
 
-            # 4. 将更新后的配置对象保存回文件
+            # 5. 将更新后的配置对象保存回文件
             self._save_config(config_from_file)
 
-            # 5. 更新内存中的配置以匹配刚保存的内容
+            # 6. 更新内存中的配置以匹配刚保存的内容
             self.config = config_from_file
 
             success_message = "Save Success!!"
