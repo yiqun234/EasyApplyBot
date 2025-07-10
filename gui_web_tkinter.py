@@ -635,7 +635,7 @@ class EasyApplyApp(tk.Tk):
             'coverletter_path': tk.StringVar(value=self.config.get('uploads', {}).get('coverLetter', '')),
             'photo_path': tk.StringVar(value=self.config.get('uploads', {}).get('photo', '')),
             # Application Settings
-            'avoidDuplicateApplications': tk.BooleanVar(value=self.config.get('avoidDuplicateApplications', False)),
+            'avoidDuplicateApplications': tk.BooleanVar(value=self.config.get('avoidDuplicateApplications', True)),
             'startFromPage': tk.IntVar(value=self.config.get('startFromPage', 1)),
             # Job
             'positions': tk.StringVar(value=safe_join_list(self.config.get('positions', []))),

@@ -386,7 +386,7 @@ class LinkedinEasyApply:
         self.poster_blacklist = parameters.get('posterBlacklist', []) or []
         
         # Duplicate application prevention configuration
-        self.avoid_duplicate_applications = parameters.get('avoidDuplicateApplications', False)
+        self.avoid_duplicate_applications = parameters.get('avoidDuplicateApplications', True)
         self.applied_jobs_file = parameters.get('appliedJobsFile', 'applied_jobs.json')
         self.applied_jobs = set()  # Store applied job links
         
