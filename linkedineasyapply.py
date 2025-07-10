@@ -593,7 +593,7 @@ class LinkedinEasyApply:
                         break  # Break from location loop, move to next position_config
 
                     location_url = "&location=" + location + "&geoId=" + self.click_location_url(location)
-                    job_page_number = self.start_from_page - 2  # Will be incremented to start_from_page - 1 in loop
+                    job_page_number = self.start_from_page - 1  # Will be incremented to start_from_page - 1 in loop
                     print(f"Searching for position '{position_name}' in '{location}' starting from page {self.start_from_page}.")
 
                     try:
@@ -652,7 +652,7 @@ class LinkedinEasyApply:
 
         for (position, location) in searches:
             location_url = "&location=" + location + "&geoId=" + self.click_location_url(location)
-            job_page_number = self.start_from_page - 2  # Will be incremented to start_from_page - 1 in loop
+            job_page_number = self.start_from_page - 1  # Will be incremented to start_from_page - 1 in loop
 
             print(f"Starting the search for {position} in {location} from page {self.start_from_page}.")
 
@@ -693,6 +693,12 @@ class LinkedinEasyApply:
                 page_sleep += 1
 
     def apply_jobs(self, location, current_position_config=None):
+        # 添加统计变量
+        jobs_processed = 0
+        jobs_applied = 0
+        jobs_skipped = 0
+        start_seen_count = len(self.seen_jobs)
+        
         no_jobs_text = ""
         try:
             no_jobs_element = self.browser.find_element(By.CLASS_NAME,
@@ -780,6 +786,9 @@ class LinkedinEasyApply:
                     print(f"Target for '{target_position_name}' ({max_allowed_applications}) reached. Stopping further applications for this position on this page.")
                     break # Stop processing jobs on this page for this position_config
             # === END: New logic for position counting and matching ===
+            
+            # jobs_processed - 只有真正开始处理的职位才计入
+            jobs_processed += 1
 
             job_title, company, poster, job_location, apply_method, link = "", "", "", "", "", ""
             job_tile = self.browser.find_elements(By.CLASS_NAME, ul_element_class)[0].find_elements(By.CLASS_NAME, 'scaffold-layout__list-item')[i]
@@ -878,6 +887,7 @@ class LinkedinEasyApply:
                                 # 如果申请人数超过设定的阈值，跳过此职位
                                 if applicants_count > self.lessApplicantsCount:
                                     print(f"Applicants count ({applicants_count}) exceeds threshold ({self.lessApplicantsCount}), skipping job")
+                                    jobs_skipped += 1  # jobs_skipped
                                     if link and link not in self.seen_jobs: 
                                         self.seen_jobs.append(link)
                                     continue
@@ -898,6 +908,7 @@ class LinkedinEasyApply:
                             # Evaluate if we should apply
                             if not self.ai_response_generator.evaluate_job_fit(job_title, job_description):
                                 print("Skipping application: Job requirements not aligned with candidate profile per AI evaluation.")
+                                jobs_skipped += 1  # jobs_skipped
                                 if link and link not in self.seen_jobs: self.seen_jobs.append(link) # Mark as seen
                                 continue
                         except Exception as e:
@@ -912,6 +923,8 @@ class LinkedinEasyApply:
                             print(f"Application sent to {company} for the position of {job_title}.")
                             # Add to applied records
                             self.add_applied_job(link)
+                            # jobs_applied
+                            jobs_applied += 1
                             # === START: New logic for incrementing count ===
                             if current_position_config:
                                 target_position_name_for_count = current_position_config['name']
@@ -946,18 +959,33 @@ class LinkedinEasyApply:
                     # pass # Original was pass, consider if seen_jobs needs update here
             else:
                 # This 'else' corresponds to the blacklist/seen_jobs check
+                skip_reason = []
+                if company.lower() in [word.lower() for word in self.company_blacklist]:
+                    skip_reason.append("company blacklisted")
+                if poster.lower() in [word.lower() for word in self.poster_blacklist]:
+                    skip_reason.append("poster blacklisted")
+                if contains_blacklisted_keywords:
+                    skip_reason.append("title contains blacklisted keywords")
+                if link in self.seen_jobs:
+                    skip_reason.append("already seen in this session")
+                if self.is_job_already_applied(link):
+                    skip_reason.append("already applied previously")
+                
+                reason_text = ", ".join(skip_reason) if skip_reason else "unknown reason"
+                
                 try:
-                    print(f"Job for {company} by {poster} contains a blacklisted word or already seen.") # Original log was here
+                    print(f"Skipping job - {company} {job_title} (Reason: {reason_text})")
                 except UnicodeEncodeError:
-                    print(f"Job for {company.encode('gbk', 'replace').decode('gbk')} by {poster.encode('gbk', 'replace').decode('gbk')} contains a blacklisted word or already seen.")
-                if link not in self.seen_jobs and link: # If skipped due to blacklist but not seen, mark seen
+                    print(f"Skipping job - {company.encode('gbk', 'replace').decode('gbk')} {job_title.encode('gbk', 'replace').decode('gbk')} (Reason: {reason_text})")
+                
+                jobs_skipped += 1
+                
+                if link not in self.seen_jobs and link:
                     self.seen_jobs.append(link)
-                # else: # If already in seen_jobs, no need to re-add or log verbosely
-                    # print(f"Skipping already seen or blacklisted job: {job_title if job_title else 'Unknown Title'} at {company if company else 'Unknown Company'}")
 
-            # Ensure link is added to seen_jobs if it hasn't been for any reason above (e.g. an error before explicit add)
-            if link and link not in self.seen_jobs:
-                 self.seen_jobs.append(link)
+        end_seen_count = len(self.seen_jobs)
+        newly_seen = end_seen_count - start_seen_count
+        print(f"Page processing complete - Processed: {jobs_processed}, Applied: {jobs_applied}, Skipped: {jobs_skipped}, Newly seen: {newly_seen}")
 
     def apply_to_job(self):
         easy_apply_button = None
@@ -1864,8 +1892,7 @@ class LinkedinEasyApply:
                 else:
                     self.additional_questions(form)
             except Exception as e:
-                print("An exception occurred while filling up the form:")
-                print(e)
+                print("An exception occurred while filling up the form: no label, pass")
         except:
             print("An exception occurred while searching for form in modal")
 
