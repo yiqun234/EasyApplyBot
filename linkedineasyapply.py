@@ -625,7 +625,14 @@ class LinkedinEasyApply:
                                 time.sleep(sleep_time)
                                 page_sleep +=1 # To avoid immediate re-trigger if loop is very fast
                     except Exception as e:
-                        if "No more jobs on this page." not in str(e) and "Nothing to do here, moving forward..." not in str(e):
+                        # These are expected exceptions that indicate we should move to next location
+                        expected_exceptions = [
+                            "No more jobs on this page.",
+                            "Nothing to do here, moving forward...",
+                            "Job list UI elements not found, cannot proceed with this page."
+                        ]
+                        
+                        if not any(expected_msg in str(e) for expected_msg in expected_exceptions):
                             print(f"Error processing position '{position_name}' in '{location}': {e}")
                             traceback.print_exc()
                         else: # Expected exceptions for end of job list or similar
@@ -677,8 +684,19 @@ class LinkedinEasyApply:
                         print(f"Sleeping for {sleep_time} seconds.")
                         time.sleep(sleep_time)
                         page_sleep += 1
-            except:
-                traceback.print_exc()
+            except Exception as e:
+                # These are expected exceptions that indicate we should move to next search
+                expected_exceptions = [
+                    "No more jobs on this page.",
+                    "Nothing to do here, moving forward...", 
+                    "Job list UI elements not found, cannot proceed with this page."
+                ]
+                
+                if not any(expected_msg in str(e) for expected_msg in expected_exceptions):
+                    print(f"Error processing {position} in {location}: {e}")
+                    traceback.print_exc()
+                else:
+                    print(f"{position} @ {location}: {str(e)}. Moving to next search.")
                 pass
 
             time_left = minimum_page_time - time.time()
