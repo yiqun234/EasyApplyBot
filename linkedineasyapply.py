@@ -593,7 +593,7 @@ class LinkedinEasyApply:
                         break  # Break from location loop, move to next position_config
 
                     location_url = "&location=" + location + "&geoId=" + self.click_location_url(location)
-                    job_page_number = self.start_from_page - 1  # Will be incremented to start_from_page - 1 in loop
+                    job_page_number = self.start_from_page - 2  # Will be incremented to start_from_page - 2 in loop
                     print(f"Searching for position '{position_name}' in '{location}' starting from page {self.start_from_page}.")
 
                     try:
@@ -659,7 +659,7 @@ class LinkedinEasyApply:
 
         for (position, location) in searches:
             location_url = "&location=" + location + "&geoId=" + self.click_location_url(location)
-            job_page_number = self.start_from_page - 1  # Will be incremented to start_from_page - 1 in loop
+            job_page_number = self.start_from_page - 2  # Will be incremented to start_from_page - 1 in loop
 
             print(f"Starting the search for {position} in {location} from page {self.start_from_page}.")
 
