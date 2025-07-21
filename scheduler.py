@@ -3,15 +3,39 @@ import time
 import subprocess
 import os
 import logging
+import glob
 from datetime import datetime
 
 # --- Configuration ---
-# Add all user configuration file paths here
-USER_CONFIGS = [
-    "config.yaml",
-    # "config_user2.yaml",  # Example: uncomment this line to add a second user
-    # "config_user3.yaml",
-]
+CONFIG_DIR = "configs"
+DEFAULT_CONFIG_FILE = "config.yaml"
+
+def get_available_user_configs():
+    """Get all available user configuration files"""
+    config_files = []
+    
+    # Add default config if it exists
+    if os.path.exists(DEFAULT_CONFIG_FILE):
+        config_files.append(DEFAULT_CONFIG_FILE)
+    
+    # Add all user configs from configs directory
+    if os.path.exists(CONFIG_DIR):
+        user_configs = glob.glob(os.path.join(CONFIG_DIR, "*.yaml"))
+        config_files.extend(user_configs)
+    
+    return config_files
+
+def get_user_id_from_config_path(config_path):
+    """Extract user ID from config file path"""
+    if config_path == DEFAULT_CONFIG_FILE:
+        return "default"
+    
+    filename = os.path.basename(config_path)
+    user_id = filename.replace('.yaml', '')
+    return user_id
+
+# Get user configuration files automatically
+USER_CONFIGS = get_available_user_configs()
 
 # Log file configuration
 LOG_FILE = "scheduler.log"
@@ -35,9 +59,10 @@ def run_bot_for_user(config_file: str):
     """
     if not os.path.exists(config_file):
         logging.error(f"Configuration file not found: {config_file}, skipping this user.")
-        return
+        return False
 
-    logging.info(f"--- Starting job for user (config: {config_file}) ---")
+    user_id = get_user_id_from_config_path(config_file)
+    logging.info(f"--- Starting job for user '{user_id}' (config: {config_file}) ---")
     
     try:
         command = ["python", "-u", MAIN_SCRIPT_PATH, "--config", config_file]
@@ -59,39 +84,66 @@ def run_bot_for_user(config_file: str):
             if output == '' and process.poll() is not None:
                 break
             if output:
-                logging.info(output.strip())
+                logging.info(f"[{user_id}] {output.strip()}")
         
         # Check the return code
         return_code = process.poll()
         if return_code == 0:
-            logging.info(f"Successfully completed job for user (config: {config_file}).")
+            logging.info(f"Successfully completed job for user '{user_id}' (config: {config_file}).")
+            return True
         else:
-            logging.error(f"Job for user (config: {config_file}) failed with return code: {return_code}")
+            logging.error(f"Job for user '{user_id}' (config: {config_file}) failed with return code: {return_code}")
+            return False
 
     except Exception as e:
-        logging.error(f"An unexpected error occurred while running the job for user (config: {config_file}): {e}")
+        logging.error(f"An unexpected error occurred while running the job for user '{user_id}' (config: {config_file}): {e}")
+        return False
         
     finally:
-        logging.info(f"--- Finished job for user (config: {config_file}) ---")
-        time.sleep(10) # Add a short delay between users
+        logging.info(f"--- Finished job for user '{user_id}' (config: {config_file}) ---")
+        time.sleep(5) # Reduced delay between users
 
 def job():
     """
     The main function for the scheduled job, which will execute tasks for all users sequentially.
     """
+    # Refresh the config list in case new users were added
+    global USER_CONFIGS
+    USER_CONFIGS = get_available_user_configs()
+    
     logging.info(f"====== Starting a new round of scheduled jobs ({datetime.now().strftime('%Y-%m-%d %H:%M:%S')}) ======")
     if not USER_CONFIGS:
         logging.warning("User config list is empty. No jobs to run in this round.")
         return
 
+    successful_jobs = 0
+    failed_jobs = 0
+    
     for config in USER_CONFIGS:
-        run_bot_for_user(config)
+        user_id = get_user_id_from_config_path(config)
+        logging.info(f"Processing user '{user_id}'...")
+        
+        try:
+            success = run_bot_for_user(config)
+            if success:
+                successful_jobs += 1
+            else:
+                failed_jobs += 1
+        except Exception as e:
+            logging.error(f"Critical error processing user '{user_id}': {e}")
+            failed_jobs += 1
+        
+        # Brief pause between users to avoid system overload
+        time.sleep(2)
 
-    logging.info(f"====== All jobs for this round have been executed. Next run at: {schedule.next_run} ======")
+    logging.info(f"====== Round completed. Successful: {successful_jobs}, Failed: {failed_jobs}. Next run at: {schedule.next_run} ======")
 
 if __name__ == "__main__":
-    logging.info("Scheduler script started.")
-    logging.info(f"User configs to be executed: {USER_CONFIGS}")
+    logging.info("Multi-User LinkedIn Bot Scheduler started.")
+    logging.info(f"Found {len(USER_CONFIGS)} user configurations:")
+    for config in USER_CONFIGS:
+        user_id = get_user_id_from_config_path(config)
+        logging.info(f"  - User '{user_id}': {config}")
     
     # --- Schedule Settings ---
     # This is an example: run every 2 hours.
