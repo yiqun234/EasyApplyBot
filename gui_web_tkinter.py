@@ -178,6 +178,8 @@ DEFAULT_CONFIG = {
     'customQuestions': {},  # 自定义问答配置
     'useCloudAI': True,  # 是否使用云服务API，默认为True
     'language': DEFAULT_LANGUAGE,  # 添加语言设置，默认为中文
+    'avoidDuplicateApplications': True,  # 防重复申请功能
+    'appliedJobsFile': 'applied_jobs.json',  # 已申请职位记录文件，将根据用户ID自动调整
 }
 
 STANDARD_DEGREES = ["High School Diploma", "Associate's Degree", "Bachelor's Degree", "Master's Degree", "Master of Business Administration", "Doctor of Philosophy", "Doctor of Medicine", "Doctor of Law"]
@@ -256,6 +258,11 @@ def load_config(user_id=None):
         elif 'default' not in final_config['experience']:
              final_config['experience']['default'] = 0
 
+        # Set user-specific applied jobs file path
+        if user_id and user_id != "default":
+            final_config['appliedJobsFile'] = f"applied_jobs_{user_id}.json"
+        else:
+            final_config['appliedJobsFile'] = "applied_jobs.json"
 
         return final_config
     except yaml.YAMLError as exc:
@@ -277,6 +284,12 @@ def save_config(config, user_id=None):
                 config_to_save[k] = v.copy()
             else:
                 config_to_save[k] = v
+
+        # Set user-specific applied jobs file path
+        if user_id and user_id != "default":
+            config_to_save['appliedJobsFile'] = f"applied_jobs_{user_id}.json"
+        else:
+            config_to_save['appliedJobsFile'] = "applied_jobs.json"
 
         with open(config_file, 'w', encoding='utf-8') as stream:
             yaml.dump(config_to_save, stream, default_flow_style=False, allow_unicode=True, sort_keys=False)

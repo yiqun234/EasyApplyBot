@@ -393,6 +393,9 @@ class LinkedinEasyApply:
         # Start from specific page configuration
         self.start_from_page = max(1, int(parameters.get('startFromPage', 1)))  # Minimum page 1
         
+        # Email verification configuration
+        self.verify_email = parameters.get('verifyEmail', True)  # Enable email verification by default
+        
         # 少于X名申请者的筛选选项
         self.lessApplicantsEnabled = parameters.get('lessApplicantsEnabled', False)
         self.lessApplicantsCount = parameters.get('lessApplicantsCount', 100)
@@ -526,9 +529,21 @@ class LinkedinEasyApply:
                 if self.browser.current_url != "https://www.linkedin.com/feed/":
                     print("Feed page not loaded, proceeding to login.")
                     self.load_login_page_and_login()
+                    # Verify email after fresh login if enabled
+                    if self.verify_email:
+                        self.verify_logged_in_email()
+                else:
+                    print("Session restored successfully.")
+                    # Verify email for existing session if enabled
+                    if self.verify_email:
+                        print("Verifying email for existing session...")
+                        self.verify_logged_in_email()
             else:
                 print("No session found, proceeding to login.")
                 self.load_login_page_and_login()
+                # Verify email after fresh login if enabled
+                if self.verify_email:
+                    self.verify_logged_in_email()
 
         except TimeoutException:
             print("Timeout occurred, checking for security challenges...")
@@ -561,6 +576,90 @@ class LinkedinEasyApply:
         )
 
         # time.sleep(random.uniform(5, 10))
+
+    def verify_logged_in_email(self):
+        """
+        验证当前登录的邮箱是否与配置文件中的邮箱匹配
+        
+        Returns:
+            bool: True if emails match, False otherwise
+        """
+        try:
+            print("Verifying logged-in email address...")
+            
+            # Navigate to LinkedIn preferences page
+            self.browser.get("https://www.linkedin.com/mypreferences/d/categories/sign-in-and-security")
+            time.sleep(random.uniform(2, 3))
+            
+            # Wait for the page to load
+            WebDriverWait(self.browser, 10).until(
+                EC.presence_of_element_located((By.CSS_SELECTOR, "[data-test-category-item-sneakpeek]"))
+            )
+            
+            # Extract the current logged-in email
+            try:
+                email_element = self.browser.find_element(By.CSS_SELECTOR, "[data-test-category-item-sneakpeek]")
+                logged_in_email = email_element.text.strip()
+                
+                print(f"Current logged-in email: {logged_in_email}")
+                print(f"Expected email from config: {self.email}")
+                
+                # Compare emails (case insensitive)
+                if logged_in_email.lower() == self.email.lower():
+                    print("✓ Email verification successful - correct account is logged in")
+                    return True
+                else:
+                    print(f"✗ Email mismatch detected!")
+                    print(f"  Logged in as: {logged_in_email}")
+                    print(f"  Expected: {self.email}")
+                    print("Please switch to the correct LinkedIn account or update your configuration.")
+                    return False
+                    
+            except Exception as e:
+                print(f"Could not extract email from preferences page: {e}")
+                
+                # Try alternative method - look for aria-label
+                try:
+                    email_container = self.browser.find_element(By.CSS_SELECTOR, "[aria-label*='Your primary email address is']")
+                    aria_label = email_container.get_attribute("aria-label")
+                    
+                    # Extract email from aria-label text
+                    import re
+                    email_match = re.search(r'Your primary email address is (.+)', aria_label)
+                    if email_match:
+                        logged_in_email = email_match.group(1).strip()
+                        print(f"Current logged-in email (from aria-label): {logged_in_email}")
+                        
+                        if logged_in_email.lower() == self.email.lower():
+                            print("✓ Email verification successful - correct account is logged in")
+                            return True
+                        else:
+                            print(f"✗ Email mismatch detected!")
+                            print(f"  Logged in as: {logged_in_email}")
+                            print(f"  Expected: {self.email}")
+                            print("Please switch to the correct LinkedIn account or update your configuration.")
+                            return False
+                    else:
+                        print("Could not parse email from aria-label")
+                        
+                except Exception as e2:
+                    print(f"Alternative email extraction method also failed: {e2}")
+                
+                # If both methods fail, return True to continue (but log the issue)
+                print("Warning: Could not verify email address, continuing with current session...")
+                return True
+                
+        except Exception as e:
+            print(f"Error during email verification: {e}")
+            print("Warning: Email verification failed, continuing with current session...")
+            return True
+        finally:
+            # Return to feed page
+            try:
+                self.browser.get("https://www.linkedin.com/feed/")
+                time.sleep(random.uniform(1, 2))
+            except:
+                pass
 
     def start_applying(self):
         # New logic: Prioritize positions_with_count if available
