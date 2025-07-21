@@ -1,4 +1,4 @@
-import yaml, os
+import yaml, os, argparse
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service as ChromeService
@@ -533,8 +533,8 @@ def init_browser():
 
     return driver
 
-def validate_yaml():
-    with open("config.yaml", 'r', encoding='utf-8') as stream:
+def validate_yaml(config_file):
+    with open(config_file, 'r', encoding='utf-8') as stream:
         try:
             parameters = yaml.safe_load(stream)
         except yaml.YAMLError as exc:
@@ -646,7 +646,16 @@ def validate_yaml():
 
 
 if __name__ == '__main__':
-    parameters = validate_yaml()
+    parser = argparse.ArgumentParser(description="LinkedIn Easy Apply Bot")
+    parser.add_argument(
+        '--config', 
+        type=str, 
+        default='config.yaml', 
+        help='Path to the configuration YAML file.'
+    )
+    args = parser.parse_args()
+
+    parameters = validate_yaml(args.config)
     browser = None
 
     browser = init_browser()

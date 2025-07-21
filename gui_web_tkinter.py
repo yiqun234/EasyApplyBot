@@ -151,6 +151,14 @@ EEO_OPTIONS = {
 
 
 CONFIG_FILE = "config.yaml"
+CONFIG_DIR = "configs"
+
+def get_config_file_path(user_id=None):
+    """Get config file path for user or default"""
+    if user_id:
+        os.makedirs(CONFIG_DIR, exist_ok=True)
+        return os.path.join(CONFIG_DIR, f"{user_id}.yaml")
+    return CONFIG_FILE
 # DEFAULT_CONFIG now primarily defines structure and default *values* if a key *exists* but has no value,
 # or if the config file is entirely missing. It's less about forcing specific keys onto the user's config.
 DEFAULT_CONFIG = {
@@ -205,16 +213,30 @@ def decode_keys(obj):
     else:
         return obj
 
-def load_config():
+def load_config(user_id=None):
+    config_file = get_config_file_path(user_id)
+    
+    # If user config doesn't exist, create it from default
+    if user_id and not os.path.exists(config_file) and os.path.exists(CONFIG_FILE):
+        try:
+            with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
+                default_config = yaml.safe_load(f)
+            with open(config_file, 'w', encoding='utf-8') as f:
+                yaml.dump(default_config, f, allow_unicode=True, sort_keys=False)
+            print(f"Created config for user {user_id}")
+        except Exception as e:
+            print(f"Error creating user config: {e}")
+            config_file = CONFIG_FILE
+    
     final_config = {}
     for k, v in DEFAULT_CONFIG.items():
          if isinstance(v, (dict, list)): final_config[k] = v.copy()
          else: final_config[k] = v
-    if not os.path.exists(CONFIG_FILE): print(f"Configuration Files {CONFIG_FILE} Does not exist..."); save_config(final_config); return final_config # Return default if file missing
+    if not os.path.exists(config_file): print(f"Configuration Files {config_file} Does not exist..."); save_config(final_config, user_id); return final_config # Return default if file missing
     try:
-        with open(CONFIG_FILE, 'r', encoding='utf-8') as stream:
+        with open(config_file, 'r', encoding='utf-8') as stream:
             loaded_config = yaml.safe_load(stream)
-            if not loaded_config: print(f"Configuration Files {CONFIG_FILE} Empty..."); return final_config # Return default if file empty
+            if not loaded_config: print(f"Configuration Files {config_file} Empty..."); return final_config # Return default if file empty
         # IMPORTANT: Update the defaults with loaded config, preserving structure
         deep_update(final_config, loaded_config)
         # Ensure essential nested dicts/lists exist if missing in file but expected by GUI/defaults
@@ -243,8 +265,9 @@ def load_config():
         messagebox.showerror("Configuration Error", f"Error updating configuration: {e}")
         return final_config
 
-def save_config(config):
+def save_config(config, user_id=None):
     try:
+        config_file = get_config_file_path(user_id)
         config_to_save = {} # Use a clean dict to ensure order from config
         for k, v in config.items():
             # Ensure nested structures are copied properly for saving
@@ -255,10 +278,10 @@ def save_config(config):
             else:
                 config_to_save[k] = v
 
-        with open(CONFIG_FILE, 'w', encoding='utf-8') as stream:
+        with open(config_file, 'w', encoding='utf-8') as stream:
             yaml.dump(config_to_save, stream, default_flow_style=False, allow_unicode=True, sort_keys=False)
         return True
-    except Exception as e: 
+    except Exception as e:
         import traceback
         print(f"Error saving configuration: {e}")
         traceback.print_exc()
@@ -287,8 +310,9 @@ def parse_list_from_textarea(text_content):
 class EasyApplyApp(tk.Tk):
     def __init__(self):
         super().__init__()
+        self.user_id = None
         self.EEO_OPTIONS = EEO_OPTIONS
-        self.config = load_config()
+        self.config = load_config() 
         self.lang_code = self.config.get('language', DEFAULT_LANGUAGE)
         self.texts = load_language(self.lang_code)
 
@@ -329,9 +353,14 @@ class EasyApplyApp(tk.Tk):
             try:
                 with open(auth_file_path, 'r', encoding='utf-8') as f:
                     auth_data_loaded = json.load(f)
-                    if auth_data_loaded.get('userId') and auth_data_loaded.get('apiKey'):
-                        self.auth_data = auth_data_loaded
-                        self.is_authenticated = True
+                if auth_data_loaded.get('userId') and auth_data_loaded.get('apiKey'):
+                    self.auth_data = auth_data_loaded
+                    self.is_authenticated = True
+                    self.user_id = auth_data_loaded.get('userId')
+                    # 重新加载用户专属配置
+                    print(f"Auto-login detected, loading config for user: {self.user_id}")
+                    self.config = load_config(self.user_id)
+                    print(f"Loaded config from: {get_config_file_path(self.user_id)}")
             except Exception as e:
                 print(f"Error reading auth.json: {e}")
                 self.auth_data = None
@@ -451,7 +480,7 @@ class EasyApplyApp(tk.Tk):
                          lang_label_widget.config(text=(self.texts['common']['language'] + ":" if 'common' in self.texts else "Language:"))
             
             # Save the configuration change
-            save_config(self.config)
+            save_config(self.config, self.user_id)
 
 
     def _handle_login(self):
@@ -499,10 +528,15 @@ class EasyApplyApp(tk.Tk):
         if self.login_progress_bar: # Check if progress bar exists
             self.login_progress_bar.stop()
         
-        if auth_result and auth_result.get('user_id') and auth_result.get('api_key'):
+        if auth_result and auth_result.get('userId') and auth_result.get('apiKey'):
             # 认证成功
             self.auth_data = auth_result
             self.is_authenticated = True
+            self.user_id = auth_result.get('userId')
+            # 重新加载用户专属配置
+            print(f"Loading config for user: {self.user_id}")
+            self.config = load_config(self.user_id)
+            print(f"Loaded config from: {get_config_file_path(self.user_id)}")
             
             # 更新状态标签
             success_text = self.texts['login']['success'] if 'login' in self.texts else "Login successful! Loading main interface..."
@@ -1682,24 +1716,24 @@ class EasyApplyApp(tk.Tk):
     # --- Action Methods ---
 
     def _open_config_file(self):
-        # (No changes needed)
         try:
-            if os.path.exists(CONFIG_FILE):
-                if sys.platform.startswith('win'): os.startfile(CONFIG_FILE)
-                elif sys.platform.startswith('darwin'): subprocess.call(['open', CONFIG_FILE])
+            config_file = get_config_file_path(self.user_id)
+            if os.path.exists(config_file):
+                if sys.platform.startswith('win'): os.startfile(config_file)
+                elif sys.platform.startswith('darwin'): subprocess.call(['open', config_file])
                 else:
                     editors = ['xdg-open', 'gedit', 'kate', 'mousepad', 'nano', 'vim', 'vi']
                     opened = False
                     for editor in editors:
                         try:
                             if subprocess.call(['which', editor], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL) == 0:
-                                subprocess.Popen([editor, CONFIG_FILE])
+                                subprocess.Popen([editor, config_file])
                                 opened = True
                                 break
                         except FileNotFoundError:
                             continue
                     if not opened:
-                        messagebox.showwarning(self.texts['common']['warning'], f"{self.texts['messages']['file_open_error']} {CONFIG_FILE}")
+                        messagebox.showwarning(self.texts['common']['warning'], f"{self.texts['messages']['file_open_error']} {config_file}")
         except Exception as e: messagebox.showerror(self.texts['common']['error'], f"{self.texts['messages']['file_open_error']}: {e}")
 
     def _open_web_config(self):
@@ -1930,8 +1964,9 @@ class EasyApplyApp(tk.Tk):
         
         try:
             # 使用更简单的方式启动，不捕获输出，不使用CREATE_NO_WINDOW标志
+            config_file = get_config_file_path(self.user_id)
             self.bot_process = subprocess.Popen(
-                [python_executable, "-u", "main.py"],
+                [python_executable, "-u", "main.py", "--config", config_file],
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 text=True,
@@ -2722,8 +2757,7 @@ class EasyApplyApp(tk.Tk):
                     
             config_to_save['customQuestions'] = processed_questions
 
-        with open('config.yaml', 'w', encoding='utf-8') as stream:
-            yaml.dump(config_to_save, stream, default_flow_style=False, allow_unicode=True, sort_keys=False)
+        save_config(config_to_save, self.user_id)
 
     def _create_experience_tab(self):
         # --- 添加滚动条支持 ---
@@ -4424,7 +4458,7 @@ class EasyApplyApp(tk.Tk):
             self.config = updated_config
             
             # 5. Save the complete, merged configuration back to config.yaml
-            save_config(self.config)
+            save_config(self.config, self.user_id)
             
             self._log_message("🔄 Configuration intelligently synced from Firebase.")
             
