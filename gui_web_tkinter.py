@@ -17,7 +17,7 @@ import auth_server
 import firebase_manager
 
 # --- Constants ---
-VERSION = "4.1"
+VERSION = "5.0"
 OCR_API = "https://ocr.nuomi.ai/api/ocr"
 WEB_CONFIG_URL = "https://account.nuomi.ai/dashboard"
 
