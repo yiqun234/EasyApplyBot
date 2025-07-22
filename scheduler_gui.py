@@ -10,6 +10,7 @@ import json
 import sys
 from datetime import datetime, timedelta
 from enum import Enum
+import traceback
 
 # 语言配置
 LANGUAGES = {
@@ -190,10 +191,12 @@ class SchedulerGUI:
         
         self.user_tasks = {}
         self.task_queue = queue.Queue()
+        self.log_queue = queue.Queue()
         self.current_running_task = None
         self.running = False
         self.scheduler_thread = None
         self.worker_thread = None
+        self.last_task_finish_time = None
         
         # 调度配置
         self.schedule_type = ScheduleType.INTERVAL
@@ -203,7 +206,22 @@ class SchedulerGUI:
         self.setup_ui()
         self.load_user_configs()
         self.update_ui_timer()
-        
+        self.process_log_queue()  # Start the log processing loop
+    
+    def process_log_queue(self):
+        """Process the log queue to update the GUI safely from other threads."""
+        try:
+            while not self.log_queue.empty():
+                message = self.log_queue.get_nowait()
+                timestamp = datetime.now().strftime("[%H:%M:%S]")
+                log_message = f"{timestamp} {message}\n"
+                self.log_text.insert(tk.END, log_message)
+                self.log_text.see(tk.END)
+        except queue.Empty:
+            pass
+        finally:
+            self.root.after(100, self.process_log_queue)
+            
     def setup_ui(self):
         # Main frame
         main_frame = ttk.Frame(self.root, padding="10")
@@ -679,66 +697,70 @@ class SchedulerGUI:
         self.update_queue_display()
     
     def scheduler_loop(self):
-        """Main scheduler loop"""
+        """Main scheduler loop - checks each task independently."""
         while self.running:
             if self.schedule_type == ScheduleType.MANUAL:
-                time.sleep(60)  # Just sleep if manual mode
+                self.interruptible_sleep(60)
                 continue
+
+            now = datetime.now()
+            
+            for task in self.user_tasks.values():
+                if not task.selected or not task.next_run:
+                    continue
                 
-            current_time = datetime.now()
-            
-            # Check if it's time to run
-            should_run = False
-            
-            if self.schedule_type == ScheduleType.INTERVAL:
-                # Check if any task is due
-                for task in self.user_tasks.values():
-                    if (task.selected and task.next_run and current_time >= task.next_run 
-                        and task.status not in [TaskStatus.RUNNING, TaskStatus.QUEUED]):
-                        should_run = True
-                        break
-                        
-            elif self.schedule_type == ScheduleType.DAILY:
-                # Check if it's the daily run time
-                for task in self.user_tasks.values():
-                    if (task.selected and task.next_run and current_time >= task.next_run
-                        and task.status not in [TaskStatus.RUNNING, TaskStatus.QUEUED]):
-                        should_run = True
-                        break
-            
-            if should_run:
-                self.queue_selected_tasks()
-                self.calculate_next_run_times()  # Set next run times
-            
-            time.sleep(30)  # Check every 30 seconds
+                if now >= task.next_run and task.status not in [TaskStatus.RUNNING, TaskStatus.QUEUED]:
+                    self.log(f"Scheduler queuing task: {task.user_id}")
+                    task.status = TaskStatus.QUEUED
+                    self.task_queue.put(task)
+                    self.update_queue_display()
+
+                    # Immediately calculate the next run time for this task,
+                    # so it doesn't get queued again in the next loop.
+                    self.calculate_next_run_time_for_task(task)
+
+            self.interruptible_sleep(10)  # Check every 10 seconds
+        
+        self.log("Scheduler loop stopped")
     
+    def interruptible_sleep(self, duration, step=0.1):
+        """Sleep for a duration, but check for stop signal periodically."""
+        slept_time = 0
+        while slept_time < duration and self.running:
+            time.sleep(step)
+            slept_time += step
+
     def worker_loop(self):
-        """Worker loop to process task queue"""
+        """Worker loop to process task queue."""
+        self.log("Worker thread started")
         while self.running:
             try:
-                # Get next task from queue (with timeout)
                 task = self.task_queue.get(timeout=1)
                 
                 if not self.running:
+                    self.task_queue.task_done()
                     break
-                    
+
                 self.current_running_task = task
                 self.run_single_task(task)
                 
-                # Delay between tasks
-                if self.running:
-                    delay = float(self.task_delay_var.get())
-                    self.log(f"Task delay {delay} seconds...")
-                    time.sleep(delay)
-                
+                # Post-execution logic
+                self.last_task_finish_time = datetime.now()
                 self.current_running_task = None
                 self.task_queue.task_done()
                 
             except queue.Empty:
                 continue
             except Exception as e:
-                self.log(f"Worker thread error: {e}")
-                self.current_running_task = None
+                self.log(f"Critical Worker thread error: {e}\n{traceback.format_exc()}")
+                if self.current_running_task:
+                    try:
+                        self.task_queue.task_done()
+                    except: pass
+                    self.current_running_task = None
+                time.sleep(1) 
+        
+        self.log("Worker thread stopped")
     
     def queue_selected_tasks(self):
         """Add selected tasks to queue"""
@@ -788,7 +810,7 @@ class SchedulerGUI:
         else:
             self.log(self.texts['no_reset_needed'])
         
-        self.update_queue_display()
+        self.update_tasks_display()
     
     def force_stop_all_tasks(self):
         """Force stop all running tasks and clear queue"""
@@ -804,6 +826,9 @@ class SchedulerGUI:
                 self.log(msg)
                 self.current_running_task.process.kill()  # 直接kill，不等待
                 self.current_running_task.status = TaskStatus.IDLE
+                # Keep task selected so it can be rescheduled by the scheduler
+                # Update last finish time to ensure proper delay before next scheduling
+                self.last_task_finish_time = datetime.now()
                 self.current_running_task = None
                 stopped_count += 1
             except Exception as e:
@@ -814,6 +839,7 @@ class SchedulerGUI:
             try:
                 task = self.task_queue.get_nowait()
                 task.status = TaskStatus.IDLE
+                # Keep queued tasks selected so they can be rescheduled
                 queue_cleared += 1
             except:
                 break
@@ -823,6 +849,7 @@ class SchedulerGUI:
         for task in self.user_tasks.values():
             if task.status in [TaskStatus.RUNNING, TaskStatus.QUEUED]:
                 task.status = TaskStatus.IDLE
+                # Keep tasks selected so scheduler can reschedule them if still running
                 reset_count += 1
                 
                 # If task has a process, kill it
@@ -847,6 +874,12 @@ class SchedulerGUI:
         
         # 5. Update display
         self.update_queue_display()
+        self.update_tasks_display()  # Update task selection status display
+        
+        # 6. Recalculate next run times for all selected tasks
+        for task in self.user_tasks.values():
+            if task.selected:
+                self.calculate_next_run_time_for_task(task)
         
         dialog_msg = f"{self.texts['stop_complete_msg']}\n{self.texts['stopped']} {stopped_count}, {self.texts['cleared']} {queue_cleared}, {self.texts['reset']} {reset_count}"
         messagebox.showinfo(self.texts['stop_complete_title'], dialog_msg)
@@ -879,62 +912,100 @@ class SchedulerGUI:
             try:
                 self.current_running_task.process.terminate()
                 self.current_running_task.status = TaskStatus.IDLE
-                self.log(f"Stopped task: {self.current_running_task.user_id}")
+                # Keep task selected so it can be rescheduled in the next cycle
+                # Update last finish time to ensure proper delay before next scheduling
+                self.last_task_finish_time = datetime.now()
+                
+                # Recalculate next run time based on manual stop time
+                stopped_task = self.current_running_task
                 self.current_running_task = None
+                self.calculate_next_run_time_for_task(stopped_task)
+                
+                self.log(f"Stopped task: {stopped_task.user_id}")
+                # Update the display to reflect the current state
+                self.update_tasks_display()
             except Exception as e:
                 self.log(f"Failed to stop task: {e}")
         else:
             messagebox.showinfo("Info", "No task currently running")
     
     def run_single_task(self, task):
-        """Run a single task"""
+        """Run a single task in a separate process and handle its I/O non-blockingly."""
         task.status = TaskStatus.RUNNING
         task.last_run = datetime.now()
         self.log(f"Starting task: {task.user_id}")
         
         try:
             # Use sys.executable to ensure the correct Python interpreter is used
-            command = [sys.executable, "-u", self.MAIN_SCRIPT, "--config", task.config_path]
-            task.process = subprocess.Popen(
-                command,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                text=True,
-                encoding='utf-8',
-                errors='replace'
-            )
+            # Set creationflags to CREATE_NO_WINDOW on Windows to hide the console
+            creationflags = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
             
-            # Read output
-            while True:
+            process = subprocess.Popen(
+                [sys.executable, "-u", self.MAIN_SCRIPT, "--config", task.config_path],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=False,  # Read as bytes to handle any encoding
+                creationflags=creationflags
+            )
+            task.process = process
+            
+            # Start daemon threads to read stdout and stderr to prevent blocking
+            stdout_thread = threading.Thread(
+                target=self.read_stream_to_queue, 
+                args=(process.stdout, task.user_id), 
+                daemon=True
+            )
+            stderr_thread = threading.Thread(
+                target=self.read_stream_to_queue, 
+                args=(process.stderr, task.user_id), 
+                daemon=True
+            )
+            stdout_thread.start()
+            stderr_thread.start()
+
+            # The worker_loop will wait for the task to finish without blocking the GUI
+            # We don't call process.wait() here to keep the worker responsive
+            while process.poll() is None:
                 if not self.running:
                     task.process.terminate()
+                    self.log(f"Terminated task {task.user_id} due to scheduler stop.")
                     break
-                    
-                output = task.process.stdout.readline()
-                if output == '' and task.process.poll() is not None:
-                    break
-                if output:
-                    self.log(f"[{task.user_id}] {output.strip()}")
-            
-            return_code = task.process.poll()
+                time.sleep(0.5)
+
+            # Threads will exit automatically as they are daemons
+
+            return_code = process.poll()
             if return_code == 0:
                 task.status = TaskStatus.SUCCESS
-                self.log(f"Task {task.user_id} completed successfully")
+                self.log(f"Task {task.user_id} completed successfully.")
             else:
                 task.status = TaskStatus.FAILED
-                self.log(f"Task {task.user_id} failed, return code: {return_code}")
+                self.log(f"Task {task.user_id} failed with return code: {return_code}")
                 
         except Exception as e:
             task.status = TaskStatus.FAILED
-            self.log(f"Task {task.user_id} execution error: {e}")
+            self.log(f"Task {task.user_id} execution error: {e}\n{traceback.format_exc()}")
+            
         finally:
             task.process = None
-            # Recalculate next run time for this task after completion
-            if self.running:  # Only if scheduler is still running
+            # This logic must be here to ensure it runs after every task execution
+            if self.running:
                 self.calculate_next_run_time_for_task(task)
-            self.update_queue_display()
-            self.update_tasks_display()  # Update display to show new next run time
+            self.update_tasks_display()
     
+    def read_stream_to_queue(self, stream, user_id):
+        """Read lines from a stream and put them into the log queue."""
+        try:
+            for line in iter(stream.readline, b''):
+                if not self.running:
+                    break
+                decoded_line = f"[{user_id}] {line.decode('utf-8', errors='ignore').strip()}"
+                self.log_queue.put(decoded_line)
+        except Exception as e:
+            self.log_queue.put(f"[SYSTEM] Error reading stream for {user_id}: {e}")
+        finally:
+            stream.close()
+
     def update_tasks_display(self):
         """Update the tasks display"""
         # Save current selection
@@ -1036,12 +1107,8 @@ class SchedulerGUI:
         self.root.after(3000, self.update_ui_timer)  # Update every 3 seconds
     
     def log(self, message):
-        """Add message to log"""
-        timestamp = datetime.now().strftime("%H:%M:%S")
-        log_message = f"[{timestamp}] {message}\n"
-        
-        self.log_text.insert(tk.END, log_message)
-        self.log_text.see(tk.END)
+        """Add message to the thread-safe log queue."""
+        self.log_queue.put(message)
     
     def clear_log(self):
         """Clear the log"""
