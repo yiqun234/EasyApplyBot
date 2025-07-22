@@ -10,4 +10,3 @@ sseclient-py
 setuptools<81.0.0
 urllib3<2.0
 validate_email
-subprocess
