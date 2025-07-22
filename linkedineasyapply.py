@@ -53,7 +53,7 @@ class CloudAIResponseGenerator:
         # 如果外部传入api_key参数，优先覆盖api_key
         
         import logging
-        self.logger = logging.getLogger('CloudAIResponseGenerator')
+        printger = logging.getLogger('CloudAIResponseGenerator')
 
     def _load_auth_data(self):
         """从本地auth.json读取userId和apiKey"""
@@ -79,11 +79,11 @@ class CloudAIResponseGenerator:
     def extract_text_via_aws(self, pdf_filename, base64_pdf_data):
         """
         使用OpenAI API通过AWS提取PDF文档中的文本内容
-        
+
         Args:
             pdf_filename: PDF文件名，用于日志记录
             base64_pdf_data: Base64编码的PDF文件内容
-            
+
         Returns:
             提取的文本内容，如果提取失败则返回None
         """
@@ -94,42 +94,42 @@ class CloudAIResponseGenerator:
                 "pdf_base64": base64_pdf_data,
                 "openai_api_key": self.openai_api_key
             }
-            
+
             # 打印基本信息
             print(f"正在使用AWS API提取PDF文件 '{pdf_filename}' 的文本内容...")
-            
+
             # 调用云端API的extract-pdf-text端点
             response_data = self._call_cloud_api("extract-pdf-text", request_data)
-            
+
             # 检查响应数据
             if not response_data:
                 print(f"从AWS API获取响应失败")
                 return None
-            
+
             # 适配新的API响应格式
             if 'success' in response_data and not response_data.get('success'):
                 print(f"PDF提取失败: {response_data.get('error', '未知错误')}")
                 return None
-                
+
             # 检查响应中是否包含提取的文本
             if "extracted_text" not in response_data:
                 print(f"AWS API响应中不包含'extracted_text'字段")
                 print(f"返回的数据: {response_data}")
                 return None
-                
+
             extracted_text = response_data["extracted_text"]
-            
+
             # 记录成功提取
             print(f"成功从PDF文件中提取了 {len(extracted_text)} 字符")
-            
+
             return extracted_text
-            
+
         except Exception as e:
             print(f"PDF文本提取过程中发生错误: {str(e)}")
             import traceback
             traceback.print_exc()
             return None
-    
+
     @property
     def resume_content(self):
         if self._resume_content is None:
@@ -143,12 +143,12 @@ class CloudAIResponseGenerator:
                 except Exception as e:
                     print(f"Could not read text resume: {str(e)}")
         return self._resume_content
-        
+
     def _build_context(self):
         # 格式化自定义问答字典
         custom_answers = "\n".join(f"- {q} => {a}" for q, a in self.customQuestions.items()) if self.customQuestions else ""
         custom_block = f"\nCustom Application Answers:\n{custom_answers}\n" if custom_answers else ""
-        
+
         # 格式化EEO信息
         eeo_info = ""
         if hasattr(self, 'eeo') and self.eeo:
@@ -158,7 +158,7 @@ class CloudAIResponseGenerator:
                     eeo_items.append(f"- {key.title()}: {value}")
             if eeo_items:
                 eeo_info = f"\nEqual Employment Opportunity (EEO) Information:\n{chr(10).join(eeo_items)}\n"
-        
+
         return f"""
         Personal Information:
         - Name: {self.personal_info['First Name']} {self.personal_info['Last Name']}
@@ -170,7 +170,7 @@ class CloudAIResponseGenerator:
         Resume Content (Give the greatest weight to this information, if specified) (If you have similar questions to the Personal Information above, please refer to the following resume content):
         {self.resume_content}
         """
-    
+
     def _call_cloud_api(self, endpoint, data):
         """调用云API处理AI请求"""
         try:
@@ -185,14 +185,14 @@ class CloudAIResponseGenerator:
                 headers["x-user-id"] = self.user_id
             else:
                 print("警告：未检测到x-user-id，API请求可能会被拒绝。请先登录。")
-            
+
             # 将用户的OpenAI API密钥添加到请求数据中(如果有)
             if self.openai_api_key:
                 data["openai_api_key"] = self.openai_api_key
-            
+
             # 构建完整的API URL
             full_url = f"{self.api_url.rstrip('/')}/{endpoint.lstrip('/')}"
-            
+
             response = requests.post(
                 full_url,
                 headers=headers,
@@ -202,7 +202,7 @@ class CloudAIResponseGenerator:
 
             if response.status_code == 200:
                 api_response = response.json()
-                
+
                 # 新的API响应格式处理
                 if 'success' in api_response:
                     # 新的响应格式
@@ -227,29 +227,29 @@ class CloudAIResponseGenerator:
                 print(f"API请求失败: HTTP {response.status_code}")
                 print(f"错误详情: {response.text}")
                 return None
-        
+
         except requests.exceptions.Timeout:
             print("API请求超时")
             return None
-        
+
         except requests.exceptions.RequestException as e:
             print(f"API请求异常: {str(e)}")
             return None
-        
+
         except Exception as e:
             print(f"处理API请求时出错: {str(e)}")
             return None
-    
+
     def generate_response(self, question_text, response_type="text", options=None, max_tokens=3000):
         """
         通过云端API生成回答
-        
+
         Args:
             question_text: 应用中的问题
             response_type: "text", "numeric", 或 "choice"
             options: 对于"choice"类型，包含可能答案的(索引,文本)元组列表
             max_tokens: 回答的最大长度
-            
+
         Returns:
             - 文本类型: 生成的文本回答或None
             - 数字类型: 整数值或None
@@ -257,7 +257,7 @@ class CloudAIResponseGenerator:
         """
         try:
             context = self._build_context()
-            
+
             # 准备发送到云端API的数据
             request_data = {
                 "context": context,
@@ -269,27 +269,27 @@ class CloudAIResponseGenerator:
 
             if response_type == "choice" and options:
                 request_data["options"] = options
-            
+
             # 调用云端API
             response_data = self._call_cloud_api("generate-response", request_data)
-            
+
             # 检查响应数据
             if not response_data:
                 return None
-            
+
             # 适配新的API响应格式
             if 'success' in response_data and not response_data.get('success'):
                 print(f"API请求失败: {response_data.get('error', '未知错误')}")
                 return None
-                
+
             # 获取结果 - 兼容新旧格式
             if "result" not in response_data:
                 print("API响应中没有'result'字段")
                 return None
-                
+
             answer = response_data["result"]
             print(f"AI response {response_type}: {answer}")
-            
+
             if response_type == "numeric":
                 # 如果返回的不是数字，尝试从回答中提取数字
                 import re
@@ -304,9 +304,9 @@ class CloudAIResponseGenerator:
                 if isinstance(answer, int) and options and 0 <= answer < len(options):
                     return answer
                 return None
-                
+
             return answer
-            
+
         except Exception as e:
             print(f"生成回答时出错: {str(e)}")
             return None
@@ -314,17 +314,17 @@ class CloudAIResponseGenerator:
     def evaluate_job_fit(self, job_title, job_description):
         """
         评估基于候选人经验和职位要求，这个职位是否值得申请
-        
+
         Args:
             job_title: 职位标题
             job_description: 完整的职位描述文本
-            
+
         Returns:
             bool: True表示应该申请，False表示应该跳过
         """
         try:
             context = self._build_context()
-            
+
             # 准备发送到云端API的数据
             request_data = {
                 "context": context,
@@ -332,44 +332,44 @@ class CloudAIResponseGenerator:
                 "job_description": job_description,
                 "debug": self.debug
             }
-            
+
             # 添加自定义提示词
             if self.job_fit_prompt:
                 request_data["system_prompt"] = self.job_fit_prompt
-            
+
             # 调用云端API
             response_data = self._call_cloud_api("evaluate-job-fit", request_data)
             print(response_data)
-            
+
             # 检查响应数据
             if not response_data:
                 return True
-            
+
             # 适配新的API响应格式
             if 'success' in response_data and not response_data.get('success'):
                 print(f"API请求失败: {response_data.get('error', '未知错误')}")
                 return True
-                
+
             # 获取结果 - 兼容新旧格式
             if "result" not in response_data:
                 print("API响应中没有'result'字段")
                 return True
-                
+
             # 提取决策结果和可能的解释
             decision = response_data["result"]
             explanation = response_data.get("explanation", "")
-            
+
             if explanation and self.debug:
                 print(f"AI Evaluation Explained: {explanation}")
-                
+
             # 决策应该是布尔值，但也接受字符串"APPLY"/"SKIP"
             if isinstance(decision, bool):
                 return decision
             elif isinstance(decision, str):
                 return decision.upper().startswith('A')  # True代表APPLY，False代表SKIP
-            
+
             return True  # 默认继续申请
-            
+
         except Exception as e:
             print(f"评估职位匹配度时出错: {str(e)}")
             return True  # 出错时继续申请
@@ -384,22 +384,22 @@ class LinkedinEasyApply:
         self.company_blacklist = parameters.get('companyBlacklist', []) or []
         self.title_blacklist = parameters.get('titleBlacklist', []) or []
         self.poster_blacklist = parameters.get('posterBlacklist', []) or []
-        
+
         # Duplicate application prevention configuration
         self.avoid_duplicate_applications = parameters.get('avoidDuplicateApplications', True)
         self.applied_jobs_file = parameters.get('appliedJobsFile', 'applied_jobs.json')
         self.applied_jobs = set()  # Store applied job links
-        
+
         # Start from specific page configuration
         self.start_from_page = max(1, int(parameters.get('startFromPage', 1)))  # Minimum page 1
-        
+
         # Email verification configuration
         self.verify_email = parameters.get('verifyEmail', True)  # Enable email verification by default
-        
+
         # 少于X名申请者的筛选选项
         self.lessApplicantsEnabled = parameters.get('lessApplicantsEnabled', False)
         self.lessApplicantsCount = parameters.get('lessApplicantsCount', 100)
-        
+
         # New: Configurations for positions with application counts
         self.positions_with_count = parameters.get('positionsWithCount', []) or []
         self.applied_counts = {} # Tracks the number of applications for each position name
@@ -407,7 +407,7 @@ class LinkedinEasyApply:
         # Existing position and location configurations
         self.positions = parameters.get('positions', [])
         self.locations = parameters.get('locations', [])
-        
+
         self.residency = parameters.get('residentStatus', [])
         self.base_search_url = self.get_base_search_url(parameters)
         self.seen_jobs = []
@@ -460,14 +460,14 @@ class LinkedinEasyApply:
             eeo=self.eeo,  # 传递EEO信息
             debug=self.debug
         )
-        
+
         # Load applied job records
         if self.avoid_duplicate_applications:
             self.load_applied_jobs()
             print(f"Duplicate application prevention enabled, currently tracking {len(self.applied_jobs)} applied jobs")
         else:
             print("Duplicate application prevention disabled")
-        
+
         # Display start page configuration
         if self.start_from_page > 1:
             print(f"Configured to start from page {self.start_from_page}")
@@ -502,7 +502,7 @@ class LinkedinEasyApply:
         """Check if job has already been applied to"""
         if not self.avoid_duplicate_applications:
             return False
-        
+
         # Clean link, remove query parameters, keep only base link
         clean_link = job_link.split('?')[0] if job_link else ""
         return clean_link in self.applied_jobs
@@ -511,11 +511,122 @@ class LinkedinEasyApply:
         """Add applied job to records"""
         if not self.avoid_duplicate_applications or not job_link:
             return
-        
+
         # Clean link, remove query parameters, keep only base link
         clean_link = job_link.split('?')[0]
         self.applied_jobs.add(clean_link)
         self.save_applied_jobs()
+
+    def logout(self):
+        """Logs out from the current LinkedIn session."""
+        try:
+            print("Attempting to log out...")
+
+            # 1. Click the profile dropdown trigger
+            # Using a stable attribute instead of the random 'id'
+            profile_dropdown_trigger = WebDriverWait(self.browser, 10).until(
+                EC.element_to_be_clickable((By.CSS_SELECTOR, "[data-test-profile-dropdown-trigger]"))
+            )
+            profile_dropdown_trigger.click()
+            print("Profile dropdown clicked.")
+            time.sleep(random.uniform(1, 2))
+
+            # 2. Find and click the "Sign Out" button
+            # The footer contains multiple links. We need to be specific.
+            # The logout link's href specifically contains '/uas/logout'.
+            sign_out_button = WebDriverWait(self.browser, 10).until(
+                EC.element_to_be_clickable((By.CSS_SELECTOR, "a[data-test-profile-dropdown-footer-link][href*='/logout']"))
+            )
+            print("Found 'Sign Out' button using a more specific CSS selector.")
+            sign_out_button.click()
+
+            # 3. Wait for the logout to complete and redirect to a logged-out page
+            WebDriverWait(self.browser, 15).until(
+                EC.url_contains("linkedin.com/home")
+            )
+            print("Successfully logged out.")
+            return True
+
+        except Exception as e:
+            print(f"An error occurred during logout: {e}")
+            # If something fails, take a screenshot for debugging and print page source
+            try:
+                self.browser.save_screenshot("logout_error_screenshot.png")
+                with open("logout_error_page_source.html", "w", encoding="utf-8") as f:
+                    f.write(self.browser.page_source)
+                print("Saved screenshot and page source for debugging logout error.")
+            except:
+                pass
+            return False
+
+    def verify_logged_in_email(self):
+        """
+        验证当前登录的邮箱是否与配置文件中的邮箱匹配
+
+        Returns:
+            bool: True if emails match or verification is skipped, False otherwise
+        """
+        if not self.verify_email:
+            print("Email verification is disabled, skipping.")
+            return True
+
+        try:
+            print("Verifying logged-in email address...")
+
+            # Navigate to LinkedIn preferences page
+            self.browser.get("https://www.linkedin.com/mypreferences/d/categories/sign-in-and-security")
+
+            # Wait for the email sneak peek element to be present
+            email_element = WebDriverWait(self.browser, 15).until(
+                EC.presence_of_element_located((By.CSS_SELECTOR, "[data-test-category-item-sneakpeek]"))
+            )
+
+            logged_in_email = email_element.text.strip().lower()
+            expected_email = self.email.lower()
+
+            print(f"Current logged-in email: {logged_in_email}")
+            print(f"Expected email from config: {expected_email}")
+
+            if logged_in_email == expected_email:
+                print("✓ Email verification successful - correct account is logged in.")
+                return True
+            else:
+                print(f"✗ Email mismatch detected! Attempting to log out and log back in.")
+
+                # Logout from the incorrect account
+                if self.logout():
+                    # If logout is successful, proceed to log in with the correct account
+                    print("Proceeding to log in with the correct account...")
+                    self.load_login_page_and_login()
+                    # After successful login, re-verify the email to be sure
+                    return self.verify_logged_in_email_after_relogin()
+                else:
+                    print("Logout failed. Cannot proceed with login. Please check the account manually.")
+                    return False
+
+        except Exception as e:
+            print(f"Error during email verification: {e}")
+            print("Warning: Email verification failed, continuing with current session as a fallback.")
+            return True
+
+    def verify_logged_in_email_after_relogin(self):
+        """A simplified verification check after a re-login attempt."""
+        try:
+            print("Re-verifying email after login...")
+            self.browser.get("https://www.linkedin.com/mypreferences/d/categories/sign-in-and-security")
+            email_element = WebDriverWait(self.browser, 15).until(
+                EC.presence_of_element_located((By.CSS_SELECTOR, "[data-test-category-item-sneakpeek]"))
+            )
+            logged_in_email = email_element.text.strip().lower()
+            if logged_in_email == self.email.lower():
+                print("✓ Email re-verification successful.")
+                return True
+            else:
+                print("✗ Email mismatch persists even after re-login. Aborting.")
+                return False
+        except Exception as e:
+            print(f"Error during email re-verification: {e}")
+            return False
 
     def login(self):
         try:
@@ -526,7 +637,7 @@ class LinkedinEasyApply:
                 time.sleep(random.uniform(1, 2))
 
                 # Check if the current URL is the feed page
-                if self.browser.current_url != "https://www.linkedin.com/feed/":
+                if "linkedin.com/feed/" not in self.browser.current_url:
                     print("Feed page not loaded, proceeding to login.")
                     self.load_login_page_and_login()
                     # Verify email after fresh login if enabled
@@ -537,7 +648,10 @@ class LinkedinEasyApply:
                     # Verify email for existing session if enabled
                     if self.verify_email:
                         print("Verifying email for existing session...")
-                        self.verify_logged_in_email()
+                        if not self.verify_logged_in_email():
+                            # If verification fails and results in a logout/login flow,
+                            # the session is now corrected. We can proceed.
+                            print("Email verification flow completed. Continuing application process.")
             else:
                 print("No session found, proceeding to login.")
                 self.load_login_page_and_login()
@@ -559,108 +673,24 @@ class LinkedinEasyApply:
             time.sleep(random.uniform(5.5, 10.5))
 
     def load_login_page_and_login(self):
-        self.browser.get("https://www.linkedin.com/login")
+        self.browser.get("https://www.linkedin.com/checkpoint/lg/sign-in-another-account")
 
         # Wait for the username field to be present
         WebDriverWait(self.browser, 10).until(
             EC.presence_of_element_located((By.ID, "username"))
         )
+        print("Login page loaded.")
 
         self.browser.find_element(By.ID, "username").send_keys(self.email)
         self.browser.find_element(By.ID, "password").send_keys(self.password)
         self.browser.find_element(By.CSS_SELECTOR, ".btn__primary--large").click()
 
         # Wait for the feed page to load after login
-        WebDriverWait(self.browser, 10).until(
-            EC.url_contains("https://www.linkedin.com/feed/")
+        WebDriverWait(self.browser, 15).until(
+            EC.url_contains("linkedin.com/feed/")
         )
-
-        # time.sleep(random.uniform(5, 10))
-
-    def verify_logged_in_email(self):
-        """
-        验证当前登录的邮箱是否与配置文件中的邮箱匹配
+        print("Successfully logged in.")
         
-        Returns:
-            bool: True if emails match, False otherwise
-        """
-        try:
-            print("Verifying logged-in email address...")
-            
-            # Navigate to LinkedIn preferences page
-            self.browser.get("https://www.linkedin.com/mypreferences/d/categories/sign-in-and-security")
-            time.sleep(random.uniform(2, 3))
-            
-            # Wait for the page to load
-            WebDriverWait(self.browser, 10).until(
-                EC.presence_of_element_located((By.CSS_SELECTOR, "[data-test-category-item-sneakpeek]"))
-            )
-            
-            # Extract the current logged-in email
-            try:
-                email_element = self.browser.find_element(By.CSS_SELECTOR, "[data-test-category-item-sneakpeek]")
-                logged_in_email = email_element.text.strip()
-                
-                print(f"Current logged-in email: {logged_in_email}")
-                print(f"Expected email from config: {self.email}")
-                
-                # Compare emails (case insensitive)
-                if logged_in_email.lower() == self.email.lower():
-                    print("✓ Email verification successful - correct account is logged in")
-                    return True
-                else:
-                    print(f"✗ Email mismatch detected!")
-                    print(f"  Logged in as: {logged_in_email}")
-                    print(f"  Expected: {self.email}")
-                    print("Please switch to the correct LinkedIn account or update your configuration.")
-                    return False
-                    
-            except Exception as e:
-                print(f"Could not extract email from preferences page: {e}")
-                
-                # Try alternative method - look for aria-label
-                try:
-                    email_container = self.browser.find_element(By.CSS_SELECTOR, "[aria-label*='Your primary email address is']")
-                    aria_label = email_container.get_attribute("aria-label")
-                    
-                    # Extract email from aria-label text
-                    import re
-                    email_match = re.search(r'Your primary email address is (.+)', aria_label)
-                    if email_match:
-                        logged_in_email = email_match.group(1).strip()
-                        print(f"Current logged-in email (from aria-label): {logged_in_email}")
-                        
-                        if logged_in_email.lower() == self.email.lower():
-                            print("✓ Email verification successful - correct account is logged in")
-                            return True
-                        else:
-                            print(f"✗ Email mismatch detected!")
-                            print(f"  Logged in as: {logged_in_email}")
-                            print(f"  Expected: {self.email}")
-                            print("Please switch to the correct LinkedIn account or update your configuration.")
-                            return False
-                    else:
-                        print("Could not parse email from aria-label")
-                        
-                except Exception as e2:
-                    print(f"Alternative email extraction method also failed: {e2}")
-                
-                # If both methods fail, return True to continue (but log the issue)
-                print("Warning: Could not verify email address, continuing with current session...")
-                return True
-                
-        except Exception as e:
-            print(f"Error during email verification: {e}")
-            print("Warning: Email verification failed, continuing with current session...")
-            return True
-        finally:
-            # Return to feed page
-            try:
-                self.browser.get("https://www.linkedin.com/feed/")
-                time.sleep(random.uniform(1, 2))
-            except:
-                pass
-
     def start_applying(self):
         # New logic: Prioritize positions_with_count if available
         if self.positions_with_count:
