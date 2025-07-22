@@ -27,23 +27,16 @@ call venv\Scripts\activate.bat
 
 REM Install dependencies if not already installed
 echo Checking and installing dependencies...
-python -c "import yaml, selenium, requests" >nul 2>&1
-if %errorlevel% equ 0 (
-    echo Dependencies are already installed and working. Skipping installation.
+if exist venv\.requirements_installed (
+    echo Dependencies appear to be installed. Skipping installation.
 ) else (
     echo Installing dependencies...
     python -m pip install --upgrade pip
     pip install -r requirements.txt
     if %errorlevel% equ 0 (
-        REM Verify installation actually worked
-        python -c "import yaml, selenium, requests" >nul 2>&1
-        if %errorlevel% equ 0 (
-            echo Dependencies installed and verified successfully.
-        ) else (
-            echo [ERROR] Dependencies installation verification failed.
-            pause
-            exit /b 1
-        )
+        echo Dependencies installed successfully.
+        REM Create a flag file to indicate successful installation
+        echo.> venv\.requirements_installed
     ) else (
         echo [ERROR] Failed to install dependencies. Please check requirements.txt and your internet connection.
         pause

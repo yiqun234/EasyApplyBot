@@ -7,6 +7,7 @@ import os
 import glob
 import time
 import json
+import sys
 from datetime import datetime, timedelta
 from enum import Enum
 
@@ -892,7 +893,8 @@ class SchedulerGUI:
         self.log(f"Starting task: {task.user_id}")
         
         try:
-            command = ["python", "-u", self.MAIN_SCRIPT, "--config", task.config_path]
+            # Use sys.executable to ensure the correct Python interpreter is used
+            command = [sys.executable, "-u", self.MAIN_SCRIPT, "--config", task.config_path]
             task.process = subprocess.Popen(
                 command,
                 stdout=subprocess.PIPE,
