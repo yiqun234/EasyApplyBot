@@ -352,6 +352,7 @@ TEXTS = {
         'stop_bot': '停止',
         'edit_yaml': '编辑YAML',
         'edit_web_config': '修改配置',
+        'logout': '退出登录',
     },
     
     # 对话框文本
@@ -368,6 +369,9 @@ TEXTS = {
         'question': '问题:',
         'answer': '答案:',
         'modify_question_title': '修改自定义问答',
+        'logout_confirm_title': '确认退出',
+        'logout_confirm_message': '您确定要退出登录吗？',
+        'logout_error_title': '登出错误',
         'batch_add_lang_title': '批量添加语言',
         'batch_add_lang_format': '输入格式：每行一个语言，格式为 \'语言名称: 熟练度\'',
         'batch_add_lang_example': '例如：\'英语: Native or bilingual\'',

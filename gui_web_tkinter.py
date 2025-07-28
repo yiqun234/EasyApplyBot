@@ -541,11 +541,11 @@ class EasyApplyApp(tk.Tk):
         if self.login_progress_bar: # Check if progress bar exists
             self.login_progress_bar.stop()
         
-        if auth_result and auth_result.get('userId') and auth_result.get('apiKey'):
+        if auth_result and (auth_result.get('userId') or auth_result.get('user_id')) and (auth_result.get('apiKey') or auth_result.get('api_key')):
             # 认证成功
             self.auth_data = auth_result
             self.is_authenticated = True
-            self.user_id = auth_result.get('userId')
+            self.user_id = auth_result.get('userId') or auth_result.get('user_id')
             # 重新加载用户专属配置
             print(f"Loading config for user: {self.user_id}")
             self.config = load_config(self.user_id)
@@ -1720,6 +1720,7 @@ class EasyApplyApp(tk.Tk):
         self.start_button = ttk.Button(button_frame, text=self.texts['control_tab']['start_bot'], command=self._start_bot); self.start_button.pack(side=tk.LEFT, padx=5)
         self.stop_button = ttk.Button(button_frame, text=self.texts['control_tab']['stop_bot'], command=self._stop_bot, state='disabled'); self.stop_button.pack(side=tk.LEFT, padx=5)
         ttk.Button(button_frame, text=self.texts['control_tab']['edit_web_config'], command=self._open_web_config).pack(side=tk.LEFT, padx=5)
+        ttk.Button(button_frame, text=self.texts['control_tab']['logout'], command=self._logout).pack(side=tk.RIGHT, padx=5)
 
     def _clear_log(self):
         self.output_area.config(state='normal')
@@ -2059,7 +2060,143 @@ class EasyApplyApp(tk.Tk):
         self.save_button.config(state='normal')
         if hasattr(self, 'bot_process'):
             self.bot_process = None
+
+    def _logout(self):
+        """
+        Logs the user out, clears session data, and returns to the login screen.
+        """
+        if messagebox.askyesno(
+            self.texts['dialogs']['logout_confirm_title'], 
+            self.texts['dialogs']['logout_confirm_message']
+        ):
+            # Stop any running process
+            if hasattr(self, 'bot_process') and self.bot_process and self.bot_process.poll() is None:
+                self._stop_bot()
+
+            # Stop firebase listener if it exists
+            if hasattr(self, 'firebase_manager') and self.firebase_manager:
+                self.firebase_manager.stop_listening()
+
+            # Clear authentication file
+            auth_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'auth.json')
+            if os.path.exists(auth_file):
+                try:
+                    os.remove(auth_file)
+                except OSError as e:
+                    messagebox.showerror(
+                        self.texts['dialogs']['logout_error_title'], 
+                        f"{self.texts['dialogs']['logout_error_title']}: {e}"
+                    )
+                    return
+
+            # Reset internal state
+            self.user_id = None
+            self.is_authenticated = False
+            self.auth_data = None
+            
+            # Reset authentication server state
+            auth_server.reset_auth_state()
+            
+            # Logout from nuomi.ai website
+            self._close_browser_auth_page()
+            
+                        # Show the login screen again (it will clear all widgets)
+            self._show_login_screen()
+
+    def _close_browser_auth_page(self):
+        """从nuomi.ai网站退出登录"""
+        try:
+            # 启动一个临时的回调服务器来接收logout确认
+            import urllib.parse
+            
+            # 找到可用端口
+            callback_port = auth_server.find_available_port(start_port=5001, max_tries=10)
+            callback_url = f"http://localhost:{callback_port}/logout/callback"
+            
+            # 构建带有callback参数的logout URL
+            logout_url = f"https://account.nuomi.ai/logout?logoutCallback={urllib.parse.quote(callback_url)}"
+            
+            print(f"Opening logout URL: {logout_url}")
+            print(f"Logout callback will be received at: {callback_url}")
+            
+            # 启动临时回调服务器
+            self._start_logout_callback_server(callback_port)
+            
+            # 在浏览器中打开logout页面
+            webbrowser.open(logout_url)
+            
+        except Exception as e:
+            print(f"Failed to open logout page: {e}")
     
+    def _start_logout_callback_server(self, port):
+        """启动logout回调服务器"""
+        def run_logout_server():
+            from http.server import HTTPServer, BaseHTTPRequestHandler
+            
+            class LogoutCallbackHandler(BaseHTTPRequestHandler):
+                def do_GET(self):
+                    if self.path.startswith('/logout/callback'):
+                        # 发送成功响应
+                        self.send_response(200)
+                        self.send_header('Content-type', 'text/html; charset=utf-8')
+                        self.end_headers()
+                        
+                        # 返回一个简单的确认页面
+                        html_response = """
+                        <!DOCTYPE html>
+                        <html>
+                        <head>
+                            <title>退出登录成功</title>
+                            <meta charset="utf-8">
+                            <style>
+                                body { 
+                                    font-family: Arial, sans-serif; 
+                                    text-align: center; 
+                                    padding: 50px;
+                                    background-color: #f5f5f5;
+                                }
+                                .message { 
+                                    background: white; 
+                                    padding: 30px; 
+                                    border-radius: 10px; 
+                                    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+                                    display: inline-block;
+                                }
+                                .success { color: #28a745; }
+                            </style>
+                        </head>
+                        <body>
+                            <div class="message">
+                                <h2 class="success">✓ 退出登录成功</h2>
+                                <p>您已成功从网站退出登录</p>
+                                <p>可以关闭此页面了</p>
+                            </div>
+                        </body>
+                        </html>
+                        """
+                        self.wfile.write(html_response.encode('utf-8'))
+                        
+                        print(f"[Logout Server] Logout callback received from: {self.client_address}")
+                        
+                        # 延迟关闭服务器
+                        threading.Timer(2.0, lambda: self.server.shutdown()).start()
+                
+                def log_message(self, format, *args):
+                    # 禁用默认的日志输出
+                    pass
+            
+            try:
+                server = HTTPServer(('localhost', port), LogoutCallbackHandler)
+                print(f"[Logout Server] Logout callback server started at http://localhost:{port}")
+                server.serve_forever()
+                print(f"[Logout Server] Logout callback server stopped")
+            except Exception as e:
+                print(f"[Logout Server] Error: {e}")
+        
+        # 在后台线程中运行logout服务器
+        logout_thread = threading.Thread(target=run_logout_server, daemon=True)
+        logout_thread.start()
+
     def _stop_bot(self):
         """停止运行中的机器人进程"""
         if hasattr(self, 'bot_process') and self.bot_process and self.bot_process.poll() is None:

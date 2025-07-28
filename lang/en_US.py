@@ -347,6 +347,7 @@ TEXTS = {
         'stop_bot': 'Stop',
         'edit_yaml': 'Edit YAML',
         'edit_web_config': 'Modify Config',
+        'logout': 'Logout',
     },
     
     # Dialog texts
@@ -363,6 +364,9 @@ TEXTS = {
         'question': 'Question:',
         'answer': 'Answer:',
         'modify_question_title': 'Modify Custom Q&A',
+        'logout_confirm_title': 'Confirm Logout',
+        'logout_confirm_message': 'Are you sure you want to log out?',
+        'logout_error_title': 'Logout Error',
         'batch_add_lang_title': 'Batch Add Languages',
         'batch_add_lang_format': 'Input Format: One language per line, format as \'Language Name: Proficiency\'',
         'batch_add_lang_example': 'Example: \'English: Native or bilingual\'',
