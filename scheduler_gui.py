@@ -11,6 +11,8 @@ import sys
 from datetime import datetime, timedelta
 from enum import Enum
 import traceback
+import firebase_manager
+import yaml
 
 # 语言配置
 LANGUAGES = {
@@ -198,6 +200,9 @@ class SchedulerGUI:
         self.worker_thread = None
         self.last_task_finish_time = None
         
+        # Firebase 监听器管理
+        self.firebase_managers = {}  # user_id -> firebase_manager instance
+        
         # 调度配置
         self.schedule_type = ScheduleType.INTERVAL
         self.schedule_interval = 2  # hours
@@ -205,8 +210,12 @@ class SchedulerGUI:
         
         self.setup_ui()
         self.load_user_configs()
+        self.setup_firebase_listeners()  # 为所有用户设置Firebase监听器
         self.update_ui_timer()
         self.process_log_queue()  # Start the log processing loop
+        
+        # 设置窗口关闭事件处理
+        self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
     
     def process_log_queue(self):
         """Process the log queue to update the GUI safely from other threads."""
@@ -221,6 +230,75 @@ class SchedulerGUI:
             pass
         finally:
             self.root.after(100, self.process_log_queue)
+    
+    def setup_firebase_listeners(self):
+        """为所有用户设置Firebase配置监听器"""
+        try:
+            for user_id, user_task in self.user_tasks.items():
+                if user_id not in self.firebase_managers:
+                    self.log(f"🔥 Setting up Firebase listener for user: {user_id[:8]}...")
+                    
+                    # 创建Firebase管理器
+                    firebase_mgr = firebase_manager.FirebaseManager(
+                        user_id=user_id,
+                        update_callback=lambda config, uid=user_id: self._on_user_config_update(uid, config),
+                        initial_sync_done_callback=lambda uid=user_id: self._on_user_sync_done(uid)
+                    )
+                    
+                    # 启动监听
+                    firebase_mgr.initial_sync_and_listen()
+                    self.firebase_managers[user_id] = firebase_mgr
+                    
+        except Exception as e:
+            self.log(f"❌ Failed to setup Firebase listeners: {str(e)}")
+    
+    def _on_user_config_update(self, user_id, firebase_config):
+        """处理用户配置更新回调"""
+        def update_in_main_thread():
+            try:
+                self.log(f"📥 Config update received for user: {user_id[:8]}...")
+                
+                # 更新本地配置文件
+                if user_id in self.user_tasks:
+                    config_path = self.user_tasks[user_id].config_path
+                    
+                    # 读取现有配置
+                    import yaml
+                    try:
+                        with open(config_path, 'r', encoding='utf-8') as f:
+                            local_config = yaml.safe_load(f) or {}
+                    except:
+                        local_config = {}
+                    
+                    # 合并Firebase配置
+                    local_config.update(firebase_config)
+                    
+                    # 保存更新后的配置
+                    with open(config_path, 'w', encoding='utf-8') as f:
+                        yaml.dump(local_config, f, default_flow_style=False, allow_unicode=True)
+                    
+                    self.log(f"✅ Config updated for user: {user_id[:8]}")
+                    
+            except Exception as e:
+                self.log(f"❌ Failed to update config for user {user_id[:8]}: {str(e)}")
+        
+        # 在主线程中执行更新
+        self.root.after(0, update_in_main_thread)
+    
+    def _on_user_sync_done(self, user_id):
+        """处理用户同步完成回调"""
+        self.root.after(0, lambda: self.log(f"🔄 Firebase sync completed for user: {user_id[:8]}"))
+    
+    def cleanup_firebase_listeners(self):
+        """清理所有Firebase监听器"""
+        for user_id, firebase_mgr in self.firebase_managers.items():
+            try:
+                firebase_mgr.stop_listening()
+                self.log(f"🔥 Stopped Firebase listener for user: {user_id[:8]}")
+            except Exception as e:
+                self.log(f"❌ Error stopping Firebase listener for {user_id[:8]}: {str(e)}")
+        
+        self.firebase_managers.clear()
             
     def setup_ui(self):
         # Main frame
@@ -486,8 +564,20 @@ class SchedulerGUI:
                 to_remove.append(user_id)
         
         for user_id in to_remove:
+            # 清理Firebase监听器
+            if user_id in self.firebase_managers:
+                try:
+                    self.firebase_managers[user_id].stop_listening()
+                    del self.firebase_managers[user_id]
+                    self.log(f"🔥 Stopped Firebase listener for removed user: {user_id[:8]}")
+                except Exception as e:
+                    self.log(f"❌ Error stopping Firebase listener for {user_id[:8]}: {str(e)}")
+            
             del self.user_tasks[user_id]
             self.log(f"Removed user: {user_id} (config file not found)")
+        
+        # 为新用户设置Firebase监听器
+        self.setup_firebase_listeners()
         
         self.update_tasks_display()
         self.update_queue_display()
@@ -1283,6 +1373,23 @@ class SchedulerGUI:
         if isinstance(status, TaskStatus):
             return self.texts['task_status'][status.value]
         return status
+    
+    def on_closing(self):
+        """处理窗口关闭事件"""
+        try:
+            # 停止调度器
+            if self.running:
+                self.stop_scheduler()
+            
+            # 清理Firebase监听器
+            self.cleanup_firebase_listeners()
+            
+            self.log("📱 Scheduler GUI shutting down...")
+            
+        except Exception as e:
+            print(f"Error during shutdown: {e}")
+        finally:
+            self.root.destroy()
 
 if __name__ == "__main__":
     root = tk.Tk()
