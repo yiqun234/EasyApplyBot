@@ -387,8 +387,9 @@ class LinkedinEasyApply:
 
         # Duplicate application prevention configuration
         self.avoid_duplicate_applications = parameters.get('avoidDuplicateApplications', True)
+        self.reapply_days = parameters.get('reapplyDays', 30)  # 多少天后可以重新投递
         self.applied_jobs_file = parameters.get('appliedJobsFile', 'applied_jobs.json')
-        self.applied_jobs = set()  # Store applied job links
+        self.applied_jobs = {}  # Store applied job records with dates
 
         # Start from specific page configuration
         self.start_from_page = max(1, int(parameters.get('startFromPage', 1)))  # Minimum page 1
@@ -479,21 +480,35 @@ class LinkedinEasyApply:
         try:
             if os.path.exists(self.applied_jobs_file):
                 with open(self.applied_jobs_file, 'r', encoding='utf-8') as f:
-                    applied_list = json.load(f)
-                    self.applied_jobs = set(applied_list)
+                    applied_data = json.load(f)
+                
+                # old to new
+                if applied_data and isinstance(applied_data[0], str):
+                    from datetime import datetime
+                    current_time = datetime.now().isoformat()
+                    self.applied_jobs = {url: current_time for url in applied_data}
+                    self.save_applied_jobs()
+                else:
+                    self.applied_jobs = {item['url']: item['applied_date'] for item in applied_data}
+                
                 print(f"Successfully loaded {len(self.applied_jobs)} applied job records")
             else:
                 print("Applied jobs record file not found, creating new record")
-                self.applied_jobs = set()
+                self.applied_jobs = {}
         except Exception as e:
             print(f"Failed to load applied job records: {e}")
-            self.applied_jobs = set()
+            self.applied_jobs = {}
 
     def save_applied_jobs(self):
         """Save applied job records"""
         try:
+            # 转换为新格式：包含URL和日期的对象列表
+            applied_list = [
+                {"url": url, "applied_date": date} 
+                for url, date in self.applied_jobs.items()
+            ]
             with open(self.applied_jobs_file, 'w', encoding='utf-8') as f:
-                json.dump(list(self.applied_jobs), f, ensure_ascii=False, indent=2)
+                json.dump(applied_list, f, ensure_ascii=False, indent=2)
             print(f"Saved {len(self.applied_jobs)} applied job records")
         except Exception as e:
             print(f"Failed to save applied job records: {e}")
@@ -505,7 +520,26 @@ class LinkedinEasyApply:
 
         # Clean link, remove query parameters, keep only base link
         clean_link = job_link.split('?')[0] if job_link else ""
-        return clean_link in self.applied_jobs
+        
+        if clean_link not in self.applied_jobs:
+            return False
+        
+        try:
+            from datetime import datetime, timedelta
+            applied_date_str = self.applied_jobs[clean_link]
+            applied_date = datetime.fromisoformat(applied_date_str.replace('Z', '+00:00'))
+            current_date = datetime.now()
+            
+            days_passed = (current_date - applied_date).days
+            if days_passed >= self.reapply_days:
+                print(f"Job {clean_link} was applied {days_passed} days ago, allowing reapplication (threshold: {self.reapply_days} days)")
+                return False
+            else:
+                print(f"Job {clean_link} was applied {days_passed} days ago, skipping (threshold: {self.reapply_days} days)")
+                return True
+        except Exception as e:
+            print(f"Error checking application date for {clean_link}: {e}")
+            return True
 
     def add_applied_job(self, job_link):
         """Add applied job to records"""
@@ -514,7 +548,9 @@ class LinkedinEasyApply:
 
         # Clean link, remove query parameters, keep only base link
         clean_link = job_link.split('?')[0]
-        self.applied_jobs.add(clean_link)
+        from datetime import datetime
+        current_time = datetime.now().isoformat()
+        self.applied_jobs[clean_link] = current_time
         self.save_applied_jobs()
 
     def logout(self):

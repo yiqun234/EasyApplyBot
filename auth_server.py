@@ -17,6 +17,14 @@ auth_data = None
 auth_complete = threading.Event()
 server_running = threading.Event()
 
+def reset_auth_state():
+    """Reset authentication state for clean restart"""
+    global auth_data, auth_complete, server_running
+    auth_data = None
+    auth_complete.clear()
+    server_running.clear()
+    print("[Auth Server] Authentication state reset")
+
 class AuthHTTPRequestHandler(BaseHTTPRequestHandler):
     """HTTP handler for processing authentication callback requests"""
     

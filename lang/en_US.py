@@ -87,6 +87,8 @@ TEXTS = {
         # Application Settings
         'application_config': 'Application Settings',
         'avoid_duplicate': 'Enable duplicate application prevention (avoid applying to already applied jobs)',
+        'reapply_interval': 'Interval',
+        'reapply_days_after': 'days before allowing reapplication',
         'start_page': 'Start Page:',
         'start_page_note': '(Which page to start from, default starts from page 1)',
     },

@@ -179,6 +179,7 @@ DEFAULT_CONFIG = {
     'useCloudAI': True,  # 是否使用云服务API，默认为True
     'language': DEFAULT_LANGUAGE,  # 添加语言设置，默认为中文
     'avoidDuplicateApplications': True,  # 防重复申请功能
+    'reapplyDays': 30,  # 多少天后可以重新投递
     'appliedJobsFile': 'applied_jobs.json',  # 已申请职位记录文件，将根据用户ID自动调整
 }
 
@@ -683,6 +684,7 @@ class EasyApplyApp(tk.Tk):
             'photo_path': tk.StringVar(value=self.config.get('uploads', {}).get('photo', '')),
             # Application Settings
             'avoidDuplicateApplications': tk.BooleanVar(value=self.config.get('avoidDuplicateApplications', True)),
+            'reapplyDays': tk.IntVar(value=self.config.get('reapplyDays', 30)),
             'startFromPage': tk.IntVar(value=self.config.get('startFromPage', 1)),
             # Job
             'positions': tk.StringVar(value=safe_join_list(self.config.get('positions', []))),
@@ -844,8 +846,17 @@ class EasyApplyApp(tk.Tk):
         
         # 防重复投递功能
         config_row = 0
-        ttk.Checkbutton(app_config_frame, text=self.texts['basic_tab']['avoid_duplicate'], 
-                       variable=self.vars['avoidDuplicateApplications']).grid(row=config_row, column=0, columnspan=2, sticky=tk.W, padx=5, pady=3)
+        avoid_duplicate_frame = ttk.Frame(app_config_frame)
+        avoid_duplicate_frame.grid(row=config_row, column=0, columnspan=2, sticky=tk.W, padx=5, pady=3)
+        
+        ttk.Checkbutton(avoid_duplicate_frame, text=self.texts['basic_tab']['avoid_duplicate'], 
+                       variable=self.vars['avoidDuplicateApplications']).pack(side=tk.LEFT)
+        
+        ttk.Label(avoid_duplicate_frame, text="   " + self.texts['basic_tab']['reapply_interval']).pack(side=tk.LEFT, padx=(10, 2))
+        reapply_spinbox = tk.Spinbox(avoid_duplicate_frame, from_=1, to=365, width=5,
+                                     textvariable=self.vars['reapplyDays'])
+        reapply_spinbox.pack(side=tk.LEFT)
+        ttk.Label(avoid_duplicate_frame, text=self.texts['basic_tab']['reapply_days_after']).pack(side=tk.LEFT, padx=(2, 0))
         config_row+=1
         
         # 起始页面配置
@@ -1769,6 +1780,7 @@ class EasyApplyApp(tk.Tk):
             self.config['uploads']['coverLetter'] = self.vars['coverletter_path'].get(); self.config['uploads']['photo'] = self.vars['photo_path'].get()
             # Application Settings
             self.config['avoidDuplicateApplications'] = self.vars['avoidDuplicateApplications'].get()
+            self.config['reapplyDays'] = max(1, self.vars['reapplyDays'].get())  # Ensure minimum of 1 day
             self.config['startFromPage'] = max(1, self.vars['startFromPage'].get())  # Ensure minimum of 1
             
             # Job Tab - Update for new structure
@@ -1905,6 +1917,7 @@ class EasyApplyApp(tk.Tk):
             
             # 4. 保存投递配置
             config_from_file['avoidDuplicateApplications'] = self.vars.get('avoidDuplicateApplications', tk.BooleanVar()).get()
+            config_from_file['reapplyDays'] = max(1, self.vars.get('reapplyDays', tk.IntVar(value=30)).get())
             config_from_file['startFromPage'] = max(1, self.vars.get('startFromPage', tk.IntVar(value=1)).get())
 
             # 5. 将更新后的配置对象保存回文件

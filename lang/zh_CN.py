@@ -87,6 +87,8 @@ TEXTS = {
         # Application Settings
         'application_config': '投递配置',
         'avoid_duplicate': '启用防重复投递功能 (避免投递已申请过的职位)',
+        'reapply_interval': '间隔',
+        'reapply_days_after': '天后可重复投递',
         'start_page': '起始页面:',
         'start_page_note': '(从第几页开始搜索投递，默认从第1页开始)',
     },
