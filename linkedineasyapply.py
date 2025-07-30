@@ -1117,6 +1117,11 @@ class LinkedinEasyApply:
                         else:
                             print(f"An application for '{job_title}' at {company} has been submitted earlier or was not EasyApply.")
                     except Exception as e_apply:
+                        # Check if it's a daily limit error
+                        if "Daily Easy Apply limit reached" in str(e_apply):
+                            print("🛑 Daily limit reached - stopping application process")
+                            raise Exception("Daily limit reached - stopping application process")
+                        
                         temp = self.file_name
                         self.file_name = "failed"
                         print(f"Failed to apply to job: '{job_title}'. Link: {link}. Error: {e_apply}")
@@ -1137,6 +1142,13 @@ class LinkedinEasyApply:
                             f"Unable to save the job information in the file for '{job_title}'. Error: {e_write}")
                         # traceback.print_exc() # Already printed by the application failure usually
                 except Exception as e_outer_job_loop:
+                    # Check if it's a daily limit error that should stop the entire process
+                    if "Daily limit reached - stopping application process" in str(e_outer_job_loop):
+                        print("🔄 The program stopped gracefully: The LinkedIn daily application limit has been reached")
+                        print(f"Page processing complete - Processed: {jobs_processed}, Applied: {jobs_applied}, Skipped: {jobs_skipped}, Newly seen: {newly_seen}")
+
+                        return jobs_processed, jobs_applied, jobs_skipped
+                    
                     print(f"Outer loop error for job '{job_title}': {e_outer_job_loop}")
                     traceback.print_exc()
                     # pass # Original was pass, consider if seen_jobs needs update here
@@ -1191,6 +1203,32 @@ class LinkedinEasyApply:
 
         print("Starting the job application...")
         easy_apply_button.click()
+        
+        # Check for daily application limit after clicking
+        time.sleep(random.uniform(2, 3)) if not self.FastMode else time.sleep(random.uniform(1, 2))
+        
+        # Check if we've reached the daily Easy Apply limit
+        daily_limit_messages = [
+            "you've reached today's easy apply limit",
+            "reached today's easy apply limit",
+            "easy apply limit for today",
+            "continue applying tomorrow",
+            "daily submissions to help ensure",
+            "您已达到今天的快速申请限额",
+            "今日快速申请限额",
+            "明天继续申请"
+        ]
+        
+        if any(msg in self.browser.page_source.lower() for msg in daily_limit_messages):
+            print("❌ you've reached today's easy apply limit")
+            # Try to close any modal dialogs
+            try:
+                self.browser.find_element(By.CLASS_NAME, 'artdeco-modal__dismiss').click()
+                time.sleep(1)
+            except:
+                pass
+
+            raise Exception("Daily Easy Apply limit reached")
 
         button_text = ""
         submit_application_text = 'submit application'
