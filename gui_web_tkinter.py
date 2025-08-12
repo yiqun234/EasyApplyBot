@@ -264,6 +264,9 @@ def load_config(user_id=None):
             final_config['appliedJobsFile'] = f"applied_jobs_{user_id}.json"
         else:
             final_config['appliedJobsFile'] = "applied_jobs.json"
+        
+        # 确保语言设置始终来自全局配置，不被用户配置覆盖
+        final_config['language'] = load_global_language_setting()
 
         return final_config
     except yaml.YAMLError as exc:
@@ -289,6 +292,9 @@ def save_config(config, user_id=None):
         # Set user-specific applied jobs file path
         if user_id and user_id != "default":
             config_to_save['appliedJobsFile'] = f"applied_jobs_{user_id}.json"
+            # 用户配置不保存语言设置，语言设置只保存在主config.yaml
+            if 'language' in config_to_save:
+                del config_to_save['language']
         else:
             config_to_save['appliedJobsFile'] = "applied_jobs.json"
 
@@ -314,6 +320,37 @@ def save_config_to_yaml(config_data):
         yaml.dump(config_data, file, default_flow_style=False, sort_keys=False, allow_unicode=True)
     return True
 
+def load_global_language_setting():
+    """从主config.yaml加载全局语言设置"""
+    try:
+        if os.path.exists('config.yaml'):
+            with open('config.yaml', 'r', encoding='utf-8') as f:
+                config = yaml.safe_load(f) or {}
+                return config.get('language', DEFAULT_LANGUAGE)
+    except Exception as e:
+        print(f"Error loading global language setting: {e}")
+    return DEFAULT_LANGUAGE
+
+def save_global_language_setting(language):
+    """保存全局语言设置到主config.yaml"""
+    try:
+        # 读取当前主配置
+        config = {}
+        if os.path.exists('config.yaml'):
+            with open('config.yaml', 'r', encoding='utf-8') as f:
+                config = yaml.safe_load(f) or {}
+        
+        # 更新语言设置
+        config['language'] = language
+        
+        # 保存回主配置
+        with open('config.yaml', 'w', encoding='utf-8') as f:
+            yaml.dump(config, f, default_flow_style=False, allow_unicode=True)
+            
+        print(f"Global language setting saved: {language}")
+    except Exception as e:
+        print(f"Error saving global language setting: {e}")
+
 # --- Helper Functions ---
 def parse_list_from_textarea(text_content):
     return [line.strip() for line in text_content.strip().split('\n') if line.strip()]
@@ -326,9 +363,12 @@ class EasyApplyApp(tk.Tk):
         super().__init__()
         self.user_id = None
         self.EEO_OPTIONS = EEO_OPTIONS
-        self.config = load_config() 
-        self.lang_code = self.config.get('language', DEFAULT_LANGUAGE)
+        
+        # 先加载全局语言设置，确保界面创建前有正确的语言包
+        self.lang_code = load_global_language_setting()
         self.texts = load_language(self.lang_code)
+        
+        self.config = None
 
         self.title(self.texts['common']['app_title'])
         self.geometry("900x800") # Default size for main app
@@ -1904,7 +1944,7 @@ class EasyApplyApp(tk.Tk):
         """仅将基础标签页中的文件路径保存到 config.yaml，并保留所有其他设置。"""
         try:
             # 1. 从文件加载最新的配置，以避免覆盖其他设置
-            config_from_file = load_config()
+            config_from_file = load_config(self.user_id)
 
             # 2. 确保 'uploads' 字典存在
             if 'uploads' not in config_from_file or not isinstance(config_from_file['uploads'], dict):
@@ -2260,10 +2300,11 @@ class EasyApplyApp(tk.Tk):
                 self.texts['common']['confirm'], 
                 self.texts['messages']['switch_language']
             ):
-                # 保存当前配置
-                # self._update_config_from_gui()
+                # 保存全局语言设置到主配置文件
+                save_global_language_setting(selected)
+                
+                # 也更新内存中的配置（但不保存到用户配置文件）
                 self.config['language'] = selected
-                self._save_config(self.config)
                 
                 # 更新EEO下拉框的语言（在重启前）
                 old_lang_code = self.lang_code
@@ -4611,8 +4652,13 @@ class EasyApplyApp(tk.Tk):
             # 1. Decode keys from Firebase to handle special characters
             decoded_config = decode_keys(firebase_config)
             
+            # 1.5. 排除语言设置，保护全局语言配置不被Firebase覆盖
+            if 'language' in decoded_config:
+                del decoded_config['language']
+                self._log_message("🛡️ Protected global language setting from Firebase sync")
+
             # 2. Load the current local configuration to ensure no data is lost
-            local_config = load_config()
+            local_config = load_config(self.user_id)
 
             # 3. Perform a deep update, merging cloud changes into local config
             updated_config = deep_update(local_config, decoded_config)
