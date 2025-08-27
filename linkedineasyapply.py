@@ -1373,6 +1373,74 @@ class LinkedinEasyApply:
         else:
             return 'no'
 
+    def _extract_question_text(self, question_element, default_text: str = ""):
+        """Extract a robust question text for a form element.
+
+        This method tries multiple fallbacks to get the visible question text:
+        1) The element's own <label>
+        2) Any span under .fb-dash-form-element__label
+        3) The nearest preceding group title/subtitle:
+           .jobs-easy-apply-form-section__group-title and
+           .jobs-easy-apply-form-section__group-subtitle
+        The collected pieces are concatenated and normalized to lowercase.
+        """
+        pieces = []
+        try:
+            if isinstance(default_text, str) and default_text.strip():
+                pieces.append(default_text.strip())
+
+            # 1) Own label
+            try:
+                label_el = question_element.find_element(By.TAG_NAME, 'label')
+                label_txt = label_el.text.strip()
+                if label_txt:
+                    pieces.append(label_txt)
+            except Exception:
+                pass
+
+            # 2) fb-dash-form-element__label span
+            try:
+                span_els = question_element.find_elements(
+                    By.XPATH,
+                    './/*[contains(@class, "fb-dash-form-element__label")]//span'
+                )
+                if span_els:
+                    span_txt = span_els[0].text.strip()
+                    if span_txt:
+                        pieces.append(span_txt)
+            except Exception:
+                pass
+
+            # 3) Nearest preceding group title/subtitle
+            try:
+                # title
+                title_nodes = question_element.find_elements(
+                    By.XPATH,
+                    'preceding::span[contains(@class, "jobs-easy-apply-form-section__group-title")][1]'
+                )
+                if title_nodes:
+                    title_txt = title_nodes[0].text.strip()
+                    if title_txt:
+                        # put title at the beginning
+                        pieces.insert(0, title_txt)
+
+                # subtitle
+                subtitle_nodes = question_element.find_elements(
+                    By.XPATH,
+                    'preceding::span[contains(@class, "jobs-easy-apply-form-section__group-subtitle")][1]'
+                )
+                if subtitle_nodes:
+                    subtitle_txt = subtitle_nodes[0].text.strip()
+                    if subtitle_txt:
+                        pieces.append(subtitle_txt)
+            except Exception:
+                pass
+
+            combined = ' '.join([p for p in pieces if p]).strip()
+            return combined.lower() if combined else (default_text or '').strip().lower()
+        except Exception:
+            return (default_text or '').strip().lower()
+
     # 主要代码
     def additional_questions(self, form):
         questions = form.find_elements(By.CLASS_NAME, 'fb-dash-form-element')
@@ -1382,7 +1450,7 @@ class LinkedinEasyApply:
                 try:
                     radio_fieldset = question.find_element(By.TAG_NAME, 'fieldset')
                     question_span = radio_fieldset.find_element(By.CLASS_NAME, 'fb-dash-form-element__label').find_elements(By.TAG_NAME, 'span')[0]
-                    radio_text = question_span.text.lower()
+                    radio_text = self._extract_question_text(question, default_text=question_span.text)
                     print(f"Radio question text: {radio_text}")
 
                     # First check whether it matches the custom question
@@ -1617,7 +1685,7 @@ class LinkedinEasyApply:
 
                 # Questions check
                 try:
-                    question_text = question.find_element(By.TAG_NAME, 'label').text.lower()
+                    question_text = self._extract_question_text(question)
                     print(question_text)
 
                     # First check whether it matches the custom question
@@ -1743,7 +1811,7 @@ class LinkedinEasyApply:
 
                 # Dropdown check
                 try:
-                    question_text = question.find_element(By.TAG_NAME, 'label').text.lower()
+                    question_text = self._extract_question_text(question)
                     print(f"Dropdown question text: {question_text}")
                     
                     # First check whether it matches the custom question
@@ -2111,6 +2179,7 @@ class LinkedinEasyApply:
                 elif 'education' in label and len(self.education) > 0:
                     self.education_fun(form)
                 else:
+                    self.send_resume()
                     self.additional_questions(form)
             except Exception as e:
                 print("An exception occurred while filling up the form: no label, pass")
@@ -2294,7 +2363,11 @@ class LinkedinEasyApply:
                         elif 'required' in upload_type.text.lower():
                             upload_button.send_keys(self.resume_dir)
                     elif  'upload' == upload_type.text.lower(): # photo is Upload
-                        if self.photo_dir != '':
+                        # if is pdf
+                        p_tag = upload_type.find_element(By.XPATH, "following-sibling::p")
+                        if 'pdf' in p_tag.text.lower():
+                            upload_button.send_keys(self.resume_dir)
+                        elif self.photo_dir != '':
                             upload_button.send_keys(self.photo_dir)
                         elif 'required' in upload_type.text.lower():
                             upload_button.send_keys(self.resume_dir)
