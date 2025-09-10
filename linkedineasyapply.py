@@ -728,141 +728,174 @@ class LinkedinEasyApply:
         print("Successfully logged in.")
         
     def start_applying(self):
-        # New logic: Prioritize positions_with_count if available
-        if self.positions_with_count:
-            print("Detected 'positionsWithCount' configuration. Engaging new application logic...")
+        try:
+            # New logic: Prioritize positions_with_count if available
+            if self.positions_with_count:
+                print("Detected 'positionsWithCount' configuration. Engaging new application logic...")
             page_sleep = 0
             minimum_time = 60 * 2  # Minimum time bot should run before taking a break
             minimum_page_time = time.time() + minimum_time
 
             for position_config in self.positions_with_count:
-                position_name = position_config['name']
-                max_applications = position_config['count']
-                
-                current_applied_for_this_pos = self.applied_counts.get(position_name, 0)
-                if current_applied_for_this_pos >= max_applications:
-                    print(f"Position '{position_name}' has reached its application limit ({current_applied_for_this_pos}/{max_applications}). Skipping.")
-                    continue
-
-                print(f"Processing position: '{position_name}' (Applied: {current_applied_for_this_pos}, Limit: {max_applications})")
-
-                if not self.locations:
-                    print(f"Warning: Global locations list is empty. Cannot search for position '{position_name}'.")
-                    continue
-                
-                shuffled_locations = random.sample(self.locations, len(self.locations))
-                for location in shuffled_locations:
-                    current_applied_for_this_pos = self.applied_counts.get(position_name, 0) # Re-check count before processing a new location
+                try:
+                    position_name = position_config['name']
+                    max_applications = position_config['count']
+                    
+                    current_applied_for_this_pos = self.applied_counts.get(position_name, 0)
                     if current_applied_for_this_pos >= max_applications:
-                        print(f"Position '{position_name}' reached limit before processing location '{location}'. Stopping search for this position.")
-                        break  # Break from location loop, move to next position_config
+                        print(f"Position '{position_name}' has reached its application limit ({current_applied_for_this_pos}/{max_applications}). Skipping.")
+                        continue
 
+                    print(f"Processing position: '{position_name}' (Applied: {current_applied_for_this_pos}, Limit: {max_applications})")
+
+                    if not self.locations:
+                        print(f"Warning: Global locations list is empty. Cannot search for position '{position_name}'.")
+                        continue
+                    
+                    shuffled_locations = random.sample(self.locations, len(self.locations))
+                    for location in shuffled_locations:
+                        current_applied_for_this_pos = self.applied_counts.get(position_name, 0) # Re-check count before processing a new location
+                        if current_applied_for_this_pos >= max_applications:
+                            print(f"Position '{position_name}' reached limit before processing location '{location}'. Stopping search for this position.")
+                            break  # Break from location loop, move to next position_config
+
+                        location_url = "&location=" + location + "&geoId=" + self.click_location_url(location)
+                        job_page_number = self.start_from_page - 2  # Will be incremented to start_from_page - 2 in loop
+                        print(f"Searching for position '{position_name}' in '{location}' starting from page {self.start_from_page}.")
+
+                        try:
+                            while True:
+                                current_applied_for_this_pos = self.applied_counts.get(position_name, 0) # Re-check count before fetching new page
+                                if current_applied_for_this_pos >= max_applications:
+                                    print(f"Position '{position_name}' reached limit ({current_applied_for_this_pos}/{max_applications}) before fetching new page in '{location}'. Stopping.")
+                                    break # Break from while loop (pages) for current location
+
+                                page_sleep += 1
+                                job_page_number += 1
+                                print(f"Position '{position_name}' @ '{location}': Going to job page {job_page_number}")
+                                self.next_job_page(position_name, location_url, job_page_number)
+                                time.sleep(random.uniform(1, 2)) if not self.FastMode else time.sleep(random.uniform(0.5, 1))
+                                print("Starting the application process for this page...")
+                                # Pass current_position_config to apply_jobs for targeted application and counting
+                                self.apply_jobs(location, current_position_config=position_config) 
+                                print("Job applications on this page have been processed.")
+
+                                # Time control logic (similar to existing logic)
+                                time_left = minimum_page_time - time.time()
+                                if time_left > 0:
+                                    print(f"Sleeping for {time_left:.2f} seconds.")
+                                    time.sleep(time_left)
+                                    minimum_page_time = time.time() + minimum_time
+                                if page_sleep % 5 == 0:
+                                    sleep_time = random.randint(5, 10)
+                                    print(f"Taking a short break for {sleep_time} seconds.")
+                                    time.sleep(sleep_time)
+                                    page_sleep +=1 # To avoid immediate re-trigger if loop is very fast
+                        except Exception as e:
+                            # Check if it's a daily limit error that should stop everything
+                            if "Daily limit reached - stopping application process" in str(e):
+                                print("🛑 Daily limit reached - stopping all application processes")
+                                raise e  # Re-raise to stop the entire application process
+                            
+                            # These are expected exceptions that indicate we should move to next location
+                            expected_exceptions = [
+                                "No more jobs on this page.",
+                                "Nothing to do here, moving forward...",
+                                "Job list UI elements not found, cannot proceed with this page."
+                            ]
+                            
+                            if not any(expected_msg in str(e) for expected_msg in expected_exceptions):
+                                print(f"Error processing position '{position_name}' in '{location}': {e}")
+                                traceback.print_exc()
+                            else: # Expected exceptions for end of job list or similar
+                                 print(f"Position '{position_name}' @ '{location}': {str(e)}. Ending search for this location.")
+                            # Any exception (including no more jobs) breaks the while True loop for the current location
+                        
+                        # After a location is fully processed (or an error occurred), check count again.
+                        if self.applied_counts.get(position_name, 0) >= max_applications:
+                            print(f"Position '{position_name}' reached application limit after processing location '{location}'.")
+                            break # Break from location loop for this position_name
+                        
+                except Exception as e:
+                    # Check if it's a daily limit error that should stop everything
+                    if "Daily limit reached - stopping application process" in str(e):
+                        print("🛑 Daily limit reached - stopping all application processes")
+                        raise e  # Re-raise to stop the entire application process
+                    else:
+                        print(f"Error processing position '{position_name}': {e}")
+                        traceback.print_exc()
+                        # Continue to next position instead of stopping everything
+            
+                print("All 'positionsWithCount' configurations have been processed.")
+                return # New logic finished, return to prevent old logic execution
+
+            # --- Existing logic starts below --- 
+            # This part will only execute if self.positions_with_count is empty.
+            print("'positionsWithCount' is not configured or is empty. Engaging original application logic...")
+            searches = list(product(self.positions, self.locations))
+            random.shuffle(searches)
+
+            page_sleep = 0
+            minimum_time = 60 * 2  # minimum time bot should run before taking a break
+            minimum_page_time = time.time() + minimum_time
+
+            for (position, location) in searches:
+                try:
                     location_url = "&location=" + location + "&geoId=" + self.click_location_url(location)
-                    job_page_number = self.start_from_page - 2  # Will be incremented to start_from_page - 2 in loop
-                    print(f"Searching for position '{position_name}' in '{location}' starting from page {self.start_from_page}.")
+                    job_page_number = self.start_from_page - 2  # Will be incremented to start_from_page - 1 in loop
+
+                    print(f"Starting the search for {position} in {location} from page {self.start_from_page}.")
 
                     try:
                         while True:
-                            current_applied_for_this_pos = self.applied_counts.get(position_name, 0) # Re-check count before fetching new page
-                            if current_applied_for_this_pos >= max_applications:
-                                print(f"Position '{position_name}' reached limit ({current_applied_for_this_pos}/{max_applications}) before fetching new page in '{location}'. Stopping.")
-                                break # Break from while loop (pages) for current location
-
                             page_sleep += 1
                             job_page_number += 1
-                            print(f"Position '{position_name}' @ '{location}': Going to job page {job_page_number}")
-                            self.next_job_page(position_name, location_url, job_page_number)
+                            print("Going to job page " + str(job_page_number))
+                            self.next_job_page(position, location_url, job_page_number)
                             time.sleep(random.uniform(1, 2)) if not self.FastMode else time.sleep(random.uniform(0.5, 1))
                             print("Starting the application process for this page...")
-                            # Pass current_position_config to apply_jobs for targeted application and counting
-                            self.apply_jobs(location, current_position_config=position_config) 
-                            print("Job applications on this page have been processed.")
+                            self.apply_jobs(location)
+                            print("Job applications on this page have been successfully completed.")
 
-                            # Time control logic (similar to existing logic)
                             time_left = minimum_page_time - time.time()
                             if time_left > 0:
-                                print(f"Sleeping for {time_left:.2f} seconds.")
+                                print("Sleeping for " + str(time_left) + " seconds.")
                                 time.sleep(time_left)
                                 minimum_page_time = time.time() + minimum_time
                             if page_sleep % 5 == 0:
-                                sleep_time = random.randint(5, 10)
-                                print(f"Taking a short break for {sleep_time} seconds.")
+                                sleep_time = random.randint(5, 10)  # Changed from 500, 900 {seconds}
+                                print(f"Sleeping for {sleep_time} seconds.")
                                 time.sleep(sleep_time)
-                                page_sleep +=1 # To avoid immediate re-trigger if loop is very fast
+                                page_sleep += 1
                     except Exception as e:
-                        # These are expected exceptions that indicate we should move to next location
+                        # Check if it's a daily limit error that should stop everything
+                        if "Daily limit reached - stopping application process" in str(e):
+                            print("🛑 Daily limit reached - stopping all application processes")
+                            raise e  # Re-raise to stop the entire application process
+                        
+                        # These are expected exceptions that indicate we should move to next search
                         expected_exceptions = [
                             "No more jobs on this page.",
-                            "Nothing to do here, moving forward...",
+                            "Nothing to do here, moving forward...", 
                             "Job list UI elements not found, cannot proceed with this page."
                         ]
                         
                         if not any(expected_msg in str(e) for expected_msg in expected_exceptions):
-                            print(f"Error processing position '{position_name}' in '{location}': {e}")
+                            print(f"Error processing {position} in {location}: {e}")
                             traceback.print_exc()
-                        else: # Expected exceptions for end of job list or similar
-                             print(f"Position '{position_name}' @ '{location}': {str(e)}. Ending search for this location.")
-                        # Any exception (including no more jobs) breaks the while True loop for the current location
+                        else:
+                            print(f"{position} @ {location}: {str(e)}. Moving to next search.")
+                        pass
                     
-                    # After a location is fully processed (or an error occurred), check count again.
-                    if self.applied_counts.get(position_name, 0) >= max_applications:
-                        print(f"Position '{position_name}' reached application limit after processing location '{location}'.")
-                        break # Break from location loop for this position_name
-            
-            print("All 'positionsWithCount' configurations have been processed.")
-            return # New logic finished, return to prevent old logic execution
-
-        # --- Existing logic starts below --- 
-        # This part will only execute if self.positions_with_count is empty.
-        print("'positionsWithCount' is not configured or is empty. Engaging original application logic...")
-        searches = list(product(self.positions, self.locations))
-        random.shuffle(searches)
-
-        page_sleep = 0
-        minimum_time = 60 * 2  # minimum time bot should run before taking a break
-        minimum_page_time = time.time() + minimum_time
-
-        for (position, location) in searches:
-            location_url = "&location=" + location + "&geoId=" + self.click_location_url(location)
-            job_page_number = self.start_from_page - 2  # Will be incremented to start_from_page - 1 in loop
-
-            print(f"Starting the search for {position} in {location} from page {self.start_from_page}.")
-
-            try:
-                while True:
-                    page_sleep += 1
-                    job_page_number += 1
-                    print("Going to job page " + str(job_page_number))
-                    self.next_job_page(position, location_url, job_page_number)
-                    time.sleep(random.uniform(1, 2)) if not self.FastMode else time.sleep(random.uniform(0.5, 1))
-                    print("Starting the application process for this page...")
-                    self.apply_jobs(location)
-                    print("Job applications on this page have been successfully completed.")
-
-                    time_left = minimum_page_time - time.time()
-                    if time_left > 0:
-                        print("Sleeping for " + str(time_left) + " seconds.")
-                        time.sleep(time_left)
-                        minimum_page_time = time.time() + minimum_time
-                    if page_sleep % 5 == 0:
-                        sleep_time = random.randint(5, 10)  # Changed from 500, 900 {seconds}
-                        print(f"Sleeping for {sleep_time} seconds.")
-                        time.sleep(sleep_time)
-                        page_sleep += 1
-            except Exception as e:
-                # These are expected exceptions that indicate we should move to next search
-                expected_exceptions = [
-                    "No more jobs on this page.",
-                    "Nothing to do here, moving forward...", 
-                    "Job list UI elements not found, cannot proceed with this page."
-                ]
-                
-                if not any(expected_msg in str(e) for expected_msg in expected_exceptions):
-                    print(f"Error processing {position} in {location}: {e}")
-                    traceback.print_exc()
-                else:
-                    print(f"{position} @ {location}: {str(e)}. Moving to next search.")
-                pass
+                except Exception as e:
+                    # Check if it's a daily limit error that should stop everything
+                    if "Daily limit reached - stopping application process" in str(e):
+                        print("🛑 Daily limit reached - stopping all application processes")
+                        raise e  # Re-raise to stop the entire application process
+                    else:
+                        print(f"Error processing {position} in {location}: {e}")
+                        traceback.print_exc()
+                        # Continue to next search instead of stopping everything
 
             time_left = minimum_page_time - time.time()
             if time_left > 0:
@@ -874,6 +907,15 @@ class LinkedinEasyApply:
                 print(f"Sleeping for {sleep_time} seconds.")
                 time.sleep(sleep_time)
                 page_sleep += 1
+
+        except Exception as e:
+            # Check if it's a daily limit error that should stop everything
+            if "Daily limit reached - stopping application process" in str(e):
+                print("🛑 Daily limit reached - stopping all application processes")
+                return
+            else:
+                print(f"Error in start_applying: {e}")
+                traceback.print_exc()
 
     def apply_jobs(self, location, current_position_config=None):
         # 添加统计变量
@@ -1145,6 +1187,8 @@ class LinkedinEasyApply:
                     # Check if it's a daily limit error that should stop the entire process
                     if "Daily limit reached - stopping application process" in str(e_outer_job_loop):
                         print("🔄 The program stopped gracefully: The LinkedIn daily application limit has been reached")
+                        end_seen_count = len(self.seen_jobs)
+                        newly_seen = end_seen_count - start_seen_count
                         print(f"Page processing complete - Processed: {jobs_processed}, Applied: {jobs_applied}, Skipped: {jobs_skipped}, Newly seen: {newly_seen}")
 
                         return jobs_processed, jobs_applied, jobs_skipped

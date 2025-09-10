@@ -25,7 +25,7 @@ LANGUAGES = {
         'task_delay': '任务间延迟(秒)：',
         'control_ops': '控制操作',
         'start_scheduler': '启动调度器',
-        'stop_scheduler': '停止调度器',
+        'stop_scheduler': '停止机器人',
         'refresh_tasks': '刷新任务列表',
         'run_queue_now': '立即执行队列',
         'reset_status': '重置任务状态',
@@ -86,7 +86,7 @@ LANGUAGES = {
         'task_delay': 'Task Delay (seconds):',
         'control_ops': 'Control Operations',
         'start_scheduler': 'Start Scheduler',
-        'stop_scheduler': 'Stop Scheduler',
+        'stop_scheduler': 'Stop Bot',
         'refresh_tasks': 'Refresh Task List',
         'run_queue_now': 'Run Queue Now',
         'reset_status': 'Reset Task Status',
@@ -460,7 +460,7 @@ class SchedulerGUI:
         select_all_text = "Select All" if self.current_language == 'en' else "全选"
         deselect_all_text = "Deselect All" if self.current_language == 'en' else "全不选"
         run_selected_text = "Run Selected" if self.current_language == 'en' else "运行选中"
-        stop_current_text = "Stop Current" if self.current_language == 'en' else "停止当前"
+        stop_current_text = "Stop Current Task" if self.current_language == 'en' else "停止当前任务"
         
         self.select_all_btn = ttk.Button(task_control_frame, text=select_all_text, 
                   command=self.select_all_tasks)
@@ -1333,7 +1333,7 @@ class SchedulerGUI:
             run_selected_text = "Run Selected" if self.current_language == 'en' else "运行选中"
             self.run_selected_btn.config(text=run_selected_text)
         if hasattr(self, 'stop_current_btn'):
-            stop_current_text = "Stop Current" if self.current_language == 'en' else "停止当前"
+            stop_current_text = "Stop Current Task" if self.current_language == 'en' else "停止当前任务"
             self.stop_current_btn.config(text=stop_current_text)
         
         # Update log control buttons
