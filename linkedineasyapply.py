@@ -2371,9 +2371,26 @@ class LinkedinEasyApply:
     def click_location_url(self, keyword):
         try:
             self.browser.get("https://www.linkedin.com/jobs/search/")
+            time.sleep(1)  # 等待页面加载
             # 使用xpath获取id前缀为jobs-search-box-location-id-xxx的元素
             location_input = self.browser.find_element(By.XPATH, '//input[starts-with(@id,"jobs-search-box-location-id-")]')
-            self.enter_text(location_input, keyword)
+            
+            # 确保完全清除旧内容：多次清除并使用键盘快捷键
+            location_input.click()  # 先点击聚焦
+            time.sleep(0.3)
+            location_input.clear()  # 清除
+            time.sleep(0.3)
+            # 使用 Ctrl+A 全选然后删除，确保清除所有内容
+            location_input.send_keys(Keys.CONTROL + "a")
+            time.sleep(0.2)
+            location_input.send_keys(Keys.DELETE)
+            time.sleep(0.3)
+            # 再次清除
+            location_input.clear()
+            time.sleep(0.3)
+            
+            # 现在输入新位置
+            location_input.send_keys(keyword)
             time.sleep(2)
 
             location_seach_button = self.browser.find_element(By.XPATH, '//*[@id="global-nav-search"]/div/div[2]/button[1]')
