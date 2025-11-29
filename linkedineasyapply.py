@@ -407,7 +407,9 @@ class LinkedinEasyApply:
 
         # Existing position and location configurations
         self.positions = parameters.get('positions', [])
-        self.locations = parameters.get('locations', [])
+        # Filter out empty strings and strip whitespace from locations
+        raw_locations = parameters.get('locations', [])
+        self.locations = [loc.strip() for loc in raw_locations if loc and loc.strip()]
 
         self.residency = parameters.get('residentStatus', [])
         self.base_search_url = self.get_base_search_url(parameters)
@@ -513,8 +515,13 @@ class LinkedinEasyApply:
         except Exception as e:
             print(f"Failed to save applied job records: {e}")
 
-    def is_job_already_applied(self, job_link):
-        """Check if job has already been applied to"""
+    def is_job_already_applied(self, job_link, silent=False):
+        """Check if job has already been applied to
+        
+        Args:
+            job_link: The job link to check
+            silent: If True, don't print log messages (default: False)
+        """
         if not self.avoid_duplicate_applications:
             return False
 
@@ -532,13 +539,16 @@ class LinkedinEasyApply:
             
             days_passed = (current_date - applied_date).days
             if days_passed >= self.reapply_days:
-                print(f"Job {clean_link} was applied {days_passed} days ago, allowing reapplication (threshold: {self.reapply_days} days)")
+                if not silent:
+                    print(f"Job {clean_link} was applied {days_passed} days ago, allowing reapplication (threshold: {self.reapply_days} days)")
                 return False
             else:
-                print(f"Job {clean_link} was applied {days_passed} days ago, skipping (threshold: {self.reapply_days} days)")
+                if not silent:
+                    print(f"Job {clean_link} was applied {days_passed} days ago, skipping (threshold: {self.reapply_days} days)")
                 return True
         except Exception as e:
-            print(f"Error checking application date for {clean_link}: {e}")
+            if not silent:
+                print(f"Error checking application date for {clean_link}: {e}")
             return True
 
     def add_applied_job(self, job_link):
@@ -1191,7 +1201,8 @@ class LinkedinEasyApply:
                         newly_seen = end_seen_count - start_seen_count
                         print(f"Page processing complete - Processed: {jobs_processed}, Applied: {jobs_applied}, Skipped: {jobs_skipped}, Newly seen: {newly_seen}")
 
-                        return jobs_processed, jobs_applied, jobs_skipped
+                        # Re-raise the exception to stop the entire process, not just return from this method
+                        raise e_outer_job_loop
                     
                     print(f"Outer loop error for job '{job_title}': {e_outer_job_loop}")
                     traceback.print_exc()
@@ -1207,7 +1218,7 @@ class LinkedinEasyApply:
                     skip_reason.append("title contains blacklisted keywords")
                 if link in self.seen_jobs:
                     skip_reason.append("already seen in this session")
-                if self.is_job_already_applied(link):
+                if self.is_job_already_applied(link, silent=True):  # Use silent=True to avoid duplicate logs
                     skip_reason.append("already applied previously")
                 
                 reason_text = ", ".join(skip_reason) if skip_reason else "unknown reason"
@@ -2348,9 +2359,12 @@ class LinkedinEasyApply:
 
         return extra_search_terms_str
 
-    def next_job_page(self, position, location, job_page):
-        self.browser.get("https://www.linkedin.com/jobs/search/" + self.base_search_url +
-                         "&keywords=" + position + location + "&start=" + str(job_page * 25))
+    def next_job_page(self, position, location_url, job_page):
+        # location_url should already contain "&location=...&geoId=..."
+        # Build the complete URL properly
+        url = "https://www.linkedin.com/jobs/search/?" + self.base_search_url.lstrip('&') + \
+              "&keywords=" + position + location_url + "&start=" + str(job_page * 25)
+        self.browser.get(url)
 
         self.avoid_lock()
 
