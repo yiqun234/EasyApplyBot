@@ -181,6 +181,9 @@ DEFAULT_CONFIG = {
     'avoidDuplicateApplications': True,  # 防重复申请功能
     'reapplyDays': 30,  # 多少天后可以重新投递
     'appliedJobsFile': 'applied_jobs.json',  # 已申请职位记录文件，将根据用户ID自动调整
+    'autoBlacklistAppliedCompanies': False,  # 是否自动将投递成功的公司加入黑名单
+    'companyBlacklistDays': 30,  # 公司黑名单天数，默认30天
+    'companyBlacklistFile': 'company_blacklist.json',  # 公司黑名单文件
 }
 
 STANDARD_DEGREES = ["High School Diploma", "Associate's Degree", "Bachelor's Degree", "Master's Degree", "Master of Business Administration", "Doctor of Philosophy", "Doctor of Medicine", "Doctor of Law"]
@@ -262,8 +265,10 @@ def load_config(user_id=None):
         # Set user-specific applied jobs file path
         if user_id and user_id != "default":
             final_config['appliedJobsFile'] = f"applied_jobs_{user_id}.json"
+            final_config['companyBlacklistFile'] = f"company_blacklist_{user_id}.json"
         else:
             final_config['appliedJobsFile'] = "applied_jobs.json"
+            final_config['companyBlacklistFile'] = "company_blacklist.json"
         
         # 确保语言设置始终来自全局配置，不被用户配置覆盖
         final_config['language'] = load_global_language_setting()
@@ -292,11 +297,13 @@ def save_config(config, user_id=None):
         # Set user-specific applied jobs file path
         if user_id and user_id != "default":
             config_to_save['appliedJobsFile'] = f"applied_jobs_{user_id}.json"
+            config_to_save['companyBlacklistFile'] = f"company_blacklist_{user_id}.json"
             # 用户配置不保存语言设置，语言设置只保存在主config.yaml
             if 'language' in config_to_save:
                 del config_to_save['language']
         else:
             config_to_save['appliedJobsFile'] = "applied_jobs.json"
+            config_to_save['companyBlacklistFile'] = "company_blacklist.json"
 
         with open(config_file, 'w', encoding='utf-8') as stream:
             yaml.dump(config_to_save, stream, default_flow_style=False, allow_unicode=True, sort_keys=False)
@@ -725,6 +732,8 @@ class EasyApplyApp(tk.Tk):
             # Application Settings
             'avoidDuplicateApplications': tk.BooleanVar(value=self.config.get('avoidDuplicateApplications', True)),
             'reapplyDays': tk.IntVar(value=self.config.get('reapplyDays', 30)),
+            'autoBlacklistAppliedCompanies': tk.BooleanVar(value=self.config.get('autoBlacklistAppliedCompanies', False)),
+            'companyBlacklistDays': tk.IntVar(value=self.config.get('companyBlacklistDays', 30)),
             'startFromPage': tk.IntVar(value=self.config.get('startFromPage', 1)),
             # Job
             'positions': tk.StringVar(value=safe_join_list(self.config.get('positions', []))),
@@ -884,7 +893,7 @@ class EasyApplyApp(tk.Tk):
         app_config_frame.columnconfigure(1, weight=1)
         current_row+=1
         
-        # 防重复投递功能
+        # 防重复投递功能 - 第一行
         config_row = 0
         avoid_duplicate_frame = ttk.Frame(app_config_frame)
         avoid_duplicate_frame.grid(row=config_row, column=0, columnspan=2, sticky=tk.W, padx=5, pady=3)
@@ -897,6 +906,19 @@ class EasyApplyApp(tk.Tk):
                                      textvariable=self.vars['reapplyDays'])
         reapply_spinbox.pack(side=tk.LEFT)
         ttk.Label(avoid_duplicate_frame, text=self.texts['basic_tab']['reapply_days_after']).pack(side=tk.LEFT, padx=(2, 0))
+        config_row+=1
+        
+        # 跳过已投递公司功能 - 第二行
+        skip_applied_companies_frame = ttk.Frame(app_config_frame)
+        skip_applied_companies_frame.grid(row=config_row, column=0, columnspan=2, sticky=tk.W, padx=5, pady=3)
+        
+        ttk.Checkbutton(skip_applied_companies_frame, text=self.texts['basic_tab'].get('skip_applied_companies', '跳过已投递公司'),
+                         variable=self.vars['autoBlacklistAppliedCompanies']).pack(side=tk.LEFT)
+        ttk.Label(skip_applied_companies_frame, text="   " + self.texts['basic_tab'].get('skip_days_prefix', '投递成功后')).pack(side=tk.LEFT, padx=(10, 2))
+        blacklist_spinbox = tk.Spinbox(skip_applied_companies_frame, from_=1, to=365, width=5,
+                                     textvariable=self.vars['companyBlacklistDays'])
+        blacklist_spinbox.pack(side=tk.LEFT)
+        ttk.Label(skip_applied_companies_frame, text=self.texts['basic_tab'].get('skip_days_suffix', '天内不再投递该公司职位')).pack(side=tk.LEFT, padx=(2, 0))
         config_row+=1
         
         # 起始页面配置
@@ -1821,6 +1843,9 @@ class EasyApplyApp(tk.Tk):
             # Application Settings
             self.config['avoidDuplicateApplications'] = self.vars['avoidDuplicateApplications'].get()
             self.config['reapplyDays'] = max(1, self.vars['reapplyDays'].get())  # Ensure minimum of 1 day
+            self.config['autoBlacklistAppliedCompanies'] = self.vars['autoBlacklistAppliedCompanies'].get()
+            self.config['companyBlacklistDays'] = max(1, self.vars['companyBlacklistDays'].get())  # Ensure minimum of 1 day
+            self.config['companyBlacklistFile'] = self.config.get('companyBlacklistFile', 'company_blacklist.json')
             self.config['startFromPage'] = max(1, self.vars['startFromPage'].get())  # Ensure minimum of 1
             
             # Job Tab - Update for new structure
@@ -1959,6 +1984,9 @@ class EasyApplyApp(tk.Tk):
             config_from_file['avoidDuplicateApplications'] = self.vars.get('avoidDuplicateApplications', tk.BooleanVar()).get()
             config_from_file['reapplyDays'] = max(1, self.vars.get('reapplyDays', tk.IntVar(value=30)).get())
             config_from_file['startFromPage'] = max(1, self.vars.get('startFromPage', tk.IntVar(value=1)).get())
+            config_from_file['autoBlacklistAppliedCompanies'] = self.vars.get('autoBlacklistAppliedCompanies', tk.BooleanVar(value=False)).get()
+            config_from_file['companyBlacklistDays'] = max(1, self.vars.get('companyBlacklistDays', tk.IntVar(value=30)).get())
+            config_from_file['companyBlacklistFile'] = config_from_file.get('companyBlacklistFile', 'company_blacklist.json')
 
             # 5. 将更新后的配置对象保存回文件
             self._save_config(config_from_file)

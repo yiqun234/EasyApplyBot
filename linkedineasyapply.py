@@ -390,6 +390,12 @@ class LinkedinEasyApply:
         self.reapply_days = parameters.get('reapplyDays', 30)  # 多少天后可以重新投递
         self.applied_jobs_file = parameters.get('appliedJobsFile', 'applied_jobs.json')
         self.applied_jobs = {}  # Store applied job records with dates
+        
+        # Auto blacklist applied companies configuration
+        self.auto_blacklist_companies = parameters.get('autoBlacklistAppliedCompanies', False)  # 是否自动将投递成功的公司加入黑名单
+        self.company_blacklist_days = parameters.get('companyBlacklistDays', 30)  # 公司黑名单天数，默认30天
+        self.company_blacklist_file = parameters.get('companyBlacklistFile', 'company_blacklist.json')  # 公司黑名单文件
+        self.company_blacklist_with_dates = {}  # Store company blacklist with dates: {company_name: date_string}
 
         # Start from specific page configuration
         self.start_from_page = max(1, int(parameters.get('startFromPage', 1)))  # Minimum page 1
@@ -470,6 +476,11 @@ class LinkedinEasyApply:
             print(f"Duplicate application prevention enabled, currently tracking {len(self.applied_jobs)} applied jobs")
         else:
             print("Duplicate application prevention disabled")
+        
+        # Load company blacklist if auto blacklist is enabled
+        if self.auto_blacklist_companies:
+            self.load_company_blacklist()
+            print(f"Auto company blacklist enabled, currently tracking {len(self.company_blacklist_with_dates)} blacklisted companies")
 
         # Display start page configuration
         if self.start_from_page > 1:
@@ -550,6 +561,128 @@ class LinkedinEasyApply:
             if not silent:
                 print(f"Error checking application date for {clean_link}: {e}")
             return True
+
+    def load_company_blacklist(self):
+        """Load company blacklist records"""
+        try:
+            if os.path.exists(self.company_blacklist_file):
+                with open(self.company_blacklist_file, 'r', encoding='utf-8') as f:
+                    blacklist_data = json.load(f)
+                
+                # Handle both old format (list of strings) and new format (list of dicts)
+                if blacklist_data and isinstance(blacklist_data, list):
+                    if len(blacklist_data) > 0 and isinstance(blacklist_data[0], str):
+                        # Old format - convert to new format
+                        from datetime import datetime
+                        current_time = datetime.now().isoformat()
+                        self.company_blacklist_with_dates = {company: current_time for company in blacklist_data}
+                        self.save_company_blacklist()
+                    else:
+                        # New format - list of dicts with company and date
+                        self.company_blacklist_with_dates = {
+                            item['company']: item['blacklisted_date'] 
+                            for item in blacklist_data if isinstance(item, dict) and 'company' in item
+                        }
+                else:
+                    self.company_blacklist_with_dates = {}
+                
+                print(f"Successfully loaded {len(self.company_blacklist_with_dates)} blacklisted company records")
+            else:
+                self.company_blacklist_with_dates = {}
+                print("Company blacklist file not found, creating new record")
+        except Exception as e:
+            print(f"Failed to load company blacklist records: {e}")
+            self.company_blacklist_with_dates = {}
+
+    def save_company_blacklist(self):
+        """Save company blacklist records"""
+        try:
+            # Convert to new format: list of dicts with company and date
+            blacklist_list = [
+                {"company": company, "blacklisted_date": date} 
+                for company, date in self.company_blacklist_with_dates.items()
+            ]
+            with open(self.company_blacklist_file, 'w', encoding='utf-8') as f:
+                json.dump(blacklist_list, f, ensure_ascii=False, indent=2)
+            print(f"Saved {len(self.company_blacklist_with_dates)} blacklisted company records")
+        except Exception as e:
+            print(f"Failed to save company blacklist records: {e}")
+
+    def is_company_blacklisted(self, company_name):
+        """Check if company is blacklisted and still within the blacklist period"""
+        if not self.auto_blacklist_companies or not company_name:
+            return False
+        
+        company_lower = company_name.lower().strip()
+        
+        # Check static blacklist first
+        if company_lower in [word.lower() for word in self.company_blacklist]:
+            return True
+        
+        # Check dynamic blacklist with dates
+        if company_lower not in {k.lower() for k in self.company_blacklist_with_dates.keys()}:
+            return False
+        
+        try:
+            from datetime import datetime, timedelta
+            # Find the company (case-insensitive)
+            blacklisted_company = None
+            blacklisted_date_str = None
+            for company, date_str in self.company_blacklist_with_dates.items():
+                if company.lower() == company_lower:
+                    blacklisted_company = company
+                    blacklisted_date_str = date_str
+                    break
+            
+            if not blacklisted_date_str:
+                return False
+            
+            blacklisted_date = datetime.fromisoformat(blacklisted_date_str.replace('Z', '+00:00'))
+            current_date = datetime.now()
+            days_passed = (current_date - blacklisted_date).days
+            
+            if days_passed >= self.company_blacklist_days:
+                # Blacklist period expired, remove from blacklist
+                del self.company_blacklist_with_dates[blacklisted_company]
+                self.save_company_blacklist()
+                print(f"Company '{blacklisted_company}' blacklist period ({days_passed} days) has expired, removed from blacklist")
+                return False
+            else:
+                return True  # Still blacklisted
+        except Exception as e:
+            print(f"Error checking company blacklist for {company_name}: {e}")
+            return False
+
+    def add_company_to_blacklist(self, company_name):
+        """Add company to blacklist after successful application"""
+        if not self.auto_blacklist_companies or not company_name:
+            return
+        
+        company_clean = company_name.strip()
+        if not company_clean:
+            return
+        
+        from datetime import datetime
+        current_time = datetime.now().isoformat()
+        
+        # Add to blacklist (case-insensitive check)
+        company_lower = company_clean.lower()
+        existing_company = None
+        for company in self.company_blacklist_with_dates.keys():
+            if company.lower() == company_lower:
+                existing_company = company
+                break
+        
+        if existing_company:
+            # Update existing entry
+            self.company_blacklist_with_dates[existing_company] = current_time
+            print(f"Updated blacklist date for company '{existing_company}'")
+        else:
+            # Add new entry
+            self.company_blacklist_with_dates[company_clean] = current_time
+            print(f"Added company '{company_clean}' to blacklist for {self.company_blacklist_days} days")
+        
+        self.save_company_blacklist()
 
     def add_applied_job(self, job_link):
         """Add applied job to records"""
@@ -1065,7 +1198,11 @@ class LinkedinEasyApply:
                     contains_blacklisted_keywords = True
                     break
 
-            if company.lower() not in [word.lower() for word in self.company_blacklist] and \
+            # Check if company is blacklisted (both static and dynamic blacklist)
+            is_company_blacklisted = self.is_company_blacklisted(company)
+            
+            if not is_company_blacklisted and \
+                    company.lower() not in [word.lower() for word in self.company_blacklist] and \
                     poster.lower() not in [word.lower() for word in self.poster_blacklist] and \
                     contains_blacklisted_keywords is False and link not in self.seen_jobs and \
                     not self.is_job_already_applied(link):
@@ -1158,6 +1295,9 @@ class LinkedinEasyApply:
                             print(f"Application sent to {company} for the position of {job_title}.")
                             # Add to applied records
                             self.add_applied_job(link)
+                            # Add company to blacklist if auto blacklist is enabled
+                            if self.auto_blacklist_companies:
+                                self.add_company_to_blacklist(company)
                             # jobs_applied
                             jobs_applied += 1
                             # === START: New logic for incrementing count ===
@@ -1210,8 +1350,11 @@ class LinkedinEasyApply:
             else:
                 # This 'else' corresponds to the blacklist/seen_jobs check
                 skip_reason = []
-                if company.lower() in [word.lower() for word in self.company_blacklist]:
-                    skip_reason.append("company blacklisted")
+                # Check both static and dynamic blacklist
+                if self.is_company_blacklisted(company):
+                    skip_reason.append("company blacklisted (auto-blacklisted)")
+                elif company.lower() in [word.lower() for word in self.company_blacklist]:
+                    skip_reason.append("company blacklisted (static)")
                 if poster.lower() in [word.lower() for word in self.poster_blacklist]:
                     skip_reason.append("poster blacklisted")
                 if contains_blacklisted_keywords:
