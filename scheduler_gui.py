@@ -75,7 +75,12 @@ LANGUAGES = {
             'interval': '间隔执行',
             'daily': '每日定时', 
             'manual': '仅手动'
-        }
+        },
+        'statistics': '今日统计（总计）',
+        'total_applications': '总投递数',
+        'successful_applications': '成功数',
+        'failed_applications': '失败数',
+        'today_stats': '今日投递'
     },
     'en': {
         'title': 'EasyApply Multi-User Scheduler',
@@ -136,7 +141,12 @@ LANGUAGES = {
             'interval': 'Interval Execution',
             'daily': 'Daily Schedule',
             'manual': 'Manual Only'
-        }
+        },
+        'statistics': 'Today\'s Statistics (Total)',
+        'total_applications': 'Total Applications',
+        'successful_applications': 'Successful',
+        'failed_applications': 'Failed',
+        'today_stats': 'Today'
     }
 }
 
@@ -417,17 +427,42 @@ class SchedulerGUI:
         right_panel = ttk.Frame(main_frame)
         right_panel.grid(row=1, column=1, sticky=(tk.W, tk.E, tk.N, tk.S))
         right_panel.columnconfigure(0, weight=1)
-        right_panel.rowconfigure(1, weight=1)
+        right_panel.rowconfigure(2, weight=1)
+        
+        # Statistics frame
+        self.statistics_frame = ttk.LabelFrame(right_panel, text=self.texts['statistics'], padding="10")
+        self.statistics_frame.grid(row=0, column=0, sticky=(tk.W, tk.E), pady=(0, 10))
+        self.statistics_frame.columnconfigure(1, weight=1)
+        self.statistics_frame.columnconfigure(3, weight=1)
+        self.statistics_frame.columnconfigure(5, weight=1)
+        
+        # Total applications
+        self.total_applications_label = ttk.Label(self.statistics_frame, text=self.texts['total_applications'] + ":", font=("Arial", 10, "bold"))
+        self.total_applications_label.grid(row=0, column=0, padx=(0, 5), sticky=tk.W)
+        self.total_applications_var = tk.StringVar(value="0")
+        ttk.Label(self.statistics_frame, textvariable=self.total_applications_var, font=("Arial", 12, "bold"), foreground="blue").grid(row=0, column=1, sticky=tk.W)
+        
+        # Successful applications
+        self.successful_applications_label = ttk.Label(self.statistics_frame, text=self.texts['successful_applications'] + ":", font=("Arial", 10, "bold"))
+        self.successful_applications_label.grid(row=0, column=2, padx=(20, 5), sticky=tk.W)
+        self.successful_applications_var = tk.StringVar(value="0")
+        ttk.Label(self.statistics_frame, textvariable=self.successful_applications_var, font=("Arial", 12, "bold"), foreground="green").grid(row=0, column=3, sticky=tk.W)
+        
+        # Failed applications
+        self.failed_applications_label = ttk.Label(self.statistics_frame, text=self.texts['failed_applications'] + ":", font=("Arial", 10, "bold"))
+        self.failed_applications_label.grid(row=0, column=4, padx=(20, 5), sticky=tk.W)
+        self.failed_applications_var = tk.StringVar(value="0")
+        ttk.Label(self.statistics_frame, textvariable=self.failed_applications_var, font=("Arial", 12, "bold"), foreground="red").grid(row=0, column=5, sticky=tk.W)
         
         # Task selection frame
         self.task_selection_frame = ttk.LabelFrame(right_panel, text=self.texts['task_selection'], padding="10")
-        self.task_selection_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), pady=(0, 10))
+        self.task_selection_frame.grid(row=1, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), pady=(0, 10))
         self.task_selection_frame.columnconfigure(0, weight=1)
         self.task_selection_frame.rowconfigure(0, weight=1)
         
         # Tasks treeview with checkboxes
-        self.column_keys = ["selected", "user_id", "status", "last_run", "next_run"]
-        columns = (self.texts['selected'], self.texts['user_id'], self.texts['status'], self.texts['last_run'], self.texts['next_run'])
+        self.column_keys = ["selected", "user_id", "status", "last_run", "next_run", "today_stats"]
+        columns = (self.texts['selected'], self.texts['user_id'], self.texts['status'], self.texts['last_run'], self.texts['next_run'], self.texts['today_stats'])
         self.tasks_tree = ttk.Treeview(self.task_selection_frame, columns=columns, show="headings", height=8)
         
         # Configure columns
@@ -441,6 +476,8 @@ class SchedulerGUI:
         self.tasks_tree.column(self.texts['last_run'], width=140)
         self.tasks_tree.heading(self.texts['next_run'], text=self.texts['next_run'])
         self.tasks_tree.column(self.texts['next_run'], width=140)
+        self.tasks_tree.heading(self.texts['today_stats'], text=self.texts['today_stats'])
+        self.tasks_tree.column(self.texts['today_stats'], width=120)
         
         # Bind double-click to toggle selection
         self.tasks_tree.bind('<Double-1>', self.toggle_task_selection)
@@ -477,7 +514,7 @@ class SchedulerGUI:
         
         # Queue status frame
         self.queue_frame = ttk.LabelFrame(right_panel, text=self.texts['queue_status'], padding="10")
-        self.queue_frame.grid(row=1, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
+        self.queue_frame.grid(row=2, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
         self.queue_frame.columnconfigure(0, weight=1)
         self.queue_frame.rowconfigure(0, weight=1)
         
@@ -1136,12 +1173,21 @@ class SchedulerGUI:
             # Use localized status text
             localized_status = self.get_localized_status(task.status)
             
+            # Get today's statistics for this user
+            user_stats = self.get_user_today_statistics(task.user_id)
+            # Format: "成功/总数" or "Successful/Total"
+            if user_stats['total'] > 0:
+                stats_text = f"{user_stats['successful']}/{user_stats['total']}"
+            else:
+                stats_text = "0/0"
+            
             item = self.tasks_tree.insert('', 'end', values=(
                 selected,
                 task.user_id,
                 localized_status,
                 last_run,
-                next_run
+                next_run,
+                stats_text
             ), tags=tags)
             
             # Mark for reselection if it was previously selected
@@ -1190,10 +1236,258 @@ class SchedulerGUI:
         
         self.queue_text.insert(tk.END, "\n".join(queue_info))
     
+    def get_user_applied_jobs_file(self, user_id):
+        """Get applied jobs file path for a user"""
+        if user_id and user_id != "default":
+            return f"applied_jobs_{user_id}.json"
+        return "applied_jobs.json"
+    
+    def get_user_failed_file(self, user_id):
+        """Get failed CSV file path for a user"""
+        return "failed.csv"  # failed.csv is shared across all users or per user based on implementation
+    
+    def get_user_today_statistics(self, user_id):
+        """Get today's application statistics for a specific user"""
+        import csv
+        from datetime import datetime, date
+        
+        successful_applications = 0
+        failed_applications = 0
+        
+        today = date.today()
+        
+        # Count successful applications from applied_jobs.json file
+        applied_jobs_file = self.get_user_applied_jobs_file(user_id)
+        if os.path.exists(applied_jobs_file):
+            try:
+                with open(applied_jobs_file, 'r', encoding='utf-8') as f:
+                    applied_data = json.load(f)
+                    
+                    # Handle both old format (list of strings) and new format (list of dicts)
+                    if isinstance(applied_data, list):
+                        if len(applied_data) > 0:
+                            if isinstance(applied_data[0], str):
+                                # Old format - all entries are today (approximation)
+                                successful_applications = len(applied_data)
+                            else:
+                                # New format - list of dicts with url and applied_date
+                                for item in applied_data:
+                                    if isinstance(item, dict) and 'applied_date' in item:
+                                        applied_date_str = item['applied_date']
+                                        try:
+                                            # Parse ISO format date
+                                            applied_date = datetime.fromisoformat(applied_date_str.replace('Z', '+00:00'))
+                                            if applied_date.date() == today:
+                                                successful_applications += 1
+                                        except:
+                                            # If parsing fails, skip this entry
+                                            pass
+                    elif isinstance(applied_data, dict):
+                        # Old format - dict with url as key and date as value
+                        for url, applied_date_str in applied_data.items():
+                            try:
+                                applied_date = datetime.fromisoformat(applied_date_str.replace('Z', '+00:00'))
+                                if applied_date.date() == today:
+                                    successful_applications += 1
+                            except:
+                                pass
+            except Exception as e:
+                # Skip if file can't be read
+                pass
+        
+        # Count failed applications from failed.csv
+        # New format includes user_id as the last column (7th column)
+        # Old format doesn't have user_id (only 6 columns), we'll skip those for per-user stats
+        failed_file = "failed.csv"
+        if os.path.exists(failed_file):
+            try:
+                with open(failed_file, 'r', encoding='utf-8', newline='') as f:
+                    reader = csv.reader(f)
+                    for row in reader:
+                        if len(row) >= 6:  # Should have at least 6 columns including datetime
+                            try:
+                                # Check if this row belongs to this user
+                                # New format: row[6] is user_id, old format: no user_id column
+                                row_user_id = None
+                                if len(row) >= 7:
+                                    row_user_id = row[6].strip()
+                                
+                                # Only count if user_id matches (or if old format, skip for per-user stats)
+                                # Handle both "default" and actual user_id
+                                if row_user_id:
+                                    # New format: check if user_id matches
+                                    # For "default" user, row_user_id should be "default"
+                                    # For other users, row_user_id should match exactly
+                                    if row_user_id != user_id:
+                                        continue
+                                else:
+                                    # Old format: no user_id column, skip for per-user stats
+                                    # (we can't determine which user these belong to)
+                                    continue
+                                
+                                # Last column before user_id should be datetime (or last column if old format)
+                                failed_date_str = row[5].strip()
+                                
+                                # Try multiple datetime formats
+                                failed_date = None
+                                date_formats = [
+                                    "%Y-%m-%d %H:%M:%S.%f",  # Standard format with microseconds
+                                    "%Y-%m-%d %H:%M:%S",     # Standard format without microseconds
+                                    "%Y-%m-%d",              # Date only
+                                ]
+                                
+                                for date_format in date_formats:
+                                    try:
+                                        failed_date = datetime.strptime(failed_date_str, date_format)
+                                        break
+                                    except ValueError:
+                                        continue
+                                
+                                # If strptime failed, try isoformat
+                                if failed_date is None:
+                                    try:
+                                        failed_date = datetime.fromisoformat(failed_date_str.replace('Z', '+00:00'))
+                                    except:
+                                        pass
+                                
+                                # Check if date matches today
+                                if failed_date and failed_date.date() == today:
+                                    failed_applications += 1
+                            except (ValueError, IndexError, AttributeError):
+                                # Skip if can't parse
+                                pass
+            except Exception as e:
+                # Skip if file can't be read
+                pass
+        
+        total_applications = successful_applications + failed_applications
+        
+        return {
+            'total': total_applications,
+            'successful': successful_applications,
+            'failed': failed_applications
+        }
+    
+    def get_today_statistics(self):
+        """Get today's application statistics for all users"""
+        import csv
+        from datetime import datetime, date
+        
+        total_applications = 0
+        successful_applications = 0
+        failed_applications = 0
+        
+        today = date.today()
+        today_str = today.isoformat()
+        
+        # Count successful applications from applied_jobs.json files
+        for user_id, task in self.user_tasks.items():
+            applied_jobs_file = self.get_user_applied_jobs_file(user_id)
+            if os.path.exists(applied_jobs_file):
+                try:
+                    with open(applied_jobs_file, 'r', encoding='utf-8') as f:
+                        applied_data = json.load(f)
+                        
+                        # Handle both old format (list of strings) and new format (list of dicts)
+                        if isinstance(applied_data, list):
+                            if len(applied_data) > 0:
+                                if isinstance(applied_data[0], str):
+                                    # Old format - all entries are today (approximation)
+                                    successful_applications += len(applied_data)
+                                else:
+                                    # New format - list of dicts with url and applied_date
+                                    for item in applied_data:
+                                        if isinstance(item, dict) and 'applied_date' in item:
+                                            applied_date_str = item['applied_date']
+                                            try:
+                                                # Parse ISO format date
+                                                applied_date = datetime.fromisoformat(applied_date_str.replace('Z', '+00:00'))
+                                                if applied_date.date() == today:
+                                                    successful_applications += 1
+                                            except:
+                                                # If parsing fails, skip this entry
+                                                pass
+                        elif isinstance(applied_data, dict):
+                            # Old format - dict with url as key and date as value
+                            for url, applied_date_str in applied_data.items():
+                                try:
+                                    applied_date = datetime.fromisoformat(applied_date_str.replace('Z', '+00:00'))
+                                    if applied_date.date() == today:
+                                        successful_applications += 1
+                                except:
+                                    pass
+                except Exception as e:
+                    # Skip if file can't be read
+                    pass
+        
+        # Count failed applications from failed.csv
+        failed_file = "failed.csv"
+        if os.path.exists(failed_file):
+            try:
+                with open(failed_file, 'r', encoding='utf-8', newline='') as f:
+                    reader = csv.reader(f)
+                    for row in reader:
+                        if len(row) >= 6:  # Should have at least 6 columns including datetime
+                            try:
+                                # Last column should be datetime
+                                failed_date_str = row[5].strip()
+                                
+                                # Try multiple datetime formats
+                                failed_date = None
+                                date_formats = [
+                                    "%Y-%m-%d %H:%M:%S.%f",  # Standard format with microseconds
+                                    "%Y-%m-%d %H:%M:%S",     # Standard format without microseconds
+                                    "%Y-%m-%d",              # Date only
+                                ]
+                                
+                                for date_format in date_formats:
+                                    try:
+                                        failed_date = datetime.strptime(failed_date_str, date_format)
+                                        break
+                                    except ValueError:
+                                        continue
+                                
+                                # If strptime failed, try isoformat
+                                if failed_date is None:
+                                    try:
+                                        failed_date = datetime.fromisoformat(failed_date_str.replace('Z', '+00:00'))
+                                    except:
+                                        pass
+                                
+                                # Check if date matches today
+                                if failed_date and failed_date.date() == today:
+                                    failed_applications += 1
+                            except (ValueError, IndexError, AttributeError):
+                                # Skip if can't parse
+                                pass
+            except Exception as e:
+                # Skip if file can't be read
+                pass
+        
+        total_applications = successful_applications + failed_applications
+        
+        return {
+            'total': total_applications,
+            'successful': successful_applications,
+            'failed': failed_applications
+        }
+    
+    def update_statistics(self):
+        """Update statistics display"""
+        try:
+            stats = self.get_today_statistics()
+            self.total_applications_var.set(str(stats['total']))
+            self.successful_applications_var.set(str(stats['successful']))
+            self.failed_applications_var.set(str(stats['failed']))
+        except Exception as e:
+            # If statistics update fails, just log it (don't break the UI)
+            pass
+    
     def update_ui_timer(self):
         """Update UI periodically"""
         self.update_tasks_display()
         self.update_queue_display()
+        self.update_statistics()
         self.root.after(3000, self.update_ui_timer)  # Update every 3 seconds
     
     def log(self, message):
@@ -1282,7 +1576,7 @@ class SchedulerGUI:
         
         # Update treeview column headers
         if hasattr(self, 'tasks_tree'):
-            columns = [self.texts['selected'], self.texts['user_id'], self.texts['status'], self.texts['last_run'], self.texts['next_run']]
+            columns = [self.texts['selected'], self.texts['user_id'], self.texts['status'], self.texts['last_run'], self.texts['next_run'], self.texts['today_stats']]
             self.tasks_tree.config(columns=columns)
             
             self.tasks_tree.heading(self.texts['selected'], text=self.texts['selected'])
@@ -1290,6 +1584,7 @@ class SchedulerGUI:
             self.tasks_tree.heading(self.texts['status'], text=self.texts['status'])
             self.tasks_tree.heading(self.texts['last_run'], text=self.texts['last_run'])
             self.tasks_tree.heading(self.texts['next_run'], text=self.texts['next_run'])
+            self.tasks_tree.heading(self.texts['today_stats'], text=self.texts['today_stats'])
         
         # Update other UI elements
         self.update_ui_elements_texts()
@@ -1359,6 +1654,17 @@ class SchedulerGUI:
             self.daily_frame.config(text=self.texts['daily_time'])
         if hasattr(self, 'queue_config_frame'):
             self.queue_config_frame.config(text=self.texts['task_delay'])
+        
+        # Update statistics frame
+        if hasattr(self, 'statistics_frame'):
+            self.statistics_frame.config(text=self.texts['statistics'])
+            # Update statistics labels
+            if hasattr(self, 'total_applications_label'):
+                self.total_applications_label.config(text=self.texts['total_applications'] + ":")
+            if hasattr(self, 'successful_applications_label'):
+                self.successful_applications_label.config(text=self.texts['successful_applications'] + ":")
+            if hasattr(self, 'failed_applications_label'):
+                self.failed_applications_label.config(text=self.texts['failed_applications'] + ":")
         
         # Update labels
         if hasattr(self, 'interval_label'):

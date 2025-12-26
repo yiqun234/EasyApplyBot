@@ -1289,6 +1289,8 @@ class LinkedinEasyApply:
                             # if link and link not in self.seen_jobs: self.seen_jobs.append(link)
                             # continue 
 
+                    # Initialize done_applying to avoid undefined variable error
+                    done_applying = False
                     try:
                         done_applying = self.apply_to_job()
                         if done_applying:
@@ -1309,9 +1311,10 @@ class LinkedinEasyApply:
                         else:
                             print(f"An application for '{job_title}' at {company} has been submitted earlier or was not EasyApply.")
                     except Exception as e_apply:
-                        # Check if it's a daily limit error
+                        # Check if it's a daily limit error - MUST stop immediately
                         if "Daily Easy Apply limit reached" in str(e_apply):
-                            print("🛑 Daily limit reached - stopping application process")
+                            print("🛑 Daily limit reached - stopping application process immediately")
+                            # Re-raise immediately to stop processing more jobs
                             raise Exception("Daily limit reached - stopping application process")
                         
                         temp = self.file_name
@@ -1341,7 +1344,8 @@ class LinkedinEasyApply:
                         newly_seen = end_seen_count - start_seen_count
                         print(f"Page processing complete - Processed: {jobs_processed}, Applied: {jobs_applied}, Skipped: {jobs_skipped}, Newly seen: {newly_seen}")
 
-                        # Re-raise the exception to stop the entire process, not just return from this method
+                        # Re-raise the exception to stop the entire process immediately
+                        # This will break out of the job loop and propagate to start_applying()
                         raise e_outer_job_loop
                     
                     print(f"Outer loop error for job '{job_title}': {e_outer_job_loop}")
@@ -1390,6 +1394,28 @@ class LinkedinEasyApply:
                 return False
         except:
             return False
+        
+        # Check for daily application limit BEFORE clicking the button
+        # This prevents unnecessary clicks and catches limit earlier
+        daily_limit_messages = [
+            "you've reached today's easy apply limit",
+            "reached today's easy apply limit",
+            "easy apply limit for today",
+            "continue applying tomorrow",
+            "daily submissions to help ensure",
+            "daily submissions to maintain quality",
+            "save this job and apply tomorrow",
+            "您已达到今天的快速申请限额",
+            "今日快速申请限额",
+            "明天继续申请",
+            "保存此职位并在明天申请"
+        ]
+        
+        page_source_lower = self.browser.page_source.lower()
+        if any(msg in page_source_lower for msg in daily_limit_messages):
+            print("❌ Daily Easy Apply limit detected on page - stopping immediately")
+            raise Exception("Daily Easy Apply limit reached")
+        
         # Scroll to the job description
         try:
             job_description_area = self.browser.find_element(By.ID, "job-details")
@@ -1402,23 +1428,13 @@ class LinkedinEasyApply:
         print("Starting the job application...")
         easy_apply_button.click()
         
-        # Check for daily application limit after clicking
+        # Check for daily application limit after clicking (double check)
         time.sleep(random.uniform(2, 3)) if not self.FastMode else time.sleep(random.uniform(1, 2))
         
-        # Check if we've reached the daily Easy Apply limit
-        daily_limit_messages = [
-            "you've reached today's easy apply limit",
-            "reached today's easy apply limit",
-            "easy apply limit for today",
-            "continue applying tomorrow",
-            "daily submissions to help ensure",
-            "您已达到今天的快速申请限额",
-            "今日快速申请限额",
-            "明天继续申请"
-        ]
-        
-        if any(msg in self.browser.page_source.lower() for msg in daily_limit_messages):
-            print("❌ you've reached today's easy apply limit")
+        # Re-check after clicking in case limit message appears after click
+        page_source_lower = self.browser.page_source.lower()
+        if any(msg in page_source_lower for msg in daily_limit_messages):
+            print("❌ Daily Easy Apply limit detected after clicking - stopping immediately")
             # Try to close any modal dialogs
             try:
                 self.browser.find_element(By.CLASS_NAME, 'artdeco-modal__dismiss').click()
@@ -2385,7 +2401,14 @@ class LinkedinEasyApply:
             print("An exception occurred while searching for form in modal")
 
     def write_to_file(self, company, job_title, link, location, search_location):
-        to_write = [company, job_title, link, location, search_location, datetime.now()]
+        # Extract user_id from applied_jobs_file name
+        user_id = "default"
+        if self.applied_jobs_file and self.applied_jobs_file != "applied_jobs.json":
+            # Format: applied_jobs_{user_id}.json
+            if self.applied_jobs_file.startswith("applied_jobs_") and self.applied_jobs_file.endswith(".json"):
+                user_id = self.applied_jobs_file[13:-5]  # Remove "applied_jobs_" prefix and ".json" suffix
+        
+        to_write = [company, job_title, link, location, search_location, datetime.now(), user_id]
         file_path = self.file_name + ".csv"
         print(f'updated {file_path}.')
 
