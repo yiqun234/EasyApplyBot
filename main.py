@@ -570,6 +570,8 @@ def validate_yaml(config_file):
     assert len(str(parameters['password'])) > 0
     assert isinstance(parameters['disableAntiLock'], bool)
     assert isinstance(parameters['remote'], bool)
+    parameters.setdefault('hybrid', False)
+    assert isinstance(parameters['hybrid'], bool)
     assert isinstance(parameters['lessthanTenApplicants'], bool)
     assert isinstance(parameters['newestPostingsFirst'], bool)
     assert isinstance(parameters['residentStatus'], bool)

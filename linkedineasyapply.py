@@ -2454,11 +2454,13 @@ class LinkedinEasyApply:
         lessthanTenApplicants_url = ""
         newestPostingsFirst_url = ""
 
+        workplace_types = []
         if parameters.get('remote'):
-            remote_url = "&f_WT=2"
-        else:
-            remote_url = ""
-            # TO DO: Others &f_WT= options { WT=1 onsite, WT=2 remote, WT=3 hybrid, f_WT=1%2C2%2C3 }
+            workplace_types.append("2")
+        if parameters.get('hybrid'):
+            workplace_types.append("3")
+        if workplace_types:
+            remote_url = f"&f_WT={'%2C'.join(workplace_types)}"
 
         if parameters['lessthanTenApplicants']:
             lessthanTenApplicants_url = "&f_EA=true"

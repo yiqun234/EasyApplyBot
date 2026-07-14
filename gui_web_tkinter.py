@@ -162,7 +162,7 @@ def get_config_file_path(user_id=None):
 # DEFAULT_CONFIG now primarily defines structure and default *values* if a key *exists* but has no value,
 # or if the config file is entirely missing. It's less about forcing specific keys onto the user's config.
 DEFAULT_CONFIG = {
-    'email': '', 'password': '', 'openaiApiKey': '', 'disableAntiLock': False, 'remote': False,
+    'email': '', 'password': '', 'openaiApiKey': '', 'disableAntiLock': False, 'remote': False, 'hybrid': False,
     'lessthanTenApplicants': True, 'newestPostingsFirst': False,
     'experienceLevel': {'internship': False, 'entry': True, 'associate': True, 'mid-senior level': True, 'director': False, 'executive': False},
     'jobTypes': {'full-time': True, 'contract': True, 'part-time': False, 'temporary': True, 'internship': False, 'other': False, 'volunteer': False},
