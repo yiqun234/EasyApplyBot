@@ -14,6 +14,20 @@ import traceback
 import firebase_manager
 import yaml
 
+
+def deep_update_config(source, overrides):
+    """Merge config updates recursively without replacing sibling keys."""
+    if not isinstance(overrides, dict):
+        return source
+
+    for key, value in overrides.items():
+        if isinstance(value, dict) and isinstance(source.get(key), dict):
+            deep_update_config(source[key], value)
+        else:
+            source[key] = value
+    return source
+
+
 # 语言配置
 LANGUAGES = {
     'zh': {
@@ -281,7 +295,7 @@ class SchedulerGUI:
                         local_config = {}
                     
                     # 合并Firebase配置
-                    local_config.update(firebase_config)
+                    deep_update_config(local_config, firebase_config)
                     
                     # 保存更新后的配置
                     with open(config_path, 'w', encoding='utf-8') as f:
@@ -1700,4 +1714,4 @@ class SchedulerGUI:
 if __name__ == "__main__":
     root = tk.Tk()
     app = SchedulerGUI(root)
-    root.mainloop() 
+    root.mainloop()

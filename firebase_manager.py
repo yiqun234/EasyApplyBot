@@ -3,6 +3,21 @@ import yaml
 import threading
 import pyrebase
 
+
+def config_patch_from_stream_message(message):
+    """Convert a Firebase stream message into a dict-shaped config patch."""
+    data = message.get("data")
+    path = message.get("path", "/") or "/"
+
+    if path == "/":
+        return data if isinstance(data, dict) else None
+
+    patch = data
+    for part in reversed([part for part in path.strip("/").split("/") if part]):
+        patch = {part: patch}
+    return patch
+
+
 class FirebaseManager:
     """
     Use pyrebase4 client SDK to handle Firebase Realtime Database real-time listening
@@ -75,9 +90,9 @@ class FirebaseManager:
     def _on_config_change(self, message):
         """Firebase real-time listening callback - truly real-time!"""
         try:
-            if message["event"] == "put":
-                config_data = message["data"]
-                if config_data:
+            if message["event"] in ("put", "patch"):
+                config_data = config_patch_from_stream_message(message)
+                if config_data is not None:
                     print("[Firebase] 🔄 Config change detected, syncing...")
                     self.update_callback(config_data)
                     
@@ -107,4 +122,4 @@ class FirebaseManager:
         """Stop listening"""
         if self.stream:
             self.stream.close()
-            print("[Firebase] Stopped listening") 
+            print("[Firebase] Stopped listening")
