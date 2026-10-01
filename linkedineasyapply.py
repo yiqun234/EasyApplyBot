@@ -1,12 +1,13 @@
 import time, random, csv, pyautogui, traceback, os, re, json, requests, logging
 import sys
 import io
+import unicodedata
 
 # Force stdout to be UTF-8, to prevent `UnicodeEncodeError` on Windows
 if sys.platform == "win32":
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', line_buffering=True)
 
-from urllib.parse import urlparse, parse_qs
+from urllib.parse import urlparse, parse_qs, urlencode
 
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
@@ -18,6 +19,8 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import Select
 from datetime import date, datetime
 from itertools import product
+from html import unescape
+from application_limits import DailyApplyLimitReached
 
 # 添加CloudAIResponseGenerator类
 class CloudAIResponseGenerator:
@@ -902,7 +905,7 @@ class LinkedinEasyApply:
                             print(f"Position '{position_name}' reached limit before processing location '{location}'. Stopping search for this position.")
                             break  # Break from location loop, move to next position_config
 
-                        location_url = "&location=" + location + "&geoId=" + self.click_location_url(location)
+                        location_url = urlencode({'location': location, 'geoId': self.click_location_url(location) or ''})
                         job_page_number = self.start_from_page - 2  # Will be incremented to start_from_page - 2 in loop
                         print(f"Searching for position '{position_name}' in '{location}' starting from page {self.start_from_page}.")
 
@@ -936,7 +939,7 @@ class LinkedinEasyApply:
                                     page_sleep +=1 # To avoid immediate re-trigger if loop is very fast
                         except Exception as e:
                             # Check if it's a daily limit error that should stop everything
-                            if "Daily limit reached - stopping application process" in str(e):
+                            if isinstance(e, DailyApplyLimitReached):
                                 print("🛑 Daily limit reached - stopping all application processes")
                                 raise e  # Re-raise to stop the entire application process
                             
@@ -961,7 +964,7 @@ class LinkedinEasyApply:
                         
                 except Exception as e:
                     # Check if it's a daily limit error that should stop everything
-                    if "Daily limit reached - stopping application process" in str(e):
+                    if isinstance(e, DailyApplyLimitReached):
                         print("🛑 Daily limit reached - stopping all application processes")
                         raise e  # Re-raise to stop the entire application process
                     else:
@@ -984,7 +987,7 @@ class LinkedinEasyApply:
 
             for (position, location) in searches:
                 try:
-                    location_url = "&location=" + location + "&geoId=" + self.click_location_url(location)
+                    location_url = urlencode({'location': location, 'geoId': self.click_location_url(location) or ''})
                     job_page_number = self.start_from_page - 2  # Will be incremented to start_from_page - 1 in loop
 
                     print(f"Starting the search for {position} in {location} from page {self.start_from_page}.")
@@ -1012,7 +1015,7 @@ class LinkedinEasyApply:
                                 page_sleep += 1
                     except Exception as e:
                         # Check if it's a daily limit error that should stop everything
-                        if "Daily limit reached - stopping application process" in str(e):
+                        if isinstance(e, DailyApplyLimitReached):
                             print("🛑 Daily limit reached - stopping all application processes")
                             raise e  # Re-raise to stop the entire application process
                         
@@ -1032,7 +1035,7 @@ class LinkedinEasyApply:
                     
                 except Exception as e:
                     # Check if it's a daily limit error that should stop everything
-                    if "Daily limit reached - stopping application process" in str(e):
+                    if isinstance(e, DailyApplyLimitReached):
                         print("🛑 Daily limit reached - stopping all application processes")
                         raise e  # Re-raise to stop the entire application process
                     else:
@@ -1053,12 +1056,95 @@ class LinkedinEasyApply:
 
         except Exception as e:
             # Check if it's a daily limit error that should stop everything
-            if "Daily limit reached - stopping application process" in str(e):
+            if isinstance(e, DailyApplyLimitReached):
                 print("🛑 Daily limit reached - stopping all application processes")
-                return
+                raise
             else:
                 print(f"Error in start_applying: {e}")
                 traceback.print_exc()
+
+    def _load_semantic_job_cards(self, card_xpath):
+        """Scroll the semantic left rail until lazy-loaded cards stabilize."""
+        cards = self.browser.find_elements(By.XPATH, card_xpath)
+        if not cards:
+            return cards
+
+        try:
+            scroll_container = self.browser.execute_script(
+                """
+                let node = arguments[0];
+                while (node && node !== document.body) {
+                    const style = getComputedStyle(node);
+                    if (node.scrollHeight > node.clientHeight + 20 &&
+                        ['auto', 'scroll'].includes(style.overflowY)) {
+                        return node;
+                    }
+                    node = node.parentElement;
+                }
+                return null;
+                """,
+                cards[0]
+            )
+        except Exception:
+            scroll_container = None
+
+        if scroll_container is None:
+            return cards
+
+        initial_count = len(cards)
+        previous_count = initial_count
+        previous_scroll_height = -1
+        stable_bottom_rounds = 0
+
+        for _ in range(60):
+            try:
+                metrics = self.browser.execute_script(
+                    """
+                    const element = arguments[0];
+                    const step = Math.max(300, element.clientHeight * 0.7);
+                    element.scrollTop = Math.min(
+                        element.scrollTop + step,
+                        element.scrollHeight
+                    );
+                    return {
+                        top: element.scrollTop,
+                        height: element.clientHeight,
+                        scrollHeight: element.scrollHeight
+                    };
+                    """,
+                    scroll_container
+                )
+                time.sleep(0.2)
+                cards = self.browser.find_elements(By.XPATH, card_xpath)
+                at_bottom = metrics['top'] + metrics['height'] >= metrics['scrollHeight'] - 2
+                if (
+                    at_bottom
+                    and len(cards) == previous_count
+                    and metrics['scrollHeight'] == previous_scroll_height
+                ):
+                    stable_bottom_rounds += 1
+                else:
+                    stable_bottom_rounds = 0
+
+                previous_count = len(cards)
+                previous_scroll_height = metrics['scrollHeight']
+                if stable_bottom_rounds >= 2:
+                    break
+            except (StaleElementReferenceException, NoSuchElementException):
+                refreshed_cards = self.browser.find_elements(By.XPATH, card_xpath)
+                if not refreshed_cards:
+                    break
+                cards = refreshed_cards
+
+        try:
+            self.browser.execute_script("arguments[0].scrollTop = 0;", scroll_container)
+            time.sleep(0.3)
+        except Exception:
+            pass
+
+        cards = self.browser.find_elements(By.XPATH, card_xpath)
+        print(f"Semantic job-list load check: {initial_count} -> {len(cards)} jobs")
+        return cards
 
     def apply_jobs(self, location, current_position_config=None):
         # 添加统计变量
@@ -1077,62 +1163,83 @@ class LinkedinEasyApply:
         if 'No matching jobs found' in no_jobs_text:
             raise Exception("No more jobs on this page.")
 
-        if 'unfortunately, things are' in self.browser.page_source.lower():
+        page_source = self.browser.page_source or ""
+        if 'unfortunately, things are' in page_source.lower():
             raise Exception("No more jobs on this page.")
 
-        job_results_header = ""
+        # This header is present in LinkedIn's classic jobs UI but was removed
+        # from the semantic-search UI rolled out to some accounts.
         maybe_jobs_crap = ""
-        job_results_header = self.browser.find_element(By.CLASS_NAME, "jobs-search-results-list__text")
-        maybe_jobs_crap = job_results_header.text
+        job_results_headers = self.browser.find_elements(By.CLASS_NAME, "jobs-search-results-list__text")
+        if job_results_headers:
+            maybe_jobs_crap = job_results_headers[0].text
 
         if 'Jobs you may be interested in' in maybe_jobs_crap:
             raise Exception("Nothing to do here, moving forward...")
 
+        new_ui_job_card_xpath = (
+            "//main//*[@role='button']"
+            "[.//button[starts-with(@aria-label, 'Dismiss ') and contains(@aria-label, ' job')]]"
+        )
+        is_semantic_search_ui = False
+        ul_element_class = None
+
         try:
+            # LinkedIn's semantic-search UI uses hashed CSS classes. Locate
+            # cards by their stable roles and accessible labels instead.
+            job_list = self.browser.find_elements(By.XPATH, new_ui_job_card_xpath)
+            if job_list:
+                is_semantic_search_ui = True
+                print("Detected LinkedIn semantic-search jobs UI.")
+                job_list = self._load_semantic_job_cards(new_ui_job_card_xpath)
+                print(f"Found {len(job_list)} jobs on this page")
+            else:
+                job_list = []
+
             # TODO: Can we simply use class name scaffold-layout__list for the scroll (necessary to show all li in the dom?)? Does it need to be the ul within the scaffold list?
             #      Then we can simply get all the li scaffold-layout__list-item elements within it for the jobs
 
-            # Define the XPaths for potentially different regions
-            xpath_region1 = "/html/body/div[6]/div[3]/div[4]/div/div/main/div/div[2]/div[1]/div"
-            xpath_region2 = "/html/body/div[5]/div[3]/div[4]/div/div/main/div/div[2]/div[1]/div"
-            job_list = []
+            if not is_semantic_search_ui:
+                # Define the XPaths for potentially different classic UI regions
+                xpath_region1 = "/html/body/div[6]/div[3]/div[4]/div/div/main/div/div[2]/div[1]/div"
+                xpath_region2 = "/html/body/div[5]/div[3]/div[4]/div/div/main/div/div[2]/div[1]/div"
 
-            # Attempt to locate the element using XPaths
-            try:
-                job_results = self.browser.find_element(By.XPATH, xpath_region1)
-                ul_xpath = "/html/body/div[6]/div[3]/div[4]/div/div/main/div/div[2]/div[1]/div/ul"
-                ul_element = self.browser.find_element(By.XPATH, ul_xpath)
-                ul_element_class = ul_element.get_attribute("class").split()[0]
-                print(f"Found using xpath_region1 and detected ul_element as {ul_element_class} based on {ul_xpath}")
+                # Attempt to locate the element using XPaths
+                try:
+                    job_results = self.browser.find_element(By.XPATH, xpath_region1)
+                    ul_xpath = "/html/body/div[6]/div[3]/div[4]/div/div/main/div/div[2]/div[1]/div/ul"
+                    ul_element = self.browser.find_element(By.XPATH, ul_xpath)
+                    ul_element_class = ul_element.get_attribute("class").split()[0]
+                    print(f"Found using xpath_region1 and detected ul_element as {ul_element_class} based on {ul_xpath}")
 
-            except NoSuchElementException:
-                job_results = self.browser.find_element(By.XPATH, xpath_region2)
-                ul_xpath = "/html/body/div[5]/div[3]/div[4]/div/div/main/div/div[2]/div[1]/div/ul"
-                ul_element = self.browser.find_element(By.XPATH, ul_xpath)
-                ul_element_class = ul_element.get_attribute("class").split()[0]
-                print(f"Found using xpath_region2 and detected ul_element as {ul_element_class} based on {ul_xpath}")
+                except NoSuchElementException:
+                    job_results = self.browser.find_element(By.XPATH, xpath_region2)
+                    ul_xpath = "/html/body/div[5]/div[3]/div[4]/div/div/main/div/div[2]/div[1]/div/ul"
+                    ul_element = self.browser.find_element(By.XPATH, ul_xpath)
+                    ul_element_class = ul_element.get_attribute("class").split()[0]
+                    print(f"Found using xpath_region2 and detected ul_element as {ul_element_class} based on {ul_xpath}")
 
-            # Extract the random class name dynamically
-            random_class = job_results.get_attribute("class").split()[0]
-            print(f"Random class detected: {random_class}")
+                # Extract the random class name dynamically
+                random_class = job_results.get_attribute("class").split()[0]
+                print(f"Random class detected: {random_class}")
 
-            # Use the detected class name to find the element
-            job_results_by_class = self.browser.find_element(By.CSS_SELECTOR, f".{random_class}")
-            print(f"job_results: {job_results_by_class}")
-            print("Successfully located the element using the random class name.")
+                # Use the detected class name to find the element
+                job_results_by_class = self.browser.find_element(By.CSS_SELECTOR, f".{random_class}")
+                print(f"job_results: {job_results_by_class}")
+                print("Successfully located the element using the random class name.")
 
-            # Find job list elements
-            job_list = self.browser.find_elements(By.CLASS_NAME, ul_element_class)[0].find_elements(By.CLASS_NAME, 'scaffold-layout__list-item')
-            print(f"Found {len(job_list)} jobs on this page")
+                # Find job list elements
+                job_list = self.browser.find_elements(By.CLASS_NAME, ul_element_class)[0].find_elements(By.CLASS_NAME, 'scaffold-layout__list-item')
+                print(f"Found {len(job_list)} jobs on this page")
 
-            if len(job_list) == 0:
-                raise Exception("No more jobs on this page.")  # TODO: Seemed to encounter an error where we ran out of jobs and didn't go to next page, perhaps because I didn't have scrolling on?
-            else:
-                job_list[0].find_element(By.TAG_NAME, 'a').click()
-                time.sleep(random.uniform(2, 3))
-                # Scroll logic (currently disabled for testing)
-                self.scroll_slow(job_results_by_class, step=600, )  # Scroll down
-                self.scroll_slow(job_results_by_class, step=900, reverse=True)  # Scroll up
+                if len(job_list) == 0:
+                    raise Exception("No more jobs on this page.")  # TODO: Seemed to encounter an error where we ran out of jobs and didn't go to next page, perhaps because I didn't have scrolling on?
+                else:
+                    job_list[0].find_element(By.TAG_NAME, 'a').click()
+                    time.sleep(random.uniform(2, 3))
+                    # Scroll logic (currently disabled for testing)
+                    self.scroll_slow(job_results_by_class, step=600, )  # Scroll down
+                    self.scroll_slow(job_results_by_class, step=900, reverse=True)  # Scroll up
 
         except NoSuchElementException:
             print("No job results found using the specified XPaths or class.")
@@ -1159,19 +1266,51 @@ class LinkedinEasyApply:
             jobs_processed += 1
 
             job_title, company, poster, job_location, apply_method, link = "", "", "", "", "", ""
-            job_tile = self.browser.find_elements(By.CLASS_NAME, ul_element_class)[0].find_elements(By.CLASS_NAME, 'scaffold-layout__list-item')[i]
-            try:
-                job_title_element = job_tile.find_element(By.TAG_NAME, 'a')
-                job_title = job_title_element.find_element(By.TAG_NAME, 'strong').text
-                # link = job_title_element.get_attribute('href').split('?')[0]
-                link = job_title_element.get_attribute('href')
-            except:
-                pass
-            try:
-                # company = job_tile.find_element(By.CLASS_NAME, 'job-card-container__primary-description').text # original code
-                company = job_tile.find_element(By.CLASS_NAME, 'artdeco-entity-lockup__subtitle').text
-            except:
-                pass
+            if is_semantic_search_ui:
+                current_job_list = self.browser.find_elements(By.XPATH, new_ui_job_card_xpath)
+                if i >= len(current_job_list):
+                    print("The semantic-search job list changed while processing; ending this page.")
+                    break
+                job_tile = current_job_list[i]
+
+                try:
+                    dismiss_button = job_tile.find_element(
+                        By.XPATH,
+                        ".//button[starts-with(@aria-label, 'Dismiss ') and contains(@aria-label, ' job')]"
+                    )
+                    dismiss_label = dismiss_button.get_attribute("aria-label") or ""
+                    job_title = re.sub(r"^Dismiss\s+|\s+job$", "", dismiss_label).strip()
+                except Exception:
+                    pass
+
+                # New cards repeat the title, followed by company and location.
+                card_lines = [line.strip() for line in (job_tile.text or "").splitlines() if line.strip()]
+                if job_title:
+                    title_indexes = [
+                        index for index, line in enumerate(card_lines)
+                        if line == job_title
+                    ]
+                    if title_indexes:
+                        metadata_index = title_indexes[-1] + 1
+                        if metadata_index < len(card_lines):
+                            company = card_lines[metadata_index]
+                        if metadata_index + 1 < len(card_lines):
+                            job_location = card_lines[metadata_index + 1]
+                apply_method = "Easy Apply" if "easy apply" in (job_tile.text or "").lower() else ""
+            else:
+                job_tile = self.browser.find_elements(By.CLASS_NAME, ul_element_class)[0].find_elements(By.CLASS_NAME, 'scaffold-layout__list-item')[i]
+                try:
+                    job_title_element = job_tile.find_element(By.TAG_NAME, 'a')
+                    job_title = job_title_element.find_element(By.TAG_NAME, 'strong').text
+                    # link = job_title_element.get_attribute('href').split('?')[0]
+                    link = job_title_element.get_attribute('href')
+                except:
+                    pass
+                try:
+                    # company = job_tile.find_element(By.CLASS_NAME, 'job-card-container__primary-description').text # original code
+                    company = job_tile.find_element(By.CLASS_NAME, 'artdeco-entity-lockup__subtitle').text
+                except:
+                    pass
             try:
                 # get the name of the person who posted for the position, if any is listed
                 hiring_line = job_tile.find_element(By.XPATH, '//span[contains(.,\' is hiring for this\')]')
@@ -1212,15 +1351,48 @@ class LinkedinEasyApply:
                     retries = 0
                     while retries < max_retries:
                         try:
-                            # TODO: This is throwing an exception when running out of jobs on a page
-                            job_el = job_tile.find_element(By.TAG_NAME, 'a')
-                            job_el.click()
+                            if is_semantic_search_ui:
+                                self.browser.execute_script(
+                                    "arguments[0].scrollIntoView({block: 'center'});",
+                                    job_tile
+                                )
+                                self.browser.execute_script("arguments[0].click();", job_tile)
+                            else:
+                                # TODO: This is throwing an exception when running out of jobs on a page
+                                job_el = job_tile.find_element(By.TAG_NAME, 'a')
+                                job_el.click()
                             break
                         except StaleElementReferenceException:
                             retries += 1
+                            if is_semantic_search_ui:
+                                refreshed_jobs = self.browser.find_elements(By.XPATH, new_ui_job_card_xpath)
+                                if i < len(refreshed_jobs):
+                                    job_tile = refreshed_jobs[i]
                             continue
 
                     time.sleep(random.uniform(3, 5)) if not self.FastMode else time.sleep(random.uniform(1, 2))
+
+                    if is_semantic_search_ui:
+                        # Semantic-search cards are buttons rather than links. The
+                        # canonical job link appears in the details pane after click.
+                        detail_links = self.browser.find_elements(By.CSS_SELECTOR, 'main a[href*="/jobs/view/"]')
+                        for detail_link in detail_links:
+                            href = detail_link.get_attribute('href')
+                            if href and (not job_title or job_title.lower() in (detail_link.text or '').lower()):
+                                link = href
+                                break
+
+                        if not link:
+                            current_job_id = parse_qs(urlparse(self.browser.current_url).query).get('currentJobId', [None])[0]
+                            if current_job_id:
+                                link = f"https://www.linkedin.com/jobs/view/{current_job_id}/"
+
+                        if link and (link in self.seen_jobs or self.is_job_already_applied(link, silent=True)):
+                            print(f"Skipping job - {company} {job_title} (Reason: already applied previously)")
+                            jobs_skipped += 1
+                            if link not in self.seen_jobs:
+                                self.seen_jobs.append(link)
+                            continue
 
                     # 检查申请人数是否超过设定的阈值
                     if self.lessApplicantsEnabled:
@@ -1312,10 +1484,10 @@ class LinkedinEasyApply:
                             print(f"An application for '{job_title}' at {company} has been submitted earlier or was not EasyApply.")
                     except Exception as e_apply:
                         # Check if it's a daily limit error - MUST stop immediately
-                        if "Daily Easy Apply limit reached" in str(e_apply):
+                        if isinstance(e_apply, DailyApplyLimitReached):
                             print("🛑 Daily limit reached - stopping application process immediately")
                             # Re-raise immediately to stop processing more jobs
-                            raise Exception("Daily limit reached - stopping application process")
+                            raise
                         
                         temp = self.file_name
                         self.file_name = "failed"
@@ -1338,7 +1510,7 @@ class LinkedinEasyApply:
                         # traceback.print_exc() # Already printed by the application failure usually
                 except Exception as e_outer_job_loop:
                     # Check if it's a daily limit error that should stop the entire process
-                    if "Daily limit reached - stopping application process" in str(e_outer_job_loop):
+                    if isinstance(e_outer_job_loop, DailyApplyLimitReached):
                         print("🔄 The program stopped gracefully: The LinkedIn daily application limit has been reached")
                         end_seen_count = len(self.seen_jobs)
                         newly_seen = end_seen_count - start_seen_count
@@ -1384,23 +1556,109 @@ class LinkedinEasyApply:
         newly_seen = end_seen_count - start_seen_count
         print(f"Page processing complete - Processed: {jobs_processed}, Applied: {jobs_applied}, Skipped: {jobs_skipped}, Newly seen: {newly_seen}")
 
-    def apply_to_job(self):
-        easy_apply_button = None
-
+    def _easy_apply_contexts(self):
+        """Return both the classic DOM and LinkedIn's newer interop shadow DOM."""
+        contexts = [self.browser]
         try:
-            easy_apply_button = self.browser.find_element(By.CLASS_NAME, 'jobs-apply-button')
-            if not ('easy apply' in easy_apply_button.text.lower()) and not ('快速申请' in easy_apply_button.text.lower()):
-                print(f"Easy apply button not found: {easy_apply_button.text}")
-                return False
-        except:
-            return False
-        
-        # Check for daily application limit BEFORE clicking the button
-        # This prevents unnecessary clicks and catches limit earlier
-        daily_limit_messages = [
-            "you've reached today's easy apply limit",
+            shadow_hosts = self.browser.find_elements(
+                By.CSS_SELECTOR,
+                '#interop-outlet, [data-testid="interop-shadowdom"]'
+            )
+            for host in shadow_hosts:
+                try:
+                    shadow_root = host.shadow_root
+                    if shadow_root not in contexts:
+                        contexts.append(shadow_root)
+                except Exception:
+                    continue
+        except Exception:
+            pass
+        return contexts
+
+    @staticmethod
+    def _visible_elements(context, by, selector):
+        try:
+            return [
+                element for element in context.find_elements(by, selector)
+                if element.is_displayed()
+            ]
+        except Exception:
+            return []
+
+    def _shadow_elements(self, selector, visible_only=False):
+        """Find elements in LinkedIn's open interop shadow root via JavaScript.
+
+        Selenium's ``is_displayed`` can incorrectly report the shadow host as
+        hidden even while fixed-position modal children are visible. Reading
+        the child rectangles in the page avoids that false negative.
+        """
+        try:
+            return self.browser.execute_script(
+                """
+                const selector = arguments[0];
+                const visibleOnly = arguments[1];
+                const hosts = document.querySelectorAll(
+                    '#interop-outlet, [data-testid="interop-shadowdom"]'
+                );
+                return Array.from(hosts).flatMap(host => {
+                    if (!host.shadowRoot) return [];
+                    return Array.from(host.shadowRoot.querySelectorAll(selector));
+                }).filter(element => {
+                    if (!visibleOnly) return true;
+                    const rect = element.getBoundingClientRect();
+                    const style = getComputedStyle(element);
+                    return rect.width > 0 && rect.height > 0 &&
+                        style.display !== 'none' && style.visibility !== 'hidden';
+                });
+                """,
+                selector,
+                visible_only
+            ) or []
+        except Exception:
+            return []
+
+    def _continue_easy_apply_warning(self):
+        """Continue past LinkedIn's optional low-match warning dialog."""
+        continue_labels = {'continue applying', '继续申请', '继续应聘'}
+        buttons = self._visible_elements(self.browser, By.CSS_SELECTOR, 'button')
+        buttons.extend(self._shadow_elements('button', visible_only=True))
+        for button in buttons:
+            try:
+                label = ' '.join(
+                    ((button.text or '') or (button.get_attribute('aria-label') or '')).lower().split()
+                )
+                if label in continue_labels and button.is_enabled():
+                    print("LinkedIn displayed a job-fit warning; continuing to the application form.")
+                    try:
+                        button.click()
+                    except Exception:
+                        self.browser.execute_script("arguments[0].click();", button)
+                    return True
+            except Exception:
+                continue
+        return False
+
+    def _raise_if_daily_apply_limit(self):
+        """Inspect visible document and shadow content before looking for a form."""
+        texts = []
+        for element in self.browser.find_elements(By.TAG_NAME, 'body'):
+            try:
+                texts.append(element.text or '')
+            except StaleElementReferenceException:
+                continue
+        for element in self._shadow_elements(
+            '[role="dialog"], .artdeco-modal, .jobs-easy-apply-modal',
+            visible_only=True,
+        ):
+            try:
+                texts.append(element.text or '')
+            except StaleElementReferenceException:
+                continue
+        visible_text = ' '.join(unescape('\n'.join(texts)).lower().replace('’', "'").split())
+        messages = (
             "reached today's easy apply limit",
             "easy apply limit for today",
+            "easy apply application limit for today",
             "continue applying tomorrow",
             "daily submissions to help ensure",
             "daily submissions to maintain quality",
@@ -1408,13 +1666,146 @@ class LinkedinEasyApply:
             "您已达到今天的快速申请限额",
             "今日快速申请限额",
             "明天继续申请",
-            "保存此职位并在明天申请"
-        ]
+            "保存此职位并在明天申请",
+        )
+        if any(message in visible_text for message in messages):
+            print("🛑 Daily Easy Apply limit detected; stopping this account.", flush=True)
+            raise DailyApplyLimitReached()
+
+    def _find_easy_apply_context(self, timeout=12):
+        """Wait for the Easy Apply modal in either the old or new LinkedIn UI."""
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            self._raise_if_daily_apply_limit()
+            classic_modals = self._visible_elements(
+                self.browser,
+                By.CLASS_NAME,
+                'jobs-easy-apply-modal'
+            )
+            shadow_modals = self._shadow_elements(
+                '.jobs-easy-apply-modal',
+                visible_only=True
+            )
+            modal_candidates = classic_modals + shadow_modals
+            if modal_candidates:
+                modal = modal_candidates[-1]
+                self._active_easy_apply_context = modal
+                return modal
+
+            if self._continue_easy_apply_warning():
+                time.sleep(0.75)
+                continue
+            time.sleep(0.25)
+        return None
+
+    def _find_easy_apply_primary_button(self, context):
+        modal_candidates = self._visible_elements(context, By.CLASS_NAME, 'jobs-easy-apply-modal')
+        search_context = modal_candidates[0] if modal_candidates else context
+        selectors = (
+            'button[data-easy-apply-next-button], '
+            'button[data-easy-apply-review-button], '
+            'button[aria-label*="Submit application"], '
+            'button[aria-label*="提交申请"], '
+            'button.artdeco-button--primary'
+        )
+        buttons = self._visible_elements(search_context, By.CSS_SELECTOR, selectors)
+        return next((button for button in buttons if button.is_enabled()), None)
+
+    def _easy_apply_text(self, context=None):
+        text_parts = [(self.browser.page_source or '').lower()]
+        if context is not None:
+            try:
+                modal_contents = self._visible_elements(
+                    context,
+                    By.CLASS_NAME,
+                    'jobs-easy-apply-modal__content'
+                )
+                if modal_contents:
+                    text_parts.append((modal_contents[0].text or '').lower())
+            except Exception:
+                pass
+        return '\n'.join(text_parts)
+
+    def _dismiss_easy_apply(self, context=None, discard=False):
+        contexts = []
+        if context is not None:
+            contexts.append(context)
+        contexts.append(self.browser)
+
+        dismissed = False
+        for candidate in contexts:
+            dismiss_buttons = self._visible_elements(candidate, By.CLASS_NAME, 'artdeco-modal__dismiss')
+            if dismiss_buttons:
+                try:
+                    dismiss_buttons[0].click()
+                    dismissed = True
+                    break
+                except Exception:
+                    continue
+
+        if not dismissed:
+            shadow_dismiss_buttons = self._shadow_elements(
+                '.artdeco-modal__dismiss',
+                visible_only=True
+            )
+            if shadow_dismiss_buttons:
+                try:
+                    self.browser.execute_script("arguments[0].click();", shadow_dismiss_buttons[0])
+                    dismissed = True
+                except Exception:
+                    pass
+
+        if discard and dismissed:
+            time.sleep(random.uniform(1, 2))
+            for candidate in contexts:
+                confirm_buttons = self._visible_elements(
+                    candidate,
+                    By.CLASS_NAME,
+                    'artdeco-modal__confirm-dialog-btn'
+                )
+                if confirm_buttons:
+                    confirm_buttons[-1].click()
+                    break
+            else:
+                shadow_confirm_buttons = self._shadow_elements(
+                    '.artdeco-modal__confirm-dialog-btn',
+                    visible_only=True
+                )
+                if shadow_confirm_buttons:
+                    self.browser.execute_script(
+                        "arguments[0].click();",
+                        shadow_confirm_buttons[-1]
+                    )
+        return dismissed
+
+    def apply_to_job(self):
+        self._raise_if_daily_apply_limit()
+        easy_apply_button = None
+
+        try:
+            classic_buttons = self.browser.find_elements(By.CLASS_NAME, 'jobs-apply-button')
+            semantic_buttons_and_links = self.browser.find_elements(
+                By.CSS_SELECTOR,
+                'button[aria-label^="Easy Apply to"], '
+                'button[data-live-test-job-apply-button], '
+                'a[aria-label^="Easy Apply to"], '
+                'a[href*="/apply/"][href*="openSDUIApplyFlow=true"]'
+            )
+            candidate_buttons = classic_buttons + semantic_buttons_and_links
+            easy_apply_button = next(
+                button for button in candidate_buttons
+                if button.is_displayed()
+                and button.is_enabled()
+                and (
+                    'jobs-apply-button' in (button.get_attribute('class') or '')
+                    or 'easy apply to' in (button.get_attribute('aria-label') or '').lower()
+                    or 'openSDUIApplyFlow=true' in (button.get_attribute('href') or '')
+                )
+            )
+        except Exception:
+            return False
         
-        page_source_lower = self.browser.page_source.lower()
-        if any(msg in page_source_lower for msg in daily_limit_messages):
-            print("❌ Daily Easy Apply limit detected on page - stopping immediately")
-            raise Exception("Daily Easy Apply limit reached")
+        self._raise_if_daily_apply_limit()
         
         # Scroll to the job description
         try:
@@ -1426,42 +1817,56 @@ class LinkedinEasyApply:
             pass
 
         print("Starting the job application...")
-        easy_apply_button.click()
-        
-        # Check for daily application limit after clicking (double check)
-        time.sleep(random.uniform(2, 3)) if not self.FastMode else time.sleep(random.uniform(1, 2))
-        
-        # Re-check after clicking in case limit message appears after click
-        page_source_lower = self.browser.page_source.lower()
-        if any(msg in page_source_lower for msg in daily_limit_messages):
-            print("❌ Daily Easy Apply limit detected after clicking - stopping immediately")
-            # Try to close any modal dialogs
-            try:
-                self.browser.find_element(By.CLASS_NAME, 'artdeco-modal__dismiss').click()
-                time.sleep(1)
-            except:
-                pass
+        self.browser.execute_script(
+            "arguments[0].scrollIntoView({block: 'center'});",
+            easy_apply_button
+        )
+        try:
+            easy_apply_button.click()
+        except Exception:
+            self.browser.execute_script("arguments[0].click();", easy_apply_button)
 
-            raise Exception("Daily Easy Apply limit reached")
+        application_context = self._find_easy_apply_context()
+        if application_context is None:
+            raise Exception("Easy Apply dialog did not open in either LinkedIn UI")
+        
+        time.sleep(random.uniform(2, 3)) if not self.FastMode else time.sleep(random.uniform(1, 2))
+        self._raise_if_daily_apply_limit()
 
         button_text = ""
         submit_application_text = 'submit application'
 
         while submit_application_text not in button_text.lower() and '提交' not in button_text:
             try:
-                self.fill_up()
-                next_button = self.browser.find_element(By.CLASS_NAME, "artdeco-button--primary")
+                self._raise_if_daily_apply_limit()
+                form_found = self.fill_up(application_context)
+                self._raise_if_daily_apply_limit()
+
+                # Filling a typeahead or upload can re-render the footer, so
+                # always reacquire the primary button after filling. LinkedIn's
+                # review screen legitimately has no <form>; it only exposes the
+                # final Submit application button.
+                next_button = self._find_easy_apply_primary_button(application_context)
+                if next_button is None:
+                    raise Exception("Could not find the Easy Apply next/submit button")
                 button_text = next_button.text.lower()
                 print(button_text)
+                if (
+                    not form_found
+                    and submit_application_text not in button_text
+                    and '提交' not in button_text
+                ):
+                    raise Exception("Could not find the Easy Apply form")
                 if submit_application_text in button_text or '提交' in button_text:
                     try:
                         # Try to unfollow company
-                        self.unfollow()
+                        self.unfollow(application_context)
                     except:
                         print("Failed to unfollow company.")
                 time.sleep(random.uniform(1.5, 2.5)) if not self.FastMode else time.sleep(random.uniform(1, 2))
                 next_button.click()
                 time.sleep(random.uniform(3.0, 5.0)) if not self.FastMode else time.sleep(random.uniform(2.0, 3.0))
+                self._raise_if_daily_apply_limit()
 
                 # Newer error handling
                 error_messages = [
@@ -1497,23 +1902,22 @@ class LinkedinEasyApply:
                     'tussen'
                 ]
 
-                if any(error in self.browser.page_source.lower() for error in error_messages):
+                if any(error.lower() in self._easy_apply_text(application_context) for error in error_messages):
                     raise Exception("Failed answering required questions or uploading required files.")
-            except:
+            except DailyApplyLimitReached:
+                raise
+            except Exception:
+                self._raise_if_daily_apply_limit()
                 traceback.print_exc()
-                self.browser.find_element(By.CLASS_NAME, 'artdeco-modal__dismiss').click()
-                time.sleep(random.uniform(2, 3)) if not self.FastMode else time.sleep(random.uniform(1, 2))
-                self.browser.find_elements(By.CLASS_NAME, 'artdeco-modal__confirm-dialog-btn')[0].click()
+                self._dismiss_easy_apply(application_context, discard=True)
                 time.sleep(random.uniform(2, 3)) if not self.FastMode else time.sleep(random.uniform(1, 2))
                 raise Exception("Failed to apply to job!")
 
         closed_notification = False
         time.sleep(random.uniform(2, 3)) if not self.FastMode else time.sleep(random.uniform(1, 2))
-        try:
-            self.browser.find_element(By.CLASS_NAME, 'artdeco-modal__dismiss').click()
+        self._raise_if_daily_apply_limit()
+        if self._dismiss_easy_apply(application_context):
             closed_notification = True
-        except:
-            pass
         try:
             self.browser.find_element(By.CLASS_NAME, 'artdeco-toast-item__dismiss').click()
             closed_notification = True
@@ -1532,6 +1936,62 @@ class LinkedinEasyApply:
 
         return True
 
+    def _select_typeahead_option(self, form, input_field, value):
+        """Enter a location and bind it to LinkedIn's dynamic typeahead entity."""
+        self.enter_text(input_field, value)
+        deadline = time.time() + 8
+        normalized_value = ' '.join(value.lower().split())
+
+        while time.time() < deadline:
+            active_context = getattr(self, '_active_easy_apply_context', None)
+            search_root = active_context if active_context is not None else form
+            try:
+                selected_text = self.browser.execute_script(
+                    r"""
+                    const root = arguments[0];
+                    const requested = arguments[1];
+                    const options = Array.from(root.querySelectorAll('[role="option"]'))
+                        .filter(option => {
+                            const rect = option.getBoundingClientRect();
+                            return rect.width > 0 && rect.height > 0 &&
+                                (option.innerText || '').trim();
+                        });
+                    const normalize = text => text.trim().toLowerCase().replace(/\s+/g, ' ');
+                    const selected = options.find(option => normalize(option.innerText) === requested) ||
+                        options.find(option => normalize(option.innerText).startsWith(requested + ','));
+                    if (!selected) return null;
+                    const text = (selected.innerText || '').trim().replace(/\s+/g, ' ');
+                    selected.click();
+                    return text;
+                    """,
+                    search_root,
+                    normalized_value
+                )
+            except Exception:
+                selected_text = None
+
+            if selected_text:
+
+                try:
+                    WebDriverWait(self.browser, 5).until(
+                        lambda _: (input_field.get_attribute('aria-expanded') or 'false') == 'false'
+                    )
+                except Exception:
+                    pass
+                print(f"Selected location suggestion: {selected_text}")
+                return True
+
+            time.sleep(0.25)
+
+        # Keep the classic keyboard fallback for older LinkedIn variants.
+        try:
+            input_field.send_keys(Keys.DOWN)
+            input_field.send_keys(Keys.RETURN)
+            time.sleep(0.5)
+            return (input_field.get_attribute('aria-expanded') or 'false') == 'false'
+        except Exception:
+            return False
+
     def home_address(self, form):
         print("Trying to fill up home address fields")
         try:
@@ -1545,10 +2005,11 @@ class LinkedinEasyApply:
                     elif 'city' in lb or 'GEO-LOCATION' in input_field.get_attribute('id'):
                         print("Trying to fill up city field")
                         print(self.personal_info['City'])
-                        self.enter_text(input_field, self.personal_info['City'])
-                        time.sleep(1.5)
-                        input_field.send_keys(Keys.DOWN)
-                        input_field.send_keys(Keys.RETURN)
+                        self._select_typeahead_option(
+                            form,
+                            input_field,
+                            self.personal_info['City']
+                        )
                     elif 'zip' in lb or 'zip / postal code' in lb or 'postal' in lb:
                         self.enter_text(input_field, self.personal_info['Zip'])
                     elif 'state' in lb or 'province' in lb:
@@ -1568,10 +2029,11 @@ class LinkedinEasyApply:
                         elif 'city' in lb or 'GEO-LOCATION' in input_field.get_attribute('id'):
                             print("Trying to fill up city field")
                             print(self.personal_info['City'])
-                            self.enter_text(input_field, self.personal_info['City'])
-                            time.sleep(1.5)
-                            input_field.send_keys(Keys.DOWN)
-                            input_field.send_keys(Keys.RETURN)
+                            self._select_typeahead_option(
+                                form,
+                                input_field,
+                                self.personal_info['City']
+                            )
                         elif 'zip' in lb or 'zip / postal code' in lb or 'postal' in lb:
                             self.enter_text(input_field, self.personal_info['Zip'])
                         elif 'state' in lb or 'province' in lb:
@@ -1660,6 +2122,13 @@ class LinkedinEasyApply:
         questions = form.find_elements(By.CLASS_NAME, 'fb-dash-form-element')
         for question in questions:
             try:
+                contact_fields = question.find_elements(By.CSS_SELECTOR, 'input, select')
+                contact_question = self._extract_question_text(question)
+                handled_contact = False
+                for field in contact_fields:
+                    handled_contact = self._fill_contact_field(form, field, contact_question) or handled_contact
+                if handled_contact:
+                    continue
                 # Radio check
                 try:
                     radio_fieldset = question.find_element(By.TAG_NAME, 'fieldset')
@@ -2375,30 +2844,34 @@ class LinkedinEasyApply:
             except Exception as e:
                 print(f"An exception occurred while processing the problem")
                 
-    def fill_up(self):
+    def fill_up(self, context=None):
+        context = context or getattr(self, '_active_easy_apply_context', self.browser)
         try:
-            easy_apply_modal_content = self.browser.find_element(By.CLASS_NAME, "jobs-easy-apply-modal__content")
+            easy_apply_modal_content = context.find_element(By.CLASS_NAME, "jobs-easy-apply-modal__content")
             form = easy_apply_modal_content.find_element(By.TAG_NAME, 'form')
             try:
-                label = form.find_element(By.TAG_NAME, 'h3').text.lower()
+                headings = form.find_elements(By.TAG_NAME, 'h3')
+                label = self._normalize_contact_text(headings[0].text) if headings else ''
                 # Try to fill in the basic information, if you don't have it AI will help you
                 if 'home address' in label:
                     self.home_address(form)
-                elif 'contact info' in label:
+                elif any(text in label for text in ('contact info', 'contact details', 'informacion de contacto', '联系信息', '联系方式')):
                     self.contact_info(form)
                 elif 'resume' in label:
-                    self.send_resume()
+                    self.send_resume(context)
                 elif 'work experience' in label and len(self.workExperiences) > 0:
                     self.work_experience(form)
                 elif 'education' in label and len(self.education) > 0:
                     self.education_fun(form)
                 else:
-                    self.send_resume()
+                    self.contact_info(form)
                     self.additional_questions(form)
             except Exception as e:
                 print("An exception occurred while filling up the form: no label, pass")
-        except:
+            return True
+        except Exception:
             print("An exception occurred while searching for form in modal")
+            return False
 
     def write_to_file(self, company, job_title, link, location, search_location):
         # Extract user_id from applied_jobs_file name
@@ -2450,9 +2923,19 @@ class LinkedinEasyApply:
         pyautogui.press('esc')
 
     def get_base_search_url(self, parameters):
-        remote_url = ""
-        lessthanTenApplicants_url = ""
-        newestPostingsFirst_url = ""
+        def selected(options, name):
+            if not isinstance(options, dict):
+                return False
+            # Cloud keys override stale legacy defaults when both exist.
+            aliases = (name.replace(' ', '_').replace('-', '_'), name.replace(' ', '_'), name)
+            return next((options[key] is True for key in aliases if key in options), False)
+
+        distance = parameters.get('distance')
+        if distance is None:
+            distance = 100
+        if isinstance(distance, bool) or distance not in (0, 5, 10, 25, 50, 100):
+            raise ValueError("Search distance must be 0, 5, 10, 25, 50, or 100 miles")
+        search_parameters = {'distance': int(distance), 'f_AL': 'true'}
 
         workplace_types = []
         if parameters.get('remote'):
@@ -2460,78 +2943,67 @@ class LinkedinEasyApply:
         if parameters.get('hybrid'):
             workplace_types.append("3")
         if workplace_types:
-            remote_url = f"&f_WT={'%2C'.join(workplace_types)}"
+            search_parameters['f_WT'] = ','.join(workplace_types)
 
-        if parameters['lessthanTenApplicants']:
-            lessthanTenApplicants_url = "&f_EA=true"
-            
-        # 注意：我们现在在页面内容中直接检查申请人数，不再使用URL参数
+        if parameters.get('lessthanTenApplicants'):
+            search_parameters['f_EA'] = 'true'
 
-        if parameters['newestPostingsFirst']:
-            newestPostingsFirst_url += "&sortBy=DD"
+        if parameters.get('newestPostingsFirst'):
+            search_parameters['sortBy'] = 'DD'
 
-        level = 1
-        experience_level = parameters.get('experienceLevel', [])
-        experience_url = "f_E="
-        for key in experience_level.keys():
-            if experience_level[key]:
-                experience_url += "%2C" + str(level)
-            level += 1
+        experience_codes = {
+            'internship': '1', 'entry': '2', 'associate': '3',
+            'mid-senior level': '4', 'director': '5', 'executive': '6',
+        }
+        experience = [
+            code for name, code in experience_codes.items()
+            if selected(parameters.get('experienceLevel'), name)
+        ]
+        if experience:
+            search_parameters['f_E'] = ','.join(experience)
 
-        distance_url = "?distance=" + str(parameters['distance'])
+        job_type_codes = {
+            'full-time': 'F', 'part-time': 'P', 'contract': 'C',
+            'temporary': 'T', 'internship': 'I', 'volunteer': 'V', 'other': 'O',
+        }
+        job_types = [
+            code for name, code in job_type_codes.items()
+            if selected(parameters.get('jobTypes'), name)
+        ]
+        if job_types:
+            search_parameters['f_JT'] = ','.join(job_types)
 
-        job_types_url = "f_JT="
-        job_types = parameters.get('jobTypes', [])
-        # job_types = parameters.get('experienceLevel', [])
-        for key in job_types:
-            if job_types[key]:
-                job_types_url += "%2C" + key[0].upper()
-
-        date_url = ""
-        dates = {"all time": "", "month": "&f_TPR=r2592000", "week": "&f_TPR=r604800", "24 hours": "&f_TPR=r86400"}
-        date_table = parameters.get('date', [])
-        
-        # 处理自定义小时数
-        custom_hours_selected = False
-        custom_hours_value = 24  # 默认24小时
-        
-        # 检查是否有自定义小时数
-        if date_table and 'custom_hours' in date_table and date_table['custom_hours']:
-            custom_hours_selected = True
-            # 获取自定义小时数
-            if 'customHours' in parameters:
-                try:
-                    custom_hours_value = int(parameters['customHours'])
-                    if custom_hours_value <= 0:  # 确保是正数
-                        custom_hours_value = 24  # 如果无效则使用默认值
-                except (ValueError, TypeError):
-                    pass  # 使用默认值
-        
-        # 设置日期URL
-        if custom_hours_selected:
-            # 计算秒数：小时数 * 3600 秒/小时
-            seconds = custom_hours_value * 3600
-            date_url = f"&f_TPR=r{seconds}"
+        date_table = parameters.get('date')
+        if selected(date_table, 'custom_hours'):
+            try:
+                hours = parameters.get('customHours', 24)
+                hours = int(hours) if not isinstance(hours, bool) else 24
+                if hours <= 0:
+                    hours = 24
+            except (ValueError, TypeError, OverflowError):
+                hours = 24
+            search_parameters['f_TPR'] = f'r{hours * 3600}'
         else:
-            # 处理标准日期选项
-            for key in date_table.keys():
-                if date_table[key] and key in dates:
-                    date_url = dates[key]
+            # Specific date filters take priority over leftover "all time" defaults.
+            for name, seconds in (('24 hours', 86400), ('week', 604800), ('month', 2592000)):
+                if selected(date_table, name):
+                    search_parameters['f_TPR'] = f'r{seconds}'
                     break
 
-        easy_apply_url = "&f_AL=true"
-
-        extra_search_terms = [distance_url, remote_url, lessthanTenApplicants_url, newestPostingsFirst_url, job_types_url, experience_url]
-        extra_search_terms_str = '&'.join(
-            term for term in extra_search_terms if len(term) > 0) + easy_apply_url + date_url
-
-        return extra_search_terms_str
+        return urlencode(search_parameters)
 
     def next_job_page(self, position, location_url, job_page):
-        # location_url should already contain "&location=...&geoId=..."
-        # Build the complete URL properly
-        url = "https://www.linkedin.com/jobs/search/?" + self.base_search_url.lstrip('&') + \
-              "&keywords=" + position + location_url + "&start=" + str(job_page * 25)
+        if not isinstance(position, str) or not position.strip():
+            raise ValueError("Position search keyword must not be empty")
+        parameters = parse_qs(self.base_search_url.lstrip('?&'))
+        location_parameters = parse_qs(location_url.lstrip('?&'))
+        for key in ('location', 'geoId'):
+            if key in location_parameters:
+                parameters[key] = location_parameters[key]
+        parameters['keywords'] = [position.strip()]
+        parameters['start'] = [str(max(0, job_page) * 25)]
+        url = "https://www.linkedin.com/jobs/search/?" + urlencode(parameters, doseq=True)
+        print(f"Job search URL: {url}")
         self.browser.get(url)
 
         self.avoid_lock()
@@ -2540,36 +3012,139 @@ class LinkedinEasyApply:
         try:
             self.browser.get("https://www.linkedin.com/jobs/search/")
             time.sleep(1)  # 等待页面加载
-            # 使用xpath获取id前缀为jobs-search-box-location-id-xxx的元素
-            location_input = self.browser.find_element(By.XPATH, '//input[starts-with(@id,"jobs-search-box-location-id-")]')
-            
-            # 确保完全清除旧内容：多次清除并使用键盘快捷键
-            location_input.click()  # 先点击聚焦
-            time.sleep(0.3)
-            location_input.clear()  # 清除
-            time.sleep(0.3)
-            # 使用 Ctrl+A 全选然后删除，确保清除所有内容
-            location_input.send_keys(Keys.CONTROL + "a")
-            time.sleep(0.2)
-            location_input.send_keys(Keys.DELETE)
-            time.sleep(0.3)
-            # 再次清除
-            location_input.clear()
-            time.sleep(0.3)
-            
-            # 现在输入新位置
-            location_input.send_keys(keyword)
-            time.sleep(2)
+            # Classic jobs UI: use the location input in the global search bar.
+            classic_location_inputs = self.browser.find_elements(
+                By.XPATH,
+                '//input[starts-with(@id,"jobs-search-box-location-id-")]'
+            )
+            if classic_location_inputs:
+                location_input = classic_location_inputs[0]
 
-            location_seach_button = self.browser.find_element(By.XPATH, '//*[@id="global-nav-search"]/div/div[2]/button[1]')
-            location_seach_button.click()
-            time.sleep(5)
-            # 获取当前地址的链接,提取参数geoId
-            url = self.browser.current_url
-            geoId = self.parse_geoId_from_url(url)
-            return geoId
-        except:
-            print("An exception occurred while searching for location")
+                # 确保完全清除旧内容：多次清除并使用键盘快捷键
+                location_input.click()  # 先点击聚焦
+                time.sleep(0.3)
+                location_input.clear()  # 清除
+                time.sleep(0.3)
+                # 使用 Ctrl+A 全选然后删除，确保清除所有内容
+                location_input.send_keys(Keys.CONTROL + "a")
+                time.sleep(0.2)
+                location_input.send_keys(Keys.DELETE)
+                time.sleep(0.3)
+                # 再次清除
+                location_input.clear()
+                time.sleep(0.3)
+
+                # 现在输入新位置
+                location_input.send_keys(keyword)
+                time.sleep(2)
+
+                location_seach_button = self.browser.find_element(By.XPATH, '//*[@id="global-nav-search"]/div/div[2]/button[1]')
+                location_seach_button.click()
+                time.sleep(5)
+                # 获取当前地址的链接,提取参数geoId
+                return self.parse_geoId_from_url(self.browser.current_url)
+
+            # Semantic-search UI: location is a filter popover with a
+            # contenteditable textbox and a stable accessible label.
+            WebDriverWait(self.browser, 10).until(
+                lambda driver: '/jobs/search-results/' in driver.current_url
+            )
+
+            def find_location_filter(driver):
+                for button in driver.find_elements(By.XPATH, "//main//*[@role='button']"):
+                    try:
+                        button_text = " ".join((button.text or "").split())
+                    except StaleElementReferenceException:
+                        return False
+                    if re.search(r"\(\d+\s*(?:mi|km)\)", button_text, re.IGNORECASE):
+                        return button
+
+                # Some semantic-search variants show only the location name
+                # (for example, "San Francisco Bay Area") without distance.
+                # The location control is the last non-empty role=button before
+                # LinkedIn's stable promoted-jobs ranking control.
+                ranking_controls = driver.find_elements(
+                    By.XPATH,
+                    "//main//*[@role='button'][contains(normalize-space(.), 'How promoted jobs are ranked')]"
+                )
+                if ranking_controls:
+                    try:
+                        preceding_buttons = ranking_controls[0].find_elements(
+                            By.XPATH,
+                            "preceding::*[@role='button'][normalize-space(.)][1]"
+                        )
+                    except StaleElementReferenceException:
+                        return False
+                    if preceding_buttons:
+                        return preceding_buttons[0]
+                return False
+
+            def open_location_filter(driver):
+                location_filter = find_location_filter(driver)
+                if not location_filter:
+                    return False
+                try:
+                    driver.execute_script("arguments[0].click();", location_filter)
+                    return True
+                except StaleElementReferenceException:
+                    return False
+
+            WebDriverWait(self.browser, 10).until(open_location_filter)
+            semantic_location_input = WebDriverWait(self.browser, 10).until(
+                EC.presence_of_element_located((By.CSS_SELECTOR, '[role="textbox"][aria-label="Location"]'))
+            )
+            select_all_key = Keys.COMMAND if sys.platform == 'darwin' else Keys.CONTROL
+            for attempt in range(3):
+                try:
+                    semantic_location_input.click()
+                    semantic_location_input.send_keys(select_all_key + "a")
+                    semantic_location_input.send_keys(keyword)
+                    break
+                except StaleElementReferenceException:
+                    if attempt == 2:
+                        raise
+                    semantic_location_input = WebDriverWait(self.browser, 10).until(
+                        EC.presence_of_element_located((By.CSS_SELECTOR, '[role="textbox"][aria-label="Location"]'))
+                    )
+
+            # React may replace suggestion elements while results settle. Read
+            # their text and stable href in one browser-side operation instead
+            # of retaining Selenium element references across re-renders.
+            suggestions = WebDriverWait(self.browser, 10).until(
+                lambda driver: driver.execute_script(
+                    """
+                    return Array.from(document.querySelectorAll('#semanticSearchBoxLocationList a'))
+                        .map(link => ({
+                            text: (link.innerText || '').trim(),
+                            href: link.href || ''
+                        }))
+                        .filter(item => item.text && item.href);
+                    """
+                ) or False
+            )
+            keyword_lower = keyword.strip().lower()
+            selected_suggestion = next(
+                (
+                    suggestion for suggestion in suggestions
+                    if suggestion['text'].strip().lower() == keyword_lower
+                ),
+                next(
+                    (
+                        suggestion for suggestion in suggestions
+                        if suggestion['text'].strip().lower().startswith(keyword_lower + ',')
+                    ),
+                    suggestions[0]
+                )
+            )
+            suggestion_url = selected_suggestion['href']
+            geo_id = self.parse_geoId_from_url(suggestion_url)
+            self.browser.get(suggestion_url)
+            WebDriverWait(self.browser, 10).until(
+                lambda driver: self.parse_geoId_from_url(driver.current_url) is not None
+            )
+            return geo_id or self.parse_geoId_from_url(self.browser.current_url)
+        except Exception as error:
+            print(f"An exception occurred while searching for location: {error}")
             return ''
 
     def parse_geoId_from_url(self, url):
@@ -2578,45 +3153,99 @@ class LinkedinEasyApply:
         geoId = query_params.get('geoId', [None])[0]
         return geoId
 
-    def unfollow(self):
+    def unfollow(self, context=None):
+        context = context or getattr(self, '_active_easy_apply_context', self.browser)
         try:
-            follow_checkbox = self.browser.find_element(By.XPATH,
-                                                        "//label[contains(.,'to stay up to date with their page.') or contains(.,'随时了解公司动态')]").click()
+            follow_checkbox = context.find_element(
+                By.XPATH,
+                ".//label[contains(.,'to stay up to date with their page.') or contains(.,'随时了解公司动态')]"
+            )
             follow_checkbox.click()
         except:
             pass
 
-    def send_resume(self):
+    def send_resume(self, context=None):
+        context = context or getattr(self, '_active_easy_apply_context', self.browser)
         print("Trying to send resume")
-        try:
-            file_upload_elements = (By.CSS_SELECTOR, "input[name='file']")
-            if len(self.browser.find_elements(file_upload_elements[0], file_upload_elements[1])) > 0:
-                input_buttons = self.browser.find_elements(file_upload_elements[0], file_upload_elements[1])
-                if len(input_buttons) == 0:
-                    raise Exception("No input elements found in element")
+
+        def upload_file(upload_button, file_path, upload_name):
+            if not file_path:
+                print(f"No {upload_name} file configured; leaving this optional upload empty")
+                return False
+
+            resolved_path = os.path.abspath(os.path.expanduser(file_path))
+            if not os.path.isfile(resolved_path):
+                print(f"Cannot upload {upload_name}: file does not exist: {resolved_path}")
+                return False
+
+            current_value = upload_button.get_attribute("value") or ""
+            if os.path.basename(resolved_path) in current_value:
+                print(f"{upload_name.capitalize()} already selected: {os.path.basename(resolved_path)}")
+                return True
+
+            upload_button.send_keys(resolved_path)
+            time.sleep(0.5)
+            try:
+                uploaded_value = upload_button.get_attribute("value") or ""
+            except StaleElementReferenceException:
+                # Selecting a file can immediately re-render the upload row.
+                # Reaching this point means send_keys completed successfully.
+                print(f"Uploaded {upload_name}: {os.path.basename(resolved_path)} (upload row refreshed)")
+                return True
+            if os.path.basename(resolved_path) in uploaded_value:
+                print(f"Uploaded {upload_name}: {os.path.basename(resolved_path)}")
+                return True
+
+            print(f"Upload input accepted {upload_name}: {os.path.basename(resolved_path)}")
+            return True
+
+        file_upload_elements = (By.CSS_SELECTOR, "input[name='file']")
+        for attempt in range(3):
+            active_context = context if attempt == 0 else self._find_easy_apply_context(timeout=3)
+            if active_context is None:
+                print("Failed to reacquire the Easy Apply form for file upload")
+                return
+
+            try:
+                input_buttons = active_context.find_elements(
+                    file_upload_elements[0],
+                    file_upload_elements[1]
+                )
                 for upload_button in input_buttons:
-                    # upload_type = upload_button.find_element(By.XPATH, "..").find_element(By.XPATH, "preceding-sibling::*")
                     input_id = upload_button.get_attribute("id")
-                    upload_type = self.browser.find_element(By.CSS_SELECTOR, f"label[for='{input_id}']")
-                    if 'resume' in upload_type.text.lower():
-                        upload_button.send_keys(self.resume_dir)
-                    elif 'cover' in upload_type.text.lower():
+                    upload_type = active_context.find_element(By.CSS_SELECTOR, f"label[for='{input_id}']")
+                    upload_label = (upload_type.text or '').strip().lower()
+                    if 'resume' in upload_label:
+                        upload_file(upload_button, self.resume_dir, "resume")
+                    elif 'cover' in upload_label:
                         if self.cover_letter_dir != '':
-                            upload_button.send_keys(self.cover_letter_dir)
-                        elif 'required' in upload_type.text.lower():
-                            upload_button.send_keys(self.resume_dir)
-                    elif  'upload' == upload_type.text.lower(): # photo is Upload
-                        # if is pdf
-                        p_tag = upload_type.find_element(By.XPATH, "following-sibling::p")
-                        if 'pdf' in p_tag.text.lower():
-                            upload_button.send_keys(self.resume_dir)
+                            upload_file(upload_button, self.cover_letter_dir, "cover letter")
+                        elif 'required' in upload_label:
+                            print("Required cover-letter upload has no configured file; using the resume")
+                            upload_file(upload_button, self.resume_dir, "required attachment")
+                    elif upload_label == 'upload':  # Generic photo/attachment button
+                        description = ''
+                        try:
+                            description = upload_type.find_element(By.XPATH, "following-sibling::p").text.lower()
+                        except Exception:
+                            pass
+                        if 'pdf' in description:
+                            upload_file(upload_button, self.resume_dir, "PDF attachment")
                         elif self.photo_dir != '':
-                            upload_button.send_keys(self.photo_dir)
-                        elif 'required' in upload_type.text.lower():
-                            upload_button.send_keys(self.resume_dir)
-        except:
-            print("Failed to upload resume or cover letter!")
-            pass
+                            upload_file(upload_button, self.photo_dir, "photo")
+                        elif 'required' in upload_label:
+                            upload_file(upload_button, self.resume_dir, "required attachment")
+                return
+            except StaleElementReferenceException:
+                if attempt < 2:
+                    print("Upload form refreshed; reacquiring its DOM and retrying")
+                    context = None
+                    time.sleep(0.5)
+                    continue
+                print("Failed to upload after the form refreshed repeatedly")
+            except Exception as error:
+                print(f"Failed to upload resume or cover letter: {error}")
+                return
 
     def enter_text(self, element, text):
         element.clear()
@@ -2632,45 +3261,146 @@ class LinkedinEasyApply:
         if label_text in label.text.lower() or clickLast == True:
             label.click()
 
+    @staticmethod
+    def _normalize_contact_text(text):
+        text = unicodedata.normalize('NFKD', text or '')
+        return ' '.join(''.join(c for c in text if not unicodedata.combining(c)).lower().split())
+
+    def _contact_field_kind(self, field, label):
+        tag = field.tag_name.lower()
+        field_type = (field.get_attribute('type') or '').lower()
+        if tag not in ('input', 'select') or (tag == 'input' and field_type not in ('', 'text', 'tel', 'email', 'number')):
+            return None
+        identity = re.sub(r'[^a-z0-9]', '', (
+            (field.get_attribute('id') or '') + ' ' + (field.get_attribute('name') or '')
+        ).lower())
+        autocomplete = (field.get_attribute('autocomplete') or '').lower().split()
+        text = self._normalize_contact_text(' '.join((
+            label or '', field.get_attribute('aria-label') or '', field.get_attribute('placeholder') or '',
+        )))
+        if tag == 'select' and (
+            ('phonenumber' in identity and 'country' in identity)
+            or 'tel-country-code' in autocomplete
+        ):
+            return 'country_code'
+        if tag == 'input' and (
+            field_type == 'tel' or 'phonenumber' in identity
+            or any(token in autocomplete for token in ('tel', 'tel-national', 'tel-local'))
+        ):
+            return 'phone'
+        if field_type == 'email' or 'email' in autocomplete or 'email' in identity:
+            return 'email'
+        if tag == 'input' and ('geolocation' in identity or 'address-level2' in autocomplete):
+            return 'city'
+        if tag == 'select' and any(word in text for word in (
+            'country code', 'calling code', 'codigo del pais', 'codigo de pais',
+            'prefijo telefonico', '国家区号', '电话区号',
+        )):
+            return 'country_code'
+        if tag == 'input' and (any(word in text for word in (
+            'phone number', 'mobile number', 'mobile phone', 'telephone number',
+            'telefono movil', 'numero de telefono', '联系电话', '手机号码',
+        )) or text.strip(' *:') in ('phone', 'telephone', 'telefono')):
+            return 'phone'
+        if any(
+            word in text for word in ('email', 'correo electronico', '邮箱', '电子邮件')
+        ):
+            return 'email'
+        if tag == 'input' and any(
+            word in text for word in ('city', 'ciudad', '城市')
+        ):
+            return 'city'
+        return None
+
+    def _select_phone_country(self, field, configured):
+        select = Select(field)
+        options = [option for option in select.options if option.is_enabled()]
+        target = self._normalize_contact_text(configured)
+        exact = [option for option in options if target in (
+            self._normalize_contact_text(option.text),
+            self._normalize_contact_text(option.get_attribute('value')),
+        )]
+        if not exact:
+            dialing_code = re.search(r'\+\s*(\d+)', configured)
+            if not dialing_code:
+                return False
+            code = dialing_code.group(1)
+            candidates = [option for option in options if re.search(
+                r'\+\s*' + re.escape(code) + r'(?!\d)', option.text or '',
+            )]
+            # +1 is shared by several countries; prefer the configured region.
+            regions = {
+                'us': ('united states', 'estados unidos', 'usa', '美国'),
+                'ca': ('canada',),
+                'gb': ('united kingdom', 'reino unido', '英国'),
+                'cn': ('china', '中国'),
+            }
+            region = next((key for key, names in regions.items() if any(name in target for name in names)), None)
+            if region:
+                exact = [option for option in candidates if (
+                    (option.get_attribute('value') or '').lower().split(':')[-1] == region
+                    or any(name in self._normalize_contact_text(option.text) for name in regions[region])
+                )]
+            if not exact and region is None and len(candidates) == 1:
+                exact = candidates
+        if len(exact) != 1:
+            return False
+        if not exact[0].is_selected():
+            select.select_by_visible_text(exact[0].text)
+        return True
+
+    def _fill_contact_field(self, form, field, label=''):
+        kind = self._contact_field_kind(field, label)
+        if kind is None:
+            return False
+        # Recognized contact fields never fall through to generated AI answers.
+        try:
+            if not field.is_displayed() or not field.is_enabled():
+                return True
+            personal = self.personal_info if isinstance(self.personal_info, dict) else {}
+            if kind == 'country_code':
+                value = str(personal.get('Phone Country Code') or '').strip()
+                if not value or not self._select_phone_country(field, value):
+                    print("Could not match configured phone country; manual selection required.")
+            elif kind == 'phone':
+                value = str(personal.get('Mobile Phone Number') or '').strip()
+                if value and re.fullmatch(r'\+?[0-9\s().-]+', value) and 5 <= len(re.sub(r'\D', '', value)) <= 15:
+                    if (field.get_attribute('value') or '').strip() != value:
+                        self.enter_text(field, value)
+                else:
+                    print("Configured mobile phone is missing or invalid; manual entry required.")
+            elif kind == 'email':
+                value = str(getattr(self, 'email', '') or personal.get('Email') or '').strip()
+                if field.tag_name.lower() == 'select':
+                    select = Select(field)
+                    matching = [option for option in select.options if option.is_enabled() and value.lower() in (
+                        (option.text or '').strip().lower(), (option.get_attribute('value') or '').strip().lower(),
+                    )] if value else []
+                    if matching and not matching[0].is_selected():
+                        select.select_by_visible_text(matching[0].text)
+                    elif not matching and not (select.first_selected_option.get_attribute('value') or '').strip():
+                        print("Configured email is not available; manual selection required.")
+                elif value and (field.get_attribute('value') or '').strip() != value:
+                    self.enter_text(field, value)
+            elif kind == 'city':
+                value = str(personal.get('City') or '').strip()
+                if value and not self._select_typeahead_option(form, field, value):
+                    print("Could not select a valid city suggestion")
+        except Exception as error:
+            print(f"Could not fill contact field ({kind}): {type(error).__name__}")
+        return True
+
     # Contact info fill-up
     def contact_info(self, form):
         print("Trying to fill up contact info fields")
-        frm_el = form.find_elements(By.TAG_NAME, 'label')
-        if len(frm_el) > 0:
-            for el in frm_el:
-                text = el.text.lower()
-                input_id = el.get_attribute('for')
-                input_field = None
-                if input_id:
-                    input_field = form.find_element(By.ID, input_id)
-                if 'email address' in text:
-                    continue
-                elif 'phone number' in text:
-                    try:
-                        country_code_picker = el.find_element(By.XPATH,
-                                                              '//select[contains(@id,"phoneNumber")][contains(@id,"country")]')
-                        self.select_dropdown(country_code_picker, self.personal_info['Phone Country Code'])
-                    except Exception as e:
-                        print("Country code " + self.personal_info[
-                            'Phone Country Code'] + " not found. Please make sure it is same as in LinkedIn.")
-                        print(e)
-                    try:
-                        phone_number_field = el.find_element(By.XPATH,
-                                                             '//input[contains(@id,"phoneNumber")][contains(@id,"nationalNumber")]')
-                        self.enter_text(phone_number_field, self.personal_info['Mobile Phone Number'])
-                    except Exception as e:
-                        print("Could not enter phone number:")
-                        print(e)
-
-                elif 'city' in text or (input_field and 'GEO-LOCATION' in input_field.get_attribute('id')):
-                    print("Trying to fill up city field")
-                    print(self.personal_info['City'])
-                    self.enter_text(input_field, self.personal_info['City'])
-                    time.sleep(1.5)
-                    input_field.send_keys(Keys.DOWN)
-                    input_field.send_keys(Keys.RETURN)
-
-            self.send_resume()
+        labels = {}
+        for label in form.find_elements(By.TAG_NAME, 'label'):
+            input_id = label.get_attribute('for')
+            if input_id:
+                labels[input_id] = label.text or ''
+        for field in form.find_elements(By.CSS_SELECTOR, 'input, select'):
+            self._fill_contact_field(form, field, labels.get(field.get_attribute('id'), ''))
+        self.send_resume()
 
     def handle_current_checkbox(self, question, form, item, form_type):
         """
@@ -2709,7 +3439,7 @@ class LinkedinEasyApply:
                         # Try to get input_id and click the corresponding label
                         input_id = question.find_element(By.TAG_NAME, 'label').get_attribute('for')
                         if input_id:
-                            label = form.find_element(By.XPATH, f"//label[@for='{input_id}']")
+                            label = form.find_element(By.XPATH, f".//label[@for='{input_id}']")
                             label.click()
                         else:
                             # If input_id not found, click the label directly
@@ -2771,20 +3501,84 @@ class LinkedinEasyApply:
                         
                         # Find delete buttons in parent element (at same level as card)
                         remove_buttons = parent_element.find_elements(By.XPATH, 
-                            ".//button[contains(@aria-label, 'Remove') or contains(@aria-label, '删除') or contains(@aria-label, 'Delete')]")
+                            ".//button["
+                            "contains(@aria-label, 'Remove') or contains(@aria-label, '删除') or "
+                            "contains(@aria-label, 'Delete') or normalize-space(.)='Remove' or "
+                            "normalize-space(.)='Delete' or normalize-space(.)='删除' or normalize-space(.)='移除'"
+                            "]")
                         
                         if not remove_buttons:
                             # Try other ways to find delete buttons
-                            remove_buttons = form.find_elements(By.XPATH, 
-                                "//button[contains(@aria-label, 'Remove') or contains(@aria-label, '删除') or contains(@aria-label, 'Delete')]")
+                            remove_buttons = form.find_elements(By.XPATH,
+                                ".//button["
+                                "contains(@aria-label, 'Remove') or contains(@aria-label, '删除') or "
+                                "contains(@aria-label, 'Delete') or normalize-space(.)='Remove' or "
+                                "normalize-space(.)='Delete' or normalize-space(.)='删除' or normalize-space(.)='移除'"
+                                "]")
                         
                         if remove_buttons:
                             print("Found delete button, clicking to remove")
                             remove_buttons[0].click()
                             time.sleep(0.5)
                             
-                            # Click confirm delete button
-                            confirm_buttons = self.browser.find_elements(By.CLASS_NAME, 'artdeco-modal__confirm-dialog-btn')
+                            # LinkedIn renders this confirmation as a sibling of
+                            # the Easy Apply modal in the classic UI, but it may
+                            # remain inside the active context in other variants.
+                            # Search both scopes so old and new layouts work.
+                            context = getattr(self, '_active_easy_apply_context', self.browser)
+                            confirm_buttons = []
+                            for search_root in (context, self.browser):
+                                try:
+                                    confirmation_overlay = search_root.find_elements(
+                                        By.CSS_SELECTOR,
+                                        "[data-test-modal-id='data-test-repeatable-groupings-remove-confirmation'][aria-hidden='false']"
+                                    )
+                                    if confirmation_overlay:
+                                        overlay_buttons = confirmation_overlay[-1].find_elements(By.TAG_NAME, 'button')
+                                        destructive_buttons = [
+                                            button for button in overlay_buttons
+                                            if button.is_displayed()
+                                            and any(
+                                                word in (button.text or button.get_attribute('aria-label') or '').strip().lower()
+                                                for word in ('delete', 'remove', 'confirm', 'yes', '删除', '移除', '确认')
+                                            )
+                                        ]
+                                        confirm_buttons = destructive_buttons or [
+                                            button for button in overlay_buttons if button.is_displayed()
+                                        ][-1:]
+
+                                    if not confirm_buttons:
+                                        confirm_buttons = [
+                                            button for button in search_root.find_elements(
+                                                By.CLASS_NAME,
+                                                'artdeco-modal__confirm-dialog-btn'
+                                            )
+                                            if button.is_displayed()
+                                        ]
+                                    if confirm_buttons:
+                                        break
+                                except Exception:
+                                    continue
+
+                            if not confirm_buttons:
+                                # The interop Easy Apply variant renders the
+                                # confirmation beside the form inside its open
+                                # shadow root. It is visible on screen but is
+                                # outside both the modal element and document
+                                # query scopes above.
+                                shadow_confirm_buttons = self._shadow_elements(
+                                    "[data-test-modal-id='data-test-repeatable-groupings-remove-confirmation']"
+                                    "[aria-hidden='false'] button",
+                                    visible_only=True
+                                )
+                                confirm_buttons = [
+                                    button for button in shadow_confirm_buttons
+                                    if any(
+                                        word in (button.text or button.get_attribute('aria-label') or '').strip().lower()
+                                        for word in ('delete', 'remove', 'confirm', 'yes', '删除', '移除', '确认')
+                                    )
+                                ]
+
                             if confirm_buttons:
                                 confirm_buttons[-1].click()
                                 print(f"Removed an existing {item_name} entry")
@@ -2799,7 +3593,8 @@ class LinkedinEasyApply:
                 # Click 'Add more' button to add new form
                 try:
                     print("Clicking 'Add more' button to add new form")
-                    add_buttons = self.browser.find_elements(By.CLASS_NAME, 'jobs-easy-apply-repeatable-groupings__add-button')
+                    context = getattr(self, '_active_easy_apply_context', self.browser)
+                    add_buttons = context.find_elements(By.CLASS_NAME, 'jobs-easy-apply-repeatable-groupings__add-button')
                     if add_buttons:
                         add_buttons[0].click()
                         print("Add button clicked")
@@ -2820,7 +3615,8 @@ class LinkedinEasyApply:
             if index > 0:
                 try:
                     print("Clicking 'Add more' button to add new form")
-                    add_buttons = self.browser.find_elements(By.CLASS_NAME, 'jobs-easy-apply-repeatable-groupings__add-button')
+                    context = getattr(self, '_active_easy_apply_context', self.browser)
+                    add_buttons = context.find_elements(By.CLASS_NAME, 'jobs-easy-apply-repeatable-groupings__add-button')
                     if add_buttons:
                         add_buttons[0].click()
                         print("Add button clicked")
@@ -2944,16 +3740,10 @@ class LinkedinEasyApply:
                             for field, keywords in field_mapping.items():
                                 if any(keyword in question_text for keyword in keywords):
                                     value = item.get(field, "")
-                                    self.enter_text(txt_field, value)
-                                    
-                                    # Special handling for city field
                                     if field == 'city' and value:
-                                        time.sleep(1.5)
-                                        try:
-                                            txt_field.send_keys(Keys.DOWN)
-                                            txt_field.send_keys(Keys.RETURN)
-                                        except:
-                                            pass
+                                        self._select_typeahead_option(form, txt_field, value)
+                                    else:
+                                        self.enter_text(txt_field, value)
                                     
                                     field_filled = True
                                     break
@@ -2969,7 +3759,7 @@ class LinkedinEasyApply:
             # Save all entries
             try:
                 # First look for buttons with explicit "Save" or "保存" text
-                save_buttons = form.find_elements(By.XPATH, "//button[contains(., 'Save') or contains(., '保存')]")
+                save_buttons = form.find_elements(By.XPATH, ".//button[contains(., 'Save') or contains(., '保存')]")
                 if save_buttons:
                     save_buttons[0].click()
                     time.sleep(1)

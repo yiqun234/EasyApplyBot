@@ -108,7 +108,7 @@ TEXTS = {
         'delete_position': 'Delete Position',
         'global_search': 'Global Search Criteria',
         'target_location': 'Target Locations (one per line):',
-        'search_radius': 'Search Radius (km):',
+        'search_radius': 'Search Radius (LinkedIn page units):',
         'remote_only': 'Search Remote Jobs Only',
         'less_than_ten': 'Filter "Less than 10 applicants" jobs',
         'filter_less_than': 'Filter less than',
@@ -513,4 +513,4 @@ TEXTS = {
         'current_study': 'Currently Studying',
         'required_fields': 'Required Fields',
     },
-} 
+}

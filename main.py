@@ -4,6 +4,9 @@ from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service as ChromeService
 from validate_email import validate_email
 from linkedineasyapply import LinkedinEasyApply
+from application_limits import (
+    DAILY_LIMIT_EXIT_CODE, DailyApplyLimitReached,
+)
 import shutil
 import sys
 import platform # For more detailed platform info like machine architecture
@@ -647,17 +650,8 @@ def validate_yaml(config_file):
     return parameters
 
 
-if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description="LinkedIn Easy Apply Bot")
-    parser.add_argument(
-        '--config', 
-        type=str, 
-        default='config.yaml', 
-        help='Path to the configuration YAML file.'
-    )
-    args = parser.parse_args()
-
-    parameters = validate_yaml(args.config)
+def run_bot(config_path):
+    parameters = validate_yaml(config_path)
     browser = None
 
     browser = init_browser()
@@ -668,4 +662,25 @@ if __name__ == '__main__':
         bot = LinkedinEasyApply(parameters, browser)
         bot.login()
         bot.security_check()
-        bot.start_applying()
+        try:
+            bot.start_applying()
+        except DailyApplyLimitReached:
+            print("Daily Easy Apply limit reached; ending this run. You can run this account again.", flush=True)
+            try:
+                browser.quit()
+            except Exception as error:
+                print(f"Could not close browser after daily limit: {error}")
+            return DAILY_LIMIT_EXIT_CODE
+    return 0
+
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description="LinkedIn Easy Apply Bot")
+    parser.add_argument(
+        '--config',
+        type=str,
+        default='config.yaml',
+        help='Path to the configuration YAML file.'
+    )
+    args = parser.parse_args()
+    raise SystemExit(run_bot(args.config))

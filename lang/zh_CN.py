@@ -108,7 +108,7 @@ TEXTS = {
         'delete_position': '删除职位',
         'global_search': '全局搜索条件',
         'target_location': '目标地点 (每行一个):',
-        'search_radius': '搜索半径 (公里):',
+        'search_radius': '搜索半径（以 LinkedIn 页面单位为准）:',
         'remote_only': '只搜索远程工作',
         'less_than_ten': '筛选"少于10名申请者"的职位',
         'filter_less_than': '筛选少于',
@@ -518,4 +518,4 @@ TEXTS = {
         'current_study': '目前就读',
         'required_fields': '必填字段',
     },
-} 
+}

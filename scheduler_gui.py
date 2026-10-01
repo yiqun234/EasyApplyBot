@@ -13,6 +13,10 @@ from enum import Enum
 import traceback
 import firebase_manager
 import yaml
+from application_limits import DAILY_LIMIT_EXIT_CODE
+
+
+VERSION = "5.1"
 
 
 def deep_update_config(source, overrides):
@@ -83,7 +87,8 @@ LANGUAGES = {
             'running': '运行中',
             'success': '成功',
             'failed': '失败',
-            'disabled': '已禁用'
+            'disabled': '已禁用',
+            'daily_limit': '上次已达每日限额'
         },
         'schedule_types': {
             'interval': '间隔执行',
@@ -149,7 +154,8 @@ LANGUAGES = {
             'running': 'Running', 
             'success': 'Success',
             'failed': 'Failed',
-            'disabled': 'Disabled'
+            'disabled': 'Disabled',
+            'daily_limit': 'Last run: daily limit reached'
         },
         'schedule_types': {
             'interval': 'Interval Execution',
@@ -171,6 +177,7 @@ class TaskStatus(Enum):
     SUCCESS = "success"
     FAILED = "failed"
     DISABLED = "disabled"
+    DAILY_LIMIT = "daily_limit"
 
 class ScheduleType(Enum):
     INTERVAL = "interval"
@@ -208,7 +215,7 @@ class SchedulerGUI:
         self.current_language = self.load_language_setting()  # 加载保存的语言设置
         self.texts = LANGUAGES[self.current_language]
         
-        self.root.title(self.texts['title'])
+        self.root.title(f"{self.texts['title']} v{VERSION}")
         self.root.geometry("1400x900")
         
         self.CONFIG_DIR = "configs"
@@ -349,7 +356,7 @@ class SchedulerGUI:
         lang_combo.bind('<<ComboboxSelected>>', self.on_language_change)
         
         # Title
-        self.title_label = ttk.Label(main_frame, text=self.texts['title'], 
+        self.title_label = ttk.Label(main_frame, text=f"{self.texts['title']} v{VERSION}",
                                font=("Arial", 16, "bold"))
         self.title_label.grid(row=0, column=0, columnspan=2, pady=(0, 20))
         
@@ -747,26 +754,8 @@ class SchedulerGUI:
     
     def calculate_next_run_times(self):
         """Calculate next run times based on schedule type"""
-        now = datetime.now()
-        
-        if self.schedule_type == ScheduleType.INTERVAL:
-            next_run_time = now + timedelta(minutes=self.schedule_interval)
-            for task in self.user_tasks.values():
-                if task.selected:
-                    task.next_run = next_run_time
-                    
-        elif self.schedule_type == ScheduleType.DAILY:
-            # Calculate next daily run time
-            today = now.date()
-            time_parts = self.daily_time.split(':')
-            target_time = datetime.combine(today, datetime.strptime(self.daily_time, "%H:%M").time())
-            
-            if target_time <= now:
-                target_time += timedelta(days=1)
-                
-            for task in self.user_tasks.values():
-                if task.selected:
-                    task.next_run = target_time
+        for task in self.user_tasks.values():
+            self.calculate_next_run_time_for_task(task)
 
     def calculate_next_run_time_for_task(self, task):
         """Calculate next run time for a single task after completion"""
@@ -774,6 +763,7 @@ class SchedulerGUI:
             # Clear next run time for unselected tasks
             task.next_run = None
             return
+
             
         now = datetime.now()
         
@@ -1116,7 +1106,10 @@ class SchedulerGUI:
             # Threads will exit automatically as they are daemons
 
             return_code = process.poll()
-            if return_code == 0:
+            if return_code == DAILY_LIMIT_EXIT_CODE:
+                task.status = TaskStatus.DAILY_LIMIT
+                self.log(f"Task {task.user_id} reached LinkedIn's daily limit. This run has ended; manual reruns and the configured schedule remain available.")
+            elif return_code == 0:
                 task.status = TaskStatus.SUCCESS
                 self.log(f"Task {task.user_id} completed successfully.")
             else:
@@ -1183,6 +1176,8 @@ class SchedulerGUI:
                 tags = ['failed']
             elif task.status == TaskStatus.QUEUED:
                 tags = ['queued']
+            elif task.status == TaskStatus.DAILY_LIMIT:
+                tags = ['daily_limit']
             
             # Use localized status text
             localized_status = self.get_localized_status(task.status)
@@ -1213,6 +1208,7 @@ class SchedulerGUI:
         self.tasks_tree.tag_configure('success', background='lightgreen')
         self.tasks_tree.tag_configure('failed', background='lightcoral')
         self.tasks_tree.tag_configure('queued', background='lightyellow')
+        self.tasks_tree.tag_configure('daily_limit', background='orange')
         
         # Restore selection
         for item in items_to_reselect:
@@ -1569,10 +1565,10 @@ class SchedulerGUI:
     def update_ui_texts(self):
         """Update all UI texts based on current language"""
         # Update window title
-        self.root.title(self.texts['title'])
+        self.root.title(f"{self.texts['title']} v{VERSION}")
         
         # Update main title
-        self.title_label.config(text=self.texts['title'])
+        self.title_label.config(text=f"{self.texts['title']} v{VERSION}")
         
         # Update config frame
         self.config_frame.config(text=self.texts['schedule_config'])
@@ -1712,6 +1708,9 @@ class SchedulerGUI:
             self.root.destroy()
 
 if __name__ == "__main__":
+    if '--version' in sys.argv:
+        print(VERSION)
+        raise SystemExit(0)
     root = tk.Tk()
     app = SchedulerGUI(root)
     root.mainloop()

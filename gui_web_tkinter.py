@@ -17,7 +17,7 @@ import auth_server
 import firebase_manager
 
 # --- Constants ---
-VERSION = "5.0"
+VERSION = "5.1"
 OCR_API = "https://ocr.nuomi.ai/api/ocr"
 WEB_CONFIG_URL = "https://account.nuomi.ai/dashboard"
 
@@ -377,7 +377,7 @@ class EasyApplyApp(tk.Tk):
         
         self.config = None
 
-        self.title(self.texts['common']['app_title'])
+        self.title(f"{self.texts['common']['app_title']} v{VERSION}")
         self.geometry("900x800") # Default size for main app
 
         # Store references to login screen widgets for language switching
@@ -442,7 +442,7 @@ class EasyApplyApp(tk.Tk):
             
         # 设置窗口大小和标题
         self.geometry("500x450") # Increased height for language selector
-        self.title(f"{self.texts['login']['app_title']} v{VERSION}" if 'login' in self.texts else "Nuomi.ai Login")
+        self.title(f"{self.texts['login']['app_title']} v{VERSION}" if 'login' in self.texts else f"Nuomi.ai Login v{VERSION}")
         
         # 创建登录框架
         self.login_frame = ttk.Frame(self, padding=20)
@@ -515,7 +515,7 @@ class EasyApplyApp(tk.Tk):
             self.texts = load_language(self.lang_code)
             
             # Update login screen UI elements
-            self.title(self.texts['login']['app_title'] if 'login' in self.texts else "Nuomi.ai Login")
+            self.title(f"{self.texts['login']['app_title']} v{VERSION}" if 'login' in self.texts else f"Nuomi.ai Login v{VERSION}")
             if self.login_welcome_label:
                 self.login_welcome_label.config(text=self.texts['login']['welcome'] if 'login' in self.texts else "Welcome to Nuomi.ai")
             if self.login_please_login_label:
@@ -4703,6 +4703,9 @@ class EasyApplyApp(tk.Tk):
             self._log_message(f"❌ Failed to update config from Firebase: {str(e)}")
 
 if __name__ == '__main__':
+    if '--version' in sys.argv:
+        print(VERSION)
+        raise SystemExit(0)
     in_venv = hasattr(sys, 'real_prefix') or (hasattr(sys, 'base_prefix') and sys.base_prefix != sys.prefix)
     if not in_venv and not os.environ.get("SKIP_VENV_CHECK"): print("Warning: It's recommended to run this application in a Python virtual environment...");
     app = EasyApplyApp(); app.mainloop()
