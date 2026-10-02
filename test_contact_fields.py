@@ -227,5 +227,84 @@ class ContactFieldTests(unittest.TestCase):
                 self.assertFalse(self.bot._fill_contact_field(Form([field]), field, label))
 
 
+class NativeDialogTests(unittest.TestCase):
+    def setUp(self):
+        self.bot = LinkedinEasyApply.__new__(LinkedinEasyApply)
+        self.bot.browser = Mock()
+        self.dialog = Mock(tag_name='dialog')
+        self.marker = Mock()
+        self.dialog.find_elements.side_effect = lambda by, selector: (
+            [self.marker] if 'data-sdui-screen' in selector else []
+        )
+
+    def test_native_form_without_form_tag_routes_to_question_filling(self):
+        self.bot.additional_questions = Mock()
+        self.bot.send_resume = Mock()
+        self.dialog.find_element.side_effect = NoSuchElementException()
+        self.assertTrue(self.bot.fill_up(self.dialog))
+        self.bot.additional_questions.assert_called_once_with(self.dialog, native=True)
+
+    def test_native_dialog_found_without_classic_modal(self):
+        self.bot._raise_if_daily_apply_limit = Mock()
+        self.bot._shadow_elements = Mock(return_value=[])
+        self.bot._visible_elements = Mock(side_effect=lambda context, by, selector: (
+            [self.dialog] if 'dialog[open]' in selector else []
+        ))
+        self.assertIs(self.bot._find_easy_apply_context(timeout=1), self.dialog)
+
+    def test_footer_action_ignores_back_and_upload(self):
+        back, upload, next_button = (Mock(text=label) for label in ('Back', 'Upload resume', 'Next'))
+        self.bot._visible_elements = Mock(side_effect=lambda context, by, selector: (
+            [back, upload, next_button] if selector == 'footer button' else []
+        ))
+        self.assertIs(self.bot._find_easy_apply_primary_button(self.dialog), next_button)
+        for button in (back, upload, next_button):
+            button.click.assert_not_called()
+
+    def test_review_can_expose_submit_without_form_fields(self):
+        submit = Mock(text='Submit application')
+        self.bot._visible_elements = Mock(side_effect=lambda context, by, selector: (
+            [submit] if selector == 'footer button' else []
+        ))
+        self.assertIs(self.bot._find_easy_apply_primary_button(self.dialog), submit)
+        submit.click.assert_not_called()
+
+    def test_native_radio_uses_visible_choices_and_configured_work_authorization(self):
+        for authorized, sponsorship, expected in ((True, False, 0), (True, True, 1), (False, False, 1)):
+            with self.subTest(authorized=authorized, sponsorship=sponsorship):
+                self.bot.checkboxes = {'legallyAuthorized': authorized, 'requireVisa': sponsorship}
+                self.bot.customQuestions = {}
+                self.bot._extract_question_text = Mock(return_value='Are you eligible to work without visa sponsorship?'.lower())
+                self.bot._native_question_groups = Mock(return_value=[Mock()])
+                question = self.bot._native_question_groups.return_value[0]
+                question.find_elements.return_value = []
+                options = [Mock(text='Yes'), Mock(text='No')]
+                question.find_element.return_value.find_elements.return_value = options
+                self.bot.additional_questions(self.dialog, native=True)
+                options[expected].click.assert_called_once()
+                options[1 - expected].click.assert_not_called()
+
+    def test_native_eeo_does_not_guess_subtype_from_broad_config(self):
+        self.bot.eeo = {'race': 'Asian'}
+        self.bot.customQuestions = {}
+        self.bot.ai_response_generator = Mock()
+        self.bot._extract_question_text = Mock(return_value='i identify my ethnicity as')
+        question = Mock()
+        question.find_elements.return_value = []
+        choices = [Mock(text='East Asian'), Mock(text='South Asian'), Mock(text="I don't wish to answer")]
+        question.find_element.return_value.find_elements.return_value = choices
+        self.bot._native_question_groups = Mock(return_value=[question])
+        self.bot.additional_questions(self.dialog, native=True)
+        choices[2].click.assert_called_once()
+        choices[0].click.assert_not_called()
+        choices[1].click.assert_not_called()
+        self.bot.ai_response_generator.generate_response.assert_not_called()
+
+    def test_native_error_text_excludes_hidden_page_source(self):
+        self.bot.browser.page_source = 'enter a valid number'
+        self.dialog.text = 'Review your application'
+        self.assertEqual(self.bot._easy_apply_text(self.dialog), 'review your application')
+
+
 if __name__ == '__main__':
     unittest.main()

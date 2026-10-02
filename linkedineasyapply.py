@@ -1687,6 +1687,15 @@ class LinkedinEasyApply:
                 visible_only=True
             )
             modal_candidates = classic_modals + shadow_modals
+            if not modal_candidates:
+                modal_candidates = [
+                    dialog for dialog in self._visible_elements(
+                        self.browser, By.CSS_SELECTOR, 'dialog[open], [role="dialog"]'
+                    )
+                    if dialog.find_elements(
+                        By.CSS_SELECTOR, '[data-sdui-screen*="jobs.easyapply.EasyApply"]'
+                    )
+                ]
             if modal_candidates:
                 modal = modal_candidates[-1]
                 self._active_easy_apply_context = modal
@@ -1697,6 +1706,15 @@ class LinkedinEasyApply:
                 continue
             time.sleep(0.25)
         return None
+
+    @staticmethod
+    def _is_native_easy_apply(context):
+        return (
+            getattr(context, 'tag_name', None) in ('dialog', 'div')
+            and bool(context.find_elements(
+                By.CSS_SELECTOR, '[data-sdui-screen*="jobs.easyapply.EasyApply"]'
+            ))
+        )
 
     def _find_easy_apply_primary_button(self, context):
         modal_candidates = self._visible_elements(context, By.CLASS_NAME, 'jobs-easy-apply-modal')
@@ -1709,9 +1727,17 @@ class LinkedinEasyApply:
             'button.artdeco-button--primary'
         )
         buttons = self._visible_elements(search_context, By.CSS_SELECTOR, selectors)
-        return next((button for button in buttons if button.is_enabled()), None)
+        primary = next((button for button in buttons if button.is_enabled()), None)
+        if primary is None and self._is_native_easy_apply(search_context):
+            labels = {'next', 'review', 'submit application', '下一步', '检查', '预览', '提交申请'}
+            primary = next((button for button in self._visible_elements(
+                search_context, By.CSS_SELECTOR, 'footer button'
+            ) if button.is_enabled() and self._normalize_contact_text(button.text) in labels), None)
+        return primary
 
     def _easy_apply_text(self, context=None):
+        if context is not None and self._is_native_easy_apply(context):
+            return (context.text or '').lower()
         text_parts = [(self.browser.page_source or '').lower()]
         if context is not None:
             try:
@@ -1733,6 +1759,17 @@ class LinkedinEasyApply:
         contexts.append(self.browser)
 
         dismissed = False
+        if context is not None and self._is_native_easy_apply(context):
+            buttons = self._visible_elements(context, By.CSS_SELECTOR, 'button[aria-label="Dismiss"]')
+            if buttons:
+                buttons[0].click()
+                if discard:
+                    WebDriverWait(self.browser, 5).until(lambda _: next((
+                        button for button in self._visible_elements(
+                            self.browser, By.CSS_SELECTOR, 'dialog[open] button, [role="dialog"] button'
+                        ) if self._normalize_contact_text(button.text) in {'discard', '放弃', '舍弃', 'descartar'}
+                    ), None)).click()
+                return True
         for candidate in contexts:
             dismiss_buttons = self._visible_elements(candidate, By.CLASS_NAME, 'artdeco-modal__dismiss')
             if dismiss_buttons:
@@ -2113,13 +2150,22 @@ class LinkedinEasyApply:
                 pass
 
             combined = ' '.join([p for p in pieces if p]).strip()
+            if not combined:
+                # SDUI questions use a sibling <p> or the control's aria-label.
+                titles = question_element.find_elements(By.XPATH, './p')
+                if titles:
+                    combined = titles[0].text.strip()
+                if not combined:
+                    fields = question_element.find_elements(By.CSS_SELECTOR, 'input[aria-label], textarea[aria-label]')
+                    if fields:
+                        combined = fields[0].get_attribute('aria-label') or ''
             return combined.lower() if combined else (default_text or '').strip().lower()
         except Exception:
             return (default_text or '').strip().lower()
 
     # 主要代码
-    def additional_questions(self, form):
-        questions = form.find_elements(By.CLASS_NAME, 'fb-dash-form-element')
+    def additional_questions(self, form, native=False):
+        questions = self._native_question_groups(form) if native else form.find_elements(By.CLASS_NAME, 'fb-dash-form-element')
         for question in questions:
             try:
                 contact_fields = question.find_elements(By.CSS_SELECTOR, 'input, select')
@@ -2132,8 +2178,11 @@ class LinkedinEasyApply:
                 # Radio check
                 try:
                     radio_fieldset = question.find_element(By.TAG_NAME, 'fieldset')
-                    question_span = radio_fieldset.find_element(By.CLASS_NAME, 'fb-dash-form-element__label').find_elements(By.TAG_NAME, 'span')[0]
-                    radio_text = self._extract_question_text(question, default_text=question_span.text)
+                    if native:
+                        radio_text = contact_question
+                    else:
+                        question_span = radio_fieldset.find_element(By.CLASS_NAME, 'fb-dash-form-element__label').find_elements(By.TAG_NAME, 'span')[0]
+                        radio_text = self._extract_question_text(question, default_text=question_span.text)
                     print(f"Radio question text: {radio_text}")
 
                     # First check whether it matches the custom question
@@ -2146,7 +2195,7 @@ class LinkedinEasyApply:
                                 print(f"Found matches for custom radio questions: '{radio_text}' -> '{custom_answer}'")
                                 break
 
-                    radio_labels = radio_fieldset.find_elements(By.TAG_NAME, 'label')
+                    radio_labels = radio_fieldset.find_elements(By.CSS_SELECTOR, '[role="radio"]') if native else radio_fieldset.find_elements(By.TAG_NAME, 'label')
                     radio_options = [(i, text.text.lower()) for i, text in enumerate(radio_labels)]
                     print(f"radio options: {[opt[1] for opt in radio_options]}")
 
@@ -2164,6 +2213,27 @@ class LinkedinEasyApply:
                                 break
                         
                         if selected:
+                            continue
+
+                    if native:
+                        eeo_key = next((key for key, words in (
+                            ('gender', ('gender',)), ('race', ('ethnic', 'race')),
+                            ('disability', ('disability',)), ('veteran', ('veteran',)),
+                        ) if any(word in radio_text for word in words)), None)
+                        if eeo_key:
+                            configured = self._normalize_contact_text(self.eeo.get(eeo_key, ''))
+                            matching = [option for option in radio_labels
+                                        if self._normalize_contact_text(option.text) == configured]
+                            # A broad configured category must not become a guessed subtype.
+                            if not matching:
+                                matching = [option for option in radio_labels if any(
+                                    label in self._normalize_contact_text(option.text)
+                                    for label in ("don't wish to answer", 'prefer not', 'decline to')
+                                )]
+                            if len(matching) == 1:
+                                matching[0].click()
+                            else:
+                                print('No unambiguous configured EEO option; manual selection required.')
                             continue
 
                     # If there is no matching custom answer, use the original logic
@@ -2273,7 +2343,15 @@ class LinkedinEasyApply:
                     elif 'previously employ' in radio_text or 'previous employ' in radio_text:
                         answer = 'no'
 
-                    elif 'authorized' in radio_text or 'authorised' in radio_text or 'legally' in radio_text:
+                    elif native and 'without' in radio_text and 'sponsor' in radio_text and any(
+                        word in radio_text for word in ('eligible', 'authorized', 'authorised', 'legally')
+                    ):
+                        answer = 'yes' if (
+                            self.checkboxes.get('legallyAuthorized') is True
+                            and self.checkboxes.get('requireVisa') is False
+                        ) else 'no'
+
+                    elif 'authorized' in radio_text or 'authorised' in radio_text or 'legally' in radio_text or (native and 'eligible to work' in radio_text):
                         answer = self.get_answer('legallyAuthorized')
 
                     elif any(keyword in radio_text.lower() for keyword in
@@ -2347,7 +2425,7 @@ class LinkedinEasyApply:
                     if to_select is None:
                         print("No answer determined")
                         self.record_unprepared_question("radio", radio_text)
-                        question_text = question.find_element(By.TAG_NAME, 'label').text.lower()
+                        question_text = radio_text
 
                         # Since no response can be determined, we use AI to identify the best responseif available, falling back to the final option if the AI response is not available
                         ai_response = self.ai_response_generator.generate_response(
@@ -2391,10 +2469,15 @@ class LinkedinEasyApply:
                         except:
                             raise Exception("Could not find textarea or input tag for question")
 
-                    if 'numeric' in txt_field.get_attribute('id').lower():
+                    if 'numeric' in txt_field.get_attribute('id').lower() or (native and (
+                        txt_field.get_attribute('type') == 'number'
+                        or txt_field.get_attribute('inputmode') in ('numeric', 'decimal')
+                    )):
                         # For decimal and integer response fields, the id contains 'numeric' while the type remains 'text' 
                         text_field_type = 'numeric'
-                    elif 'text' in txt_field.get_attribute('type').lower():
+                    elif 'text' in (txt_field.get_attribute('type') or '').lower() or (native and (
+                        txt_field.tag_name == 'textarea' or txt_field.get_attribute('type') == 'url'
+                    )):
                         text_field_type = 'text'
                     else:
                         raise Exception("Could not determine input type of input field!")
@@ -2844,8 +2927,43 @@ class LinkedinEasyApply:
             except Exception as e:
                 print(f"An exception occurred while processing the problem")
                 
+    def _native_question_groups(self, context):
+        """Group SDUI controls by their question without depending on hashed CSS."""
+        return self.browser.execute_script(
+            """
+            const root = arguments[0];
+            const groups = [];
+            for (const field of root.querySelectorAll('input, select, textarea, fieldset')) {
+                const fieldset = field.closest('fieldset');
+                if (fieldset) {
+                    if (fieldset.querySelector('[id^="easyApplyUploaded"]')) continue;
+                    if (!fieldset.querySelector('[role="radio"]')) continue;
+                    const group = fieldset.parentElement;
+                    if (!groups.includes(group)) groups.push(group);
+                    continue;
+                }
+                if (['radio', 'checkbox', 'file', 'hidden', 'submit', 'button'].includes(field.type)) continue;
+                let group = field.closest('[componentkey^="easyApplyFieldFocus"]');
+                if (!group) {
+                    for (let parent = field.parentElement; parent && parent !== root; parent = parent.parentElement) {
+                        if (Array.from(parent.querySelectorAll('label')).some(label => label.htmlFor === field.id)) {
+                            group = parent;
+                            break;
+                        }
+                    }
+                }
+                if (group && !groups.includes(group)) groups.push(group);
+            }
+            return groups;
+            """, context
+        ) or []
+
     def fill_up(self, context=None):
         context = context or getattr(self, '_active_easy_apply_context', self.browser)
+        if self._is_native_easy_apply(context):
+            self.additional_questions(context, native=True)
+            self.send_resume(context)
+            return True
         try:
             easy_apply_modal_content = context.find_element(By.CLASS_NAME, "jobs-easy-apply-modal__content")
             form = easy_apply_modal_content.find_element(By.TAG_NAME, 'form')
