@@ -22,6 +22,14 @@ from itertools import product
 from html import unescape
 from application_limits import DailyApplyLimitReached
 
+
+class ApplicationSubmissionUnconfirmed(RuntimeError):
+    """Submission was attempted but LinkedIn did not provide a receipt."""
+
+
+class ApplicationValidationError(RuntimeError):
+    """LinkedIn rejected an application step with a visible validation error."""
+
 # 添加CloudAIResponseGenerator类
 class CloudAIResponseGenerator:
     """基于AWS Lambda的AI响应生成器，将请求发送到AWS API Gateway处理"""
@@ -1490,8 +1498,10 @@ class LinkedinEasyApply:
                             raise
                         
                         temp = self.file_name
-                        self.file_name = "failed"
-                        print(f"Failed to apply to job: '{job_title}'. Link: {link}. Error: {e_apply}")
+                        unconfirmed = isinstance(e_apply, ApplicationSubmissionUnconfirmed)
+                        self.file_name = "unconfirmed" if unconfirmed else "failed"
+                        outcome = "Submission unconfirmed" if unconfirmed else "Failed to apply to job"
+                        print(f"{outcome}: '{job_title}'. Link: {link}. Error: {e_apply}")
                         traceback.print_exc()
                         try:
                             self.write_to_file(company, job_title, link, job_location, location)
@@ -1815,6 +1825,96 @@ class LinkedinEasyApply:
                     )
         return dismissed
 
+    def _application_form_state(self, context):
+        """Read step identity and validation errors, without logging answer values."""
+        return self.browser.execute_script(
+            r"""
+            const root = arguments[0];
+            const visible = e => {
+                const box = e.getBoundingClientRect();
+                const style = getComputedStyle(e);
+                return box.width > 0 && box.height > 0 &&
+                    style.display !== 'none' && style.visibility !== 'hidden';
+            };
+            const clean = text => (text || '').trim().replace(/\s+/g, ' ');
+            const controls = Array.from(root.querySelectorAll('input, select, textarea'));
+            const label = field => clean(
+                Array.from(field.labels || []).map(e => e.innerText).join(' ') ||
+                field.getAttribute('aria-label') || field.getAttribute('placeholder') ||
+                field.closest('[componentkey^="easyApplyFieldFocus"]')?.querySelector('p')?.innerText ||
+                field.name || field.type || field.tagName
+            );
+            const errors = Array.from(root.querySelectorAll(
+                '[role="alert"], [id^="error-message"], .artdeco-inline-feedback--error, ' +
+                '[data-test-form-element-error-messages]'
+            )).filter(visible).map(e => clean(e.innerText)).filter(Boolean);
+            for (const field of controls) {
+                if (!visible(field) || field.disabled) continue;
+                if (field.getAttribute('aria-invalid') === 'true' ||
+                    (field.willValidate && !field.validity.valid)) {
+                    const messages = (field.getAttribute('aria-describedby') || '').split(/\s+/)
+                        .map(id => id && root.querySelector('#' + CSS.escape(id)))
+                        .filter(Boolean).filter(visible).map(e => clean(e.innerText));
+                    errors.push(label(field) + ': ' +
+                        (field.validationMessage || messages.join(' ') || 'Invalid or missing value'));
+                }
+            }
+            const text = root.innerText || '';
+            const progress = text.match(/\b\d+\s*\/\s*\d+\s*pages\b/i)?.[0] ||
+                root.querySelector('[role="progressbar"]')?.getAttribute('aria-valuenow') || '';
+            const headings = Array.from(root.querySelectorAll('h2, h3, legend'))
+                .filter(visible).map(e => clean(e.innerText));
+            const buttons = Array.from(root.querySelectorAll('footer button, .jobs-easy-apply-footer button'))
+                .filter(visible).map(e => clean(e.innerText));
+            return {
+                signature: JSON.stringify([progress, headings,
+                    controls.filter(visible).map(e => [e.tagName, e.type, label(e)]), buttons]),
+                errors: Array.from(new Set(errors))
+            };
+            """, context
+        )
+
+    def _application_confirmation_visible(self):
+        """Require an explicit receipt, not merely a closed modal or clicked button."""
+        selector = ('dialog[open], [role="dialog"], .artdeco-modal, '
+                    '.artdeco-toast-item, [role="alert"], [role="status"]')
+        elements = self._visible_elements(self.browser, By.CSS_SELECTOR, selector)
+        elements.extend(self._shadow_elements(selector, visible_only=True))
+        receipt = re.compile(
+            r'(?:your )?application (?:was |has been )?(?:sent|submitted)'
+            r'(?: successfully)?(?: to .+)?[.!]?'
+            r'|(?:申请已发送|申请已提交|已发送申请|已提交申请)[。！!]?'
+        )
+        for element in elements:
+            try:
+                lines = [' '.join(line.lower().split()) for line in (element.text or '').splitlines()]
+                if any(receipt.fullmatch(line) for line in lines):
+                    return True
+            except StaleElementReferenceException:
+                continue
+        return False
+
+    def _wait_for_application_progress(self, context, before, action, submitted=False, timeout=12):
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            self._raise_if_daily_apply_limit()
+            if submitted and self._application_confirmation_visible():
+                return context
+            try:
+                state = self._application_form_state(context)
+                if not submitted and state['signature'] != before['signature']:
+                    return context
+                if state['errors']:
+                    raise ApplicationValidationError('Application validation failed: ' + '; '.join(state['errors']))
+            except (StaleElementReferenceException, NoSuchElementException):
+                replacement = self._find_easy_apply_context(timeout=1)
+                if replacement is not None:
+                    context = replacement
+            time.sleep(0.5)
+        if submitted:
+            raise ApplicationSubmissionUnconfirmed('Submit clicked once, but no confirmation received; submission status unknown')
+        raise RuntimeError(f'Easy Apply did not advance after {action}; check required fields or uploads')
+
     def apply_to_job(self):
         self._raise_if_daily_apply_limit()
         easy_apply_button = None
@@ -1872,9 +1972,14 @@ class LinkedinEasyApply:
 
         button_text = ""
         submit_application_text = 'submit application'
+        submitted = False
+        step_count = 0
 
         while submit_application_text not in button_text.lower() and '提交' not in button_text:
             try:
+                step_count += 1
+                if step_count > 30:
+                    raise RuntimeError('Easy Apply exceeded 30 steps without completing')
                 self._raise_if_daily_apply_limit()
                 form_found = self.fill_up(application_context)
                 self._raise_if_daily_apply_limit()
@@ -1900,10 +2005,24 @@ class LinkedinEasyApply:
                         self.unfollow(application_context)
                     except:
                         print("Failed to unfollow company.")
+                before = self._application_form_state(application_context)
                 time.sleep(random.uniform(1.5, 2.5)) if not self.FastMode else time.sleep(random.uniform(1, 2))
-                next_button.click()
+                submitted = submit_application_text in button_text or '提交' in button_text
+                try:
+                    next_button.click()
+                except Exception as click_error:
+                    if submitted:
+                        raise ApplicationSubmissionUnconfirmed(
+                            'Submit click did not complete reliably; submission status unknown'
+                        ) from click_error
+                    raise
                 time.sleep(random.uniform(3.0, 5.0)) if not self.FastMode else time.sleep(random.uniform(2.0, 3.0))
                 self._raise_if_daily_apply_limit()
+                application_context = self._wait_for_application_progress(
+                    application_context, before, button_text, submitted=submitted
+                )
+                if submitted:
+                    break
 
                 # Newer error handling
                 error_messages = [
@@ -1939,22 +2058,34 @@ class LinkedinEasyApply:
                     'tussen'
                 ]
 
-                if any(error.lower() in self._easy_apply_text(application_context) for error in error_messages):
+                if not self._is_native_easy_apply(application_context) and any(
+                    error.lower() in self._easy_apply_text(application_context) for error in error_messages
+                ):
                     raise Exception("Failed answering required questions or uploading required files.")
             except DailyApplyLimitReached:
                 raise
-            except Exception:
-                self._raise_if_daily_apply_limit()
+            except Exception as error:
+                if submitted and not isinstance(error, (ApplicationValidationError, ApplicationSubmissionUnconfirmed)):
+                    error = ApplicationSubmissionUnconfirmed(
+                        f'Submit was attempted; confirmation check failed ({type(error).__name__})'
+                    )
                 traceback.print_exc()
-                self._dismiss_easy_apply(application_context, discard=True)
+                try:
+                    self._dismiss_easy_apply(application_context, discard=not submitted)
+                except Exception as dismiss_error:
+                    print(f"Could not close application dialog: {type(dismiss_error).__name__}")
                 time.sleep(random.uniform(2, 3)) if not self.FastMode else time.sleep(random.uniform(1, 2))
-                raise Exception("Failed to apply to job!")
+                if isinstance(error, ApplicationSubmissionUnconfirmed):
+                    raise error
+                raise RuntimeError(f"Failed to apply to job: {error}") from error
 
         closed_notification = False
         time.sleep(random.uniform(2, 3)) if not self.FastMode else time.sleep(random.uniform(1, 2))
-        self._raise_if_daily_apply_limit()
-        if self._dismiss_easy_apply(application_context):
-            closed_notification = True
+        try:
+            if self._dismiss_easy_apply(application_context):
+                closed_notification = True
+        except Exception as error:
+            print(f"Application confirmed; dialog cleanup failed: {type(error).__name__}")
         try:
             self.browser.find_element(By.CLASS_NAME, 'artdeco-toast-item__dismiss').click()
             closed_notification = True
@@ -1969,7 +2100,7 @@ class LinkedinEasyApply:
         time.sleep(random.uniform(3, 5)) if not self.FastMode else time.sleep(random.uniform(2, 3))
 
         if closed_notification is False:
-            raise Exception("Could not close the applied confirmation window!")
+            print("Application confirmed, but its confirmation window could not be closed.")
 
         return True
 
