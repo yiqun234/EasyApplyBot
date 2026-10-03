@@ -2106,7 +2106,7 @@ class LinkedinEasyApply:
 
     def _select_typeahead_option(self, form, input_field, value):
         """Enter a location and bind it to LinkedIn's dynamic typeahead entity."""
-        self.enter_text(input_field, value)
+        self.enter_text(input_field, value, force=True)
         deadline = time.time() + 8
         normalized_value = ' '.join(value.lower().split())
 
@@ -3496,9 +3496,30 @@ class LinkedinEasyApply:
                 print(f"Failed to upload resume or cover letter: {error}")
                 return
 
-    def enter_text(self, element, text):
-        element.clear()
-        element.send_keys(text)
+    def enter_text(self, element, text, force=False):
+        value = '' if text is None else str(text)
+        current = element.get_attribute('value') or ''
+        if current == value and not force:
+            return
+
+        capabilities = getattr(getattr(self, 'browser', None), 'capabilities', {})
+        platform_name = capabilities.get('platformName', '') if isinstance(capabilities, dict) else ''
+        is_mac = str(platform_name).lower().startswith(('mac', 'darwin')) if platform_name else sys.platform == 'darwin'
+        element.click()
+        if current:
+            # Keyboard deletion updates controlled inputs; clear() may only change the DOM.
+            element.send_keys(Keys.COMMAND if is_mac else Keys.CONTROL, 'a')
+            element.send_keys(Keys.BACKSPACE)
+            WebDriverWait(element, 2, poll_frequency=0.1).until(
+                lambda field: not field.get_attribute('value'),
+                message='Text field could not be cleared; refusing to append',
+            )
+        if value:
+            element.send_keys(value)
+        WebDriverWait(element, 2, poll_frequency=0.1).until(
+            lambda field: (field.get_attribute('value') or '') == value,
+            message='Text field did not retain the replacement value',
+        )
 
     def select_dropdown(self, element, text):
         select = Select(element)

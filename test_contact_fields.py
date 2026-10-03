@@ -1,8 +1,10 @@
 import unittest
 from unittest.mock import Mock, patch
 
-from selenium.common.exceptions import NoSuchElementException, StaleElementReferenceException
+from selenium.common.exceptions import NoSuchElementException, StaleElementReferenceException, TimeoutException
 from selenium.webdriver.common.by import By
+from selenium.webdriver.common.keys import Keys
+from selenium.webdriver.support.ui import WebDriverWait
 
 from linkedineasyapply import LinkedinEasyApply
 
@@ -16,7 +18,21 @@ class Field:
         self.is_displayed = Mock(return_value=True)
         self.is_enabled = Mock(return_value=True)
         self.clear = Mock(side_effect=lambda: self.attributes.update(value=''))
-        self.send_keys = Mock(side_effect=lambda value: self.attributes.update(value=str(value)))
+        self.click = Mock()
+        self.select_all = False
+        self.send_keys = Mock(side_effect=self.type_keys)
+
+    def type_keys(self, *keys):
+        if keys in ((Keys.CONTROL, 'a'), (Keys.COMMAND, 'a')):
+            self.select_all = True
+        elif keys == (Keys.BACKSPACE,):
+            current = self.attributes.get('value', '')
+            self.attributes['value'] = '' if self.select_all else current[:-1]
+            self.select_all = False
+        else:
+            current = '' if self.select_all else self.attributes.get('value', '')
+            self.attributes['value'] = current + ''.join(str(key) for key in keys)
+            self.select_all = False
 
     def get_attribute(self, name):
         return self.attributes.get(name, '')
@@ -84,7 +100,8 @@ class ContactFieldTests(unittest.TestCase):
         context = Mock()
         context.find_element.return_value = form
         self.assertTrue(self.bot.fill_up(context))
-        phone.send_keys.assert_called_once_with('4155550123')
+        phone.send_keys.assert_called_with('4155550123')
+        self.assertEqual(phone.get_attribute('value'), '4155550123')
         self.bot.ai_response_generator.generate_response.assert_not_called()
 
     def test_english_contact_step_remains_supported(self):
@@ -225,6 +242,71 @@ class ContactFieldTests(unittest.TestCase):
         for field, label in cases:
             with self.subTest(label=label):
                 self.assertFalse(self.bot._fill_contact_field(Form([field]), field, label))
+
+
+class TextReplacementTests(unittest.TestCase):
+    def setUp(self):
+        self.bot = LinkedinEasyApply.__new__(LinkedinEasyApply)
+        self.bot.browser = Mock(capabilities={'platformName': 'windows'})
+
+    def field(self, value, tag='input'):
+        field = Field(tag, type='text', value=value)
+        # A controlled input can restore its old state after WebDriver.clear().
+        field.clear.side_effect = None
+        return field
+
+    def test_correct_prefilled_name_is_untouched(self):
+        field = self.field('Yiqun')
+        self.bot.enter_text(field, 'Yiqun')
+        self.assertEqual(field.get_attribute('value'), 'Yiqun')
+        field.send_keys.assert_not_called()
+
+    def test_duplicate_name_is_replaced_and_repeated_fill_is_idempotent(self):
+        field = self.field('XuXu')
+        self.bot.enter_text(field, 'Xu')
+        self.bot.enter_text(field, 'Xu')
+        self.assertEqual(field.get_attribute('value'), 'Xu')
+
+    def test_windows_browser_uses_control_even_on_mac_host(self):
+        field = self.field('Old')
+        with patch('linkedineasyapply.sys.platform', 'darwin'):
+            self.bot.enter_text(field, 'New')
+        field.send_keys.assert_any_call(Keys.CONTROL, 'a')
+        self.assertEqual(field.get_attribute('value'), 'New')
+
+    def test_mac_browser_uses_command(self):
+        self.bot.browser.capabilities = {'platformName': 'mac'}
+        field = self.field('Old')
+        self.bot.enter_text(field, 'New')
+        field.send_keys.assert_any_call(Keys.COMMAND, 'a')
+
+    def test_textarea_and_numeric_zero_replace_old_values(self):
+        for tag, target in (('textarea', 'New answer'), ('input', 0)):
+            with self.subTest(tag=tag):
+                field = self.field('Old', tag)
+                self.bot.enter_text(field, target)
+                self.assertEqual(field.get_attribute('value'), str(target))
+
+    def test_none_clears_without_typing_literal_none(self):
+        field = self.field('Old')
+        self.bot.enter_text(field, None)
+        self.assertEqual(field.get_attribute('value'), '')
+
+    def test_typeahead_can_force_input_events_without_appending(self):
+        field = self.field('San Francisco')
+        self.bot.enter_text(field, 'San Francisco', force=True)
+        field.send_keys.assert_called_with('San Francisco')
+        self.assertEqual(field.get_attribute('value'), 'San Francisco')
+
+    def test_failed_clear_does_not_append_new_text(self):
+        field = self.field('Old')
+        field.send_keys.side_effect = None
+        with patch('linkedineasyapply.WebDriverWait', side_effect=lambda element, *args, **kwargs:
+                   WebDriverWait(element, 0.01, poll_frequency=0.001)):
+            with self.assertRaises(TimeoutException):
+                self.bot.enter_text(field, 'New')
+        self.assertEqual(field.get_attribute('value'), 'Old')
+        self.assertNotIn(('New',), [call.args for call in field.send_keys.call_args_list])
 
 
 class NativeDialogTests(unittest.TestCase):
